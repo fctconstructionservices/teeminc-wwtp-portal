@@ -60,7 +60,26 @@ async function submitRequestForm(e) {
     } else {
         document.getElementById('req-amount-field').classList.remove('error');
     }
+    // Validate Date Needed
     
+    if (!dateNeeded) {
+        document.getElementById('req-date-field').classList.add('error');
+        valid = false;
+        missingFields.push('Date Needed');
+    } else {
+    document.getElementById('req-date-field').classList.remove('error');
+    }
+
+    // Validate File Upload
+
+    const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
+    if (!hasFile) {
+        document.getElementById('req-file-field').classList.add('error');
+        valid = false;
+        missingFields.push('Quotation/Basis file');
+    } else {
+    document.getElementById('req-file-field').classList.remove('error');
+}
     // If validation fails, show error message with missing fields
     if (!valid) {
         UI.toast(`Please fill in all required fields: ${missingFields.join(', ')}`, 'error');
