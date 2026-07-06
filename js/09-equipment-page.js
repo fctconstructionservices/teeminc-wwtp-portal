@@ -1,38 +1,39 @@
 // ================================================================
-        //  EQUIPMENT DATABASE PAGE (with role-based Approve button)
-        // ================================================================
+//  EQUIPMENT DATABASE PAGE (with role-based Approve button)
+//  FIX: After submission, automatically switch to Pending tab (Bug #1)
+// ================================================================
 
-        const EquipmentPage = {
-            _allEquipment: [],
-            _currentFilter: 'approved',
-            _searchResults: null,
+const EquipmentPage = {
+    _allEquipment: [],
+    _currentFilter: 'approved',
+    _searchResults: null,
 
-            async load() {
-                this._searchResults = null;
-                const container = document.getElementById('equipmentContent');
-                UI.showLoading(container);
-                try {
-                    this._allEquipment = await DataService.getAllEquipment();
-                    this.render(container);
-                } catch (err) { console.error('Equipment error:', err);
-                    UI.toast('Error loading equipment.', 'error'); }
-            },
+    async load() {
+        this._searchResults = null;
+        const container = document.getElementById('equipmentContent');
+        UI.showLoading(container);
+        try {
+            this._allEquipment = await DataService.getAllEquipment();
+            this.render(container);
+        } catch (err) { console.error('Equipment error:', err);
+            UI.toast('Error loading equipment.', 'error'); }
+    },
 
-            render(container, items = null) {
-                let list = items;
-                if (!list) {
-                    const approved = this._allEquipment.filter(e => e.status === 'approved');
-                    const pending = this._allEquipment.filter(e => e.status === 'pending');
-                    list = this._currentFilter === 'approved' ? approved : pending;
-                }
-                if (this._searchResults !== null) {
-                    list = this._searchResults;
-                }
+    render(container, items = null) {
+        let list = items;
+        if (!list) {
+            const approved = this._allEquipment.filter(e => e.status === 'approved');
+            const pending = this._allEquipment.filter(e => e.status === 'pending');
+            list = this._currentFilter === 'approved' ? approved : pending;
+        }
+        if (this._searchResults !== null) {
+            list = this._searchResults;
+        }
 
-                const approved = this._allEquipment.filter(e => e.status === 'approved');
-                const pending = this._allEquipment.filter(e => e.status === 'pending');
+        const approved = this._allEquipment.filter(e => e.status === 'approved');
+        const pending = this._allEquipment.filter(e => e.status === 'pending');
 
-                let html = `
+        let html = `
                 <div class="section-head"><h2>Tools & Equipment Database</h2><div class="rule"></div>
                     <button class="btn-primary" onclick="EquipmentPage.showAddForm()" style="padding:6px 14px;font-size:11px;">+ Add New Equipment</button>
                 </div>
@@ -121,91 +122,96 @@
                 }
                 html += `</div>`;
                 UI.setContent(container, html);
-            },
+    },
 
-            setFilter(filter) {
-                this._currentFilter = filter;
-                this._searchResults = null;
-                this.load();
-            },
+    setFilter(filter) {
+        this._currentFilter = filter;
+        this._searchResults = null;
+        this.load();
+    },
 
-            clearSearch() {
-                this._searchResults = null;
-                this.load();
-            },
+    clearSearch() {
+        this._searchResults = null;
+        this.load();
+    },
 
-            search() {
-                const query = document.getElementById('equipSearch').value;
-                if (!query.trim()) {
-                    this._searchResults = null;
-                    this.load();
-                    return;
-                }
-                const container = document.getElementById('equipmentContent');
-                UI.showLoading(container);
-                setTimeout(async () => {
-                    const results = await DataService.searchEquipment(query);
-                    this._searchResults = results;
-                    this.render(container);
-                }, 300);
-            },
+    search() {
+        const query = document.getElementById('equipSearch').value;
+        if (!query.trim()) {
+            this._searchResults = null;
+            this.load();
+            return;
+        }
+        const container = document.getElementById('equipmentContent');
+        UI.showLoading(container);
+        setTimeout(async () => {
+            const results = await DataService.searchEquipment(query);
+            this._searchResults = results;
+            this.render(container);
+        }, 300);
+    },
 
-            showAddForm() { const f = document.getElementById('equipAddForm'); if (f) f.style.display = 'block'; },
-            hideAddForm() { const f = document.getElementById('equipAddForm'); if (f) f.style.display = 'none'; },
-            previewEquipImage(e) {
-                const file = e.target.files[0];
-                const preview = document.getElementById('equipImagePreview');
-                const img = document.getElementById('equipImagePreviewImg');
-                if (file) { const r = new FileReader();
-                    r.onload = function(ev) { img.src = ev.target.result;
-                        preview.classList.add('open'); };
-                    r.readAsDataURL(file); } else preview.classList.remove('open');
-            },
-            async submitEquipment(e) {
-                e.preventDefault();
-                const data = {
-                    category: document.getElementById('equip-category').value,
-                    type: document.getElementById('equip-category').value,
-                    capacity: document.getElementById('equip-capacity').value.trim(),
-                    unit: document.getElementById('equip-unit').value,
-                    brand: document.getElementById('equip-brand').value.trim(),
-                    model: document.getElementById('equip-model').value.trim(),
-                    serial: document.getElementById('equip-serial').value.trim(),
-                    powerSource: document.getElementById('equip-power').value,
-                    ownership: document.getElementById('equip-ownership').value,
-                    acquisitionDate: document.getElementById('equip-acq').value,
-                    condition: document.getElementById('equip-condition').value,
-                    notes: document.getElementById('equip-notes').value.trim(),
-                    image: document.getElementById('equipImagePreviewImg').src || 'https://placehold.co/600x400/5B6360/FFFFFF?text=Equipment',
-                    manual: document.getElementById('equip-manual').files[0] ? document.getElementById('equip-manual')
-                        .files[0].name : ''
-                };
-                if (!data.category || !data.brand) { UI.toast('Category and Brand are required.', 'error'); return; }
-                const confirmed = await Confirm.open('Submit for Approval?', '');
-                if (!confirmed) return;
-                try { const result = await DataService.requestEquipment(data);
-                    UI.toast(`${result.id} submitted for approval!`, 'success');
-                    document.getElementById('equipForm').reset();
-                    document.getElementById('equipImagePreview').classList.remove('open');
-                    this.hideAddForm();
-                    this._allEquipment = await DataService.getAllEquipment();
-                    this._searchResults = null;
-                    this.load(); } catch (err) { UI.toast('' + err.message, 'error'); }
-                return false;
-            },
-            async approveEquipment(id) {
-                const confirmed = await Confirm.open('Approve Equipment?', '');
-                if (!confirmed) return;
-                try { await DataService.approveEquipment(id);
-                    UI.toast('Equipment approved!', 'success');
-                    this._allEquipment = await DataService.getAllEquipment();
-                    this._searchResults = null;
-                    this.load(); } catch (err) { UI.toast('' + err.message, 'error'); }
-            },
-            async viewEquipment(id) {
-                const all = await DataService.getAllEquipment();
-                const eq = all.find(e => e.id === id);
-                if (!eq) { UI.toast('Not found.', 'error'); return; }
-                EquipPrintModal.open(eq);
-            }
+    showAddForm() { const f = document.getElementById('equipAddForm'); if (f) f.style.display = 'block'; },
+    hideAddForm() { const f = document.getElementById('equipAddForm'); if (f) f.style.display = 'none'; },
+    previewEquipImage(e) {
+        const file = e.target.files[0];
+        const preview = document.getElementById('equipImagePreview');
+        const img = document.getElementById('equipImagePreviewImg');
+        if (file) { const r = new FileReader();
+            r.onload = function(ev) { img.src = ev.target.result;
+                preview.classList.add('open'); };
+            r.readAsDataURL(file); } else preview.classList.remove('open');
+    },
+    async submitEquipment(e) {
+        e.preventDefault();
+        const data = {
+            category: document.getElementById('equip-category').value,
+            type: document.getElementById('equip-category').value,
+            capacity: document.getElementById('equip-capacity').value.trim(),
+            unit: document.getElementById('equip-unit').value,
+            brand: document.getElementById('equip-brand').value.trim(),
+            model: document.getElementById('equip-model').value.trim(),
+            serial: document.getElementById('equip-serial').value.trim(),
+            powerSource: document.getElementById('equip-power').value,
+            ownership: document.getElementById('equip-ownership').value,
+            acquisitionDate: document.getElementById('equip-acq').value,
+            condition: document.getElementById('equip-condition').value,
+            notes: document.getElementById('equip-notes').value.trim(),
+            image: document.getElementById('equipImagePreviewImg').src || 'https://placehold.co/600x400/5B6360/FFFFFF?text=Equipment',
+            manual: document.getElementById('equip-manual').files[0] ? document.getElementById('equip-manual')
+                .files[0].name : ''
         };
+        if (!data.category || !data.brand) { UI.toast('Category and Brand are required.', 'error'); return; }
+        const confirmed = await Confirm.open('Submit for Approval?', '');
+        if (!confirmed) return;
+        try { 
+            const result = await DataService.requestEquipment(data);
+            UI.toast(`${result.id} submitted for approval!`, 'success');
+            document.getElementById('equipForm').reset();
+            document.getElementById('equipImagePreview').classList.remove('open');
+            this.hideAddForm();
+            this._allEquipment = await DataService.getAllEquipment();
+            this._searchResults = null;
+            
+            // ✅ FIX: Automatically switch to Pending tab after submission (Bug #1)
+            this._currentFilter = 'pending';
+            this.load();
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+        return false;
+    },
+    async approveEquipment(id) {
+        const confirmed = await Confirm.open('Approve Equipment?', '');
+        if (!confirmed) return;
+        try { await DataService.approveEquipment(id);
+            UI.toast('Equipment approved!', 'success');
+            this._allEquipment = await DataService.getAllEquipment();
+            this._searchResults = null;
+            this.load(); } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
+    async viewEquipment(id) {
+        const all = await DataService.getAllEquipment();
+        const eq = all.find(e => e.id === id);
+        if (!eq) { UI.toast('Not found.', 'error'); return; }
+        EquipPrintModal.open(eq);
+    }
+};
