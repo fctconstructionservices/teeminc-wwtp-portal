@@ -151,8 +151,8 @@ const ApprovalsPage = {
             const userEmail = user ? user.email.toLowerCase() : '';
             const filteredRequests = pendingData.requests.filter(function(r) {
                 const notSelf = r.requestorEmail && r.requestorEmail.toLowerCase() !== userEmail;
-                const notActed = !r.userActed;
-                return notSelf && notActed ; 
+                const notActed = !r.userActed;  // ← HINDI pa na-act ng user
+                return notSelf && notActed; 
             });
             const filteredMaterials = pendingData.materials.filter(function(m) {
                 return m.requestedBy && m.requestedBy.toLowerCase() !== userEmail;
