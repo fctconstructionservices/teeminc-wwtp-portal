@@ -55,6 +55,10 @@ const App = {
         if (page === 'materials') await MaterialsPage.load();
         if (page === 'equipment') await EquipmentPage.load();
         if (page === 'approvals') await ApprovalsPage.load();
+       if (page === 'release-cash') {
+        // Mag-load ng dropdown pagkatapos mag-render ang page
+        setTimeout(loadReleaseDropdown, 100);
+        }
 
         // ✅ FIX: Update user badges AFTER all page content is rendered
         this.updateUserBadges();
