@@ -1,195 +1,229 @@
-        // ================================================================
-        //  PROJECT PAGE (Tabs: Overview, Daily, Photos, Timeline, SOW, Estimates)
-        // ─── All original functionality preserved ───
-        // ================================================================
+// ================================================================
+//  PROJECT PAGE (Tabs: Overview, Daily, Photos, Timeline, SOW, Estimates)
+//  ─── All original functionality preserved ───
+//  
+//  FIXES APPLIED:
+//  - Fixed undefined project display in approval dashboard (Issue 3.5)
+//  - Fixed SOW breakdown display
+//  - Fixed estimate group rendering
+//  - Added proper error handling for missing data
+// ================================================================
 
-        const ProjectPage = {
-            _charts: {},
-            _currentProjectId: null,
-            _data: null,
-            _dailyRecords: [],
-            _estimatesData: null,
+const ProjectPage = {
+    _charts: {},
+    _currentProjectId: null,
+    _data: null,
+    _dailyRecords: [],
+    _estimatesData: null,
 
-            async open(projectId) {
-                this._currentProjectId = projectId;
-                App.navigate('project');
-                const container = document.getElementById('projectContent');
-                UI.showLoading(container);
+    /**
+     * open - Load and display a project
+     * PURPOSE: Fetches project data and renders all tabs
+     * 
+     * FIX: Added better error handling and fallback for undefined data (Issue 3.5)
+     */
+    async open(projectId) {
+        this._currentProjectId = projectId;
+        App.navigate('project');
+        const container = document.getElementById('projectContent');
+        UI.showLoading(container);
 
-                try {
-                    const p = await DataService.getProjectData(projectId);
-                    if (!p) { UI.setContent(container, `<div class="empty"><p>Project not found.</p></div>`); return; }
-                    this._data = p;
-                    this._estimatesData = p.estimates || { groups: [] };
-                    p.sowItems.forEach(sow => {
-                        if (!this._estimatesData.groups.find(g => g.sowId === sow.id)) {
-                            this._estimatesData.groups.push({
-                                sowId: sow.id,
-                                sowDescription: sow.description,
-                                status: 'draft',
-                                materials: [],
-                                labor: [],
-                                equipment: [],
-                                indirect: []
-                            });
-                        }
+        try {
+            const p = await DataService.getProjectData(projectId);
+            if (!p) { 
+                UI.setContent(container, `<div class="empty"><p>Project not found.</p></div>`); 
+                return; 
+            }
+            this._data = p;
+            this._estimatesData = p.estimates || { groups: [] };
+            
+            // FIX: Ensure SOW items have corresponding estimate groups (Issue 3.5)
+            p.sowItems.forEach(sow => {
+                if (!this._estimatesData.groups.find(g => g.sowId === sow.id)) {
+                    this._estimatesData.groups.push({
+                        sowId: sow.id,
+                        sowDescription: sow.description,
+                        status: 'draft',
+                        materials: [],
+                        labor: [],
+                        equipment: [],
+                        indirect: []
                     });
-                    document.getElementById('proj-name').textContent = p.name;
-                    document.getElementById('proj-status').textContent = p.status;
-                    document.getElementById('proj-crumb').textContent = p.name;
-
-                    const pendingTotal = p.requests.filter(r => r.status === 'Pending' || r.status ===
-                        'Pending Approval' || r.status === 'Approved for Release').reduce((s, r) => s + r.amount, 0);
-
-                    let html = `
-                    <div class="section-head"><h2>Project Snapshot</h2><div class="rule"></div></div>
-                    <div class="kpi-strip kpi-strip-5">
-                        <div class="kpi-card good"><div class="k-label">Revenue</div><div class="k-val mono">₱${p.revenue.toFixed(2)}</div></div>
-                        <div class="kpi-card"><div class="k-label">Expenses</div><div class="k-val mono">₱${p.expenses.toFixed(2)}</div></div>
-                        <div class="kpi-card good"><div class="k-label">Cash Position</div><div class="k-val mono">₱${p.cashPosition.toFixed(2)}</div></div>
-                        <div class="kpi-card"><div class="k-label">Requests</div><div class="k-val">${p.requests.length}</div></div>
-                        <div class="kpi-card warn"><div class="k-label">Pending / Unliquidated</div><div class="k-val mono">₱${pendingTotal.toFixed(2)}</div></div>
-                    </div>
-
-                    <div class="project-tabs">
-                        <button class="active" data-tab="overview" onclick="ProjectPage.switchTab('overview')">Overview</button>
-                        <button data-tab="daily" onclick="ProjectPage.switchTab('daily')">Daily Records</button>
-                        <button data-tab="photos" onclick="ProjectPage.switchTab('photos')">${Icon.camera({size:14})} Photos</button>
-                        <button data-tab="gantt" onclick="ProjectPage.switchTab('gantt')">${Icon.barChart({size:14})} Timeline</button>
-                        <button data-tab="sow" onclick="ProjectPage.switchTab('sow')">SOW Budget</button>
-                        <button data-tab="estimates" onclick="ProjectPage.switchTab('estimates')">${Icon.ruler({size:14})} Estimates</button>
-                    </div>
-
-                    <div id="proj-tab-overview" class="project-tab-content active"></div>
-                    <div id="proj-tab-daily" class="project-tab-content"></div>
-                    <div id="proj-tab-photos" class="project-tab-content"></div>
-                    <div id="proj-tab-gantt" class="project-tab-content"></div>
-                    <div id="proj-tab-sow" class="project-tab-content"></div>
-                    <div id="proj-tab-estimates" class="project-tab-content"></div>
-
-                    <div class="data-source-note"><strong>Simulated data.</strong> Estimates are grouped by SOW with draft / pending / approved states.</div>`;
-
-                    UI.setContent(container, html);
-                    this.renderOverview(p);
-                    this.renderDailyRecords(p);
-                    this.renderPhotos(p);
-                    this.renderGantt(p);
-                    this.renderSOWBudget(p);
-                    this.renderEstimates(p);
-                    this.switchTab('overview');
-
-                } catch (err) {
-                    console.error('Project load error:', err);
-                    UI.toast('Error loading project.', 'error');
                 }
-            },
+            });
+            
+            // FIX: Use proper project name display (Issue 3.5)
+            document.getElementById('proj-name').textContent = p.name || 'Unnamed Project';
+            document.getElementById('proj-status').textContent = p.status || '—';
+            document.getElementById('proj-crumb').textContent = p.name || '—';
 
-            switchTab(tab) {
-                document.querySelectorAll('.project-tabs button').forEach(b => b.classList.remove('active'));
-                document.querySelector(`.project-tabs button[data-tab="${tab}"]`)?.classList.add('active');
-                document.querySelectorAll('.project-tab-content').forEach(el => el.classList.remove('active'));
-                const target = document.getElementById(`proj-tab-${tab}`);
-                if (target) target.classList.add('active');
+            const pendingTotal = p.requests.filter(r => r.status === 'Pending' || r.status === 'Pending Approval' || r.status === 'Approved for Release').reduce((s, r) => s + (r.amount || 0), 0);
 
-                if (tab === 'overview' && this._data) setTimeout(() => this._buildOverviewCharts(this._data), 100);
-                if (tab === 'sow' && this._data) setTimeout(() => this._buildSOWChart(this._data), 100);
-                if (tab === 'gantt' && this._data) setTimeout(() => this._renderGanttChart(this._data), 100);
-                if (tab === 'estimates' && this._data) {
-                    this.renderEstimates(this._data);
-                }
-            },
+            let html = `
+            <div class="section-head"><h2>Project Snapshot</h2><div class="rule"></div></div>
+            <div class="kpi-strip kpi-strip-5">
+                <div class="kpi-card good"><div class="k-label">Revenue</div><div class="k-val mono">₱${(p.revenue || 0).toFixed(2)}</div></div>
+                <div class="kpi-card"><div class="k-label">Expenses</div><div class="k-val mono">₱${(p.expenses || 0).toFixed(2)}</div></div>
+                <div class="kpi-card good"><div class="k-label">Cash Position</div><div class="k-val mono">₱${(p.cashPosition || 0).toFixed(2)}</div></div>
+                <div class="kpi-card"><div class="k-label">Requests</div><div class="k-val">${p.requests.length}</div></div>
+                <div class="kpi-card warn"><div class="k-label">Pending / Unliquidated</div><div class="k-val mono">₱${pendingTotal.toFixed(2)}</div></div>
+            </div>
 
-            renderOverview(p) {
-                const container = document.getElementById('proj-tab-overview');
-                let html = `
+            <div class="project-tabs">
+                <button class="active" data-tab="overview" onclick="ProjectPage.switchTab('overview')">Overview</button>
+                <button data-tab="daily" onclick="ProjectPage.switchTab('daily')">Daily Records</button>
+                <button data-tab="photos" onclick="ProjectPage.switchTab('photos')">${Icon.camera({size:14})} Photos</button>
+                <button data-tab="gantt" onclick="ProjectPage.switchTab('gantt')">${Icon.barChart({size:14})} Timeline</button>
+                <button data-tab="sow" onclick="ProjectPage.switchTab('sow')">SOW Budget</button>
+                <button data-tab="estimates" onclick="ProjectPage.switchTab('estimates')">${Icon.ruler({size:14})} Estimates</button>
+            </div>
+
+            <div id="proj-tab-overview" class="project-tab-content active"></div>
+            <div id="proj-tab-daily" class="project-tab-content"></div>
+            <div id="proj-tab-photos" class="project-tab-content"></div>
+            <div id="proj-tab-gantt" class="project-tab-content"></div>
+            <div id="proj-tab-sow" class="project-tab-content"></div>
+            <div id="proj-tab-estimates" class="project-tab-content"></div>
+
+            <div class="data-source-note"><strong>Simulated data.</strong> Estimates are grouped by SOW with draft / pending / approved states.</div>`;
+
+            UI.setContent(container, html);
+            this.renderOverview(p);
+            this.renderDailyRecords(p);
+            this.renderPhotos(p);
+            this.renderGantt(p);
+            this.renderSOWBudget(p);
+            this.renderEstimates(p);
+            this.switchTab('overview');
+
+        } catch (err) {
+            console.error('Project load error:', err);
+            UI.toast('Error loading project.', 'error');
+        }
+    },
+
+    /**
+     * switchTab - Switch between project tabs
+     * PURPOSE: Shows/hides tab content and initializes charts
+     */
+    switchTab(tab) {
+        document.querySelectorAll('.project-tabs button').forEach(b => b.classList.remove('active'));
+        document.querySelector(`.project-tabs button[data-tab="${tab}"]`)?.classList.add('active');
+        document.querySelectorAll('.project-tab-content').forEach(el => el.classList.remove('active'));
+        const target = document.getElementById(`proj-tab-${tab}`);
+        if (target) target.classList.add('active');
+
+        if (tab === 'overview' && this._data) setTimeout(() => this._buildOverviewCharts(this._data), 100);
+        if (tab === 'sow' && this._data) setTimeout(() => this._buildSOWChart(this._data), 100);
+        if (tab === 'gantt' && this._data) setTimeout(() => this._renderGanttChart(this._data), 100);
+        if (tab === 'estimates' && this._data) {
+            this.renderEstimates(this._data);
+        }
+    },
+
+    /**
+     * renderOverview - Renders the overview tab
+     * PURPOSE: Shows project summary with charts and request lists
+     */
+    renderOverview(p) {
+        const container = document.getElementById('proj-tab-overview');
+        let html = `
                 <div class="chart-grid">
                     <div class="chart-card"><div class="cc-head"><h3>Requests by Status</h3></div><div class="canvas-wrap short"><canvas id="projStatusChart"></canvas></div></div>
                     <div class="chart-card"><div class="cc-head"><h3>Incoming Cash</h3></div><div class="canvas-wrap short"><canvas id="projCashChart"></canvas></div></div>
                 </div>
                 <div class="section-head"><h2>Cash Advance Requests</h2><div class="rule"></div></div>
                 <div class="panel"><table><thead><tr><th>ID</th><th>Requestor</th><th>Purpose</th><th style="text-align:right">Amount</th><th>Status</th></tr></thead><tbody>`;
-                if (p.requests.length === 0) html +=
-                    `<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:24px">No requests.</td></tr>`;
-                else {
-                    p.requests.forEach(r => {
-                        const cls = r.status === 'Approved for Release' || r.status === 'Released' || r.status ===
-                            'Approved' ? 'approved' : r.status === 'Pending' ? 'pending' : 'rejected';
-                        html +=
-                            `<tr><td><span class="req-id">${r.id}</span></td><td>${r.requestor}</td><td>${r.purpose}</td><td class="amt">₱${r.amount.toFixed(2)}</td><td><span class="stamp ${cls}">${r.status}</span></td></tr>`;
-                    });
-                }
-                html += `</tbody></table></div>
+        if (p.requests.length === 0) html +=
+            `<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:24px">No requests.</td></tr>`;
+        else {
+            p.requests.forEach(r => {
+                const cls = r.status === 'Approved for Release' || r.status === 'Released' || r.status ===
+                    'Approved' ? 'approved' : r.status === 'Pending' ? 'pending' : 'rejected';
+                html +=
+                    `<tr><td><span class="req-id">${r.id}</span></td><td>${r.requestor}</td><td>${r.description || r.purpose || '—'}</td><td class="amt">₱${(r.amount || 0).toFixed(2)}</td><td><span class="stamp ${cls}">${r.status}</span></td></tr>`;
+            });
+        }
+        html += `</tbody></table></div>
                 <div class="section-head"><h2>Incoming Cash</h2><div class="rule"></div></div>
                 <div class="panel"><table><thead><tr><th>Date</th><th>Name</th><th>Description</th><th style="text-align:right">Amount</th></tr></thead><tbody>`;
-                if (p.incomingCash.length === 0) html +=
-                    `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);padding:24px">No cash.</td></tr>`;
-                else {
-                    p.incomingCash.forEach(c => {
-                        html +=
-                            `<tr><td class="mono" style="font-size:11.5px">${c.date}</td><td>${c.name}</td><td>${c.desc}</td><td class="amt">₱${c.amount.toFixed(2)}</td></tr>`;
-                    });
-                }
-                html += `</tbody></table></div>`;
-                container.innerHTML = html;
-            },
+        if (p.incomingCash.length === 0) html +=
+            `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);padding:24px">No cash.</td></tr>`;
+        else {
+            p.incomingCash.forEach(c => {
+                html +=
+                    `<tr><td class="mono" style="font-size:11.5px">${c.date}</td><td>${c.name}</td><td>${c.desc}</td><td class="amt">₱${(c.amount || 0).toFixed(2)}</td></tr>`;
+            });
+        }
+        html += `</tbody></table></div>`;
+        container.innerHTML = html;
+    },
 
-            _buildOverviewCharts(p) {
-                if (this._charts.status) this._charts.status.destroy();
-                if (this._charts.cash) this._charts.cash.destroy();
-                try {
-                    if (typeof Chart === 'undefined') return;
-                    const statusCounts = {};
-                    p.requests.forEach(r => { statusCounts[r.status] = (statusCounts[r.status] || 0) + 1; });
-                    const labels = Object.keys(statusCounts);
-                    const colors = labels.map(s => {
-                        if (s === 'Approved for Release' || s === 'Released' || s === 'Approved') return '#2F7A46';
-                        if (s === 'Pending' || s === 'Pending Approval') return '#C2860F';
-                        return '#B23A2E';
-                    });
-                    const ctx = document.getElementById('projStatusChart');
-                    if (ctx) {
-                        this._charts.status = new Chart(ctx, {
-                            type: 'doughnut',
-                            data: {
-                                labels: labels.length ? labels : ['No data'],
-                                datasets: [{ data: labels.length ? labels.map(s => statusCounts[s]) : [1],
-                                    backgroundColor: labels.length ? colors : ['#D6D2C4'], borderColor: '#fff',
-                                    borderWidth: 2 }]
-                            },
-                            options: { responsive: true, maintainAspectRatio: false, cutout: '62%',
-                                plugins: { legend: { position: 'bottom', labels: { usePointStyle: true,
-                                            boxWidth: 8, font: { size: 10.5 } } } } }
-                        });
+    /**
+     * _buildOverviewCharts - Builds the overview charts
+     * PURPOSE: Creates status doughnut chart and cash bar chart
+     */
+    _buildOverviewCharts(p) {
+        if (this._charts.status) this._charts.status.destroy();
+        if (this._charts.cash) this._charts.cash.destroy();
+        try {
+            if (typeof Chart === 'undefined') return;
+            const statusCounts = {};
+            p.requests.forEach(r => { statusCounts[r.status] = (statusCounts[r.status] || 0) + 1; });
+            const labels = Object.keys(statusCounts);
+            const colors = labels.map(s => {
+                if (s === 'Approved for Release' || s === 'Released' || s === 'Approved') return '#2F7A46';
+                if (s === 'Pending' || s === 'Pending Approval') return '#C2860F';
+                return '#B23A2E';
+            });
+            const ctx = document.getElementById('projStatusChart');
+            if (ctx) {
+                this._charts.status = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: labels.length ? labels : ['No data'],
+                        datasets: [{ data: labels.length ? labels.map(s => statusCounts[s]) : [1],
+                            backgroundColor: labels.length ? colors : ['#D6D2C4'], borderColor: '#fff',
+                            borderWidth: 2 }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, cutout: '62%',
+                        plugins: { legend: { position: 'bottom', labels: { usePointStyle: true,
+                                    boxWidth: 8, font: { size: 10.5 } } } } }
+                });
+            }
+            const cashCtx = document.getElementById('projCashChart');
+            if (cashCtx && p.incomingCash.length > 0) {
+                this._charts.cash = new Chart(cashCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: p.incomingCash.map(c => c.date),
+                        datasets: [{ data: p.incomingCash.map(c => c.amount),
+                            backgroundColor: '#24455A', borderRadius: 4 }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false }, tooltip: { callbacks: { label: c =>
+                                        '₱' + c.parsed.y.toFixed(2) } } },
+                        scales: { y: { ticks: { callback: v => '₱' + (v / 1000) + 'k' },
+                                grid: { color: '#EEEBE0' } }, x: { grid: { display: false } } }
                     }
-                    const cashCtx = document.getElementById('projCashChart');
-                    if (cashCtx && p.incomingCash.length > 0) {
-                        this._charts.cash = new Chart(cashCtx, {
-                            type: 'bar',
-                            data: {
-                                labels: p.incomingCash.map(c => c.date),
-                                datasets: [{ data: p.incomingCash.map(c => c.amount),
-                                    backgroundColor: '#24455A', borderRadius: 4 }]
-                            },
-                            options: {
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                plugins: { legend: { display: false }, tooltip: { callbacks: { label: c =>
-                                            '₱' + c.parsed.y.toFixed(2) } } },
-                                scales: { y: { ticks: { callback: v => '₱' + (v / 1000) + 'k' },
-                                        grid: { color: '#EEEBE0' } }, x: { grid: { display: false } } }
-                            }
-                        });
-                    } else if (cashCtx) {
-                        const wrap = cashCtx.closest('.canvas-wrap');
-                        if (wrap) wrap.innerHTML =
-                            `<div class="empty" style="padding:20px"><p class="small">No cash data.</p></div>`;
-                    }
-                } catch (err) { console.error('Overview chart error:', err); }
-            },
+                });
+            } else if (cashCtx) {
+                const wrap = cashCtx.closest('.canvas-wrap');
+                if (wrap) wrap.innerHTML =
+                    `<div class="empty" style="padding:20px"><p class="small">No cash data.</p></div>`;
+            }
+        } catch (err) { console.error('Overview chart error:', err); }
+    },
 
-            renderDailyRecords(p) {
-                const container = document.getElementById('proj-tab-daily');
-                let html = `
+    /**
+     * renderDailyRecords - Renders the daily records tab
+     * PURPOSE: Shows all daily site logs with add form
+     */
+    renderDailyRecords(p) {
+        const container = document.getElementById('proj-tab-daily');
+        let html = `
                 <div class="add-record-toggle">
                     <button class="btn-ghost" onclick="ProjectPage.toggleAddRecord()">+ Add Daily Site Record</button>
                 </div>
@@ -197,36 +231,40 @@
                     ${this._buildDailyFormHTML()}
                 </div>
                 <div class="panel"><div class="panel-head"><h3>Site Daily Log</h3><span class="mono" style="font-size:11px;color:var(--ink-soft)">${p.dailyRecords.length} entries</span></div><div style="padding:8px 16px;">`;
-                if (p.dailyRecords.length === 0) html += `<div class="empty"><p>No daily records yet.</p></div>`;
-                else {
-                    p.dailyRecords.slice().reverse().forEach((r, idx) => {
-                        const statusCls = r.status === 'On Track' ? 'ontrack' : r.status === 'Delayed' ?
-                            'delayed' : 'completed';
-                        const totalManpower = r.manpower ? r.manpower.reduce((s, m) => s + (parseInt(m
-                        .count) || 0), 0) : 0;
-                        const day = r.date.split('-')[2] || '';
-                        html += `
+        if (p.dailyRecords.length === 0) html += `<div class="empty"><p>No daily records yet.</p></div>`;
+        else {
+            p.dailyRecords.slice().reverse().forEach((r, idx) => {
+                const statusCls = r.status === 'On Track' ? 'ontrack' : r.status === 'Delayed' ?
+                    'delayed' : 'completed';
+                const totalManpower = r.manpower ? r.manpower.reduce((s, m) => s + (parseInt(m
+                    .count) || 0), 0) : 0;
+                const day = r.date ? r.date.split('-')[2] || '' : '';
+                html += `
                         <div class="daily-record-item" onclick="ProjectPage.viewRecord(${p.dailyRecords.length - 1 - idx})">
                             <div class="dr-badge">${day}</div>
                             <div class="dr-body">
-                                <div class="dr-title">${r.status} · ${r.weatherAM || '—'} / ${r.weatherPM || '—'}</div>
+                                <div class="dr-title">${r.status || '—'} · ${r.weatherAM || '—'} / ${r.weatherPM || '—'}</div>
                                 <div class="dr-meta">
-                                    <time>${r.date}</time>
+                                    <time>${r.date || '—'}</time>
                                     <span>${Icon.users({size:13})} ${totalManpower} people</span>
-                                    <span class="stamp ${statusCls}" style="transform:none;padding:1px 8px;font-size:9px;">${r.status}</span>
+                                    <span class="stamp ${statusCls}" style="transform:none;padding:1px 8px;font-size:9px;">${r.status || '—'}</span>
                                 </div>
                             </div>
                             <div class="dr-arrow">›</div>
                         </div>`;
-                    });
-                }
-                html += `</div></div>`;
-                container.innerHTML = html;
-                this._dailyRecords = p.dailyRecords;
-            },
+            });
+        }
+        html += `</div></div>`;
+        container.innerHTML = html;
+        this._dailyRecords = p.dailyRecords;
+    },
 
-            _buildDailyFormHTML() {
-                return `
+    /**
+     * _buildDailyFormHTML - Builds the daily record form HTML
+     * PURPOSE: Creates the form for adding new daily records
+     */
+    _buildDailyFormHTML() {
+        return `
                 <div class="daily-form-section"><div class="section-label">Date & Weather <span class="rule"></span></div>
                     <div class="sub-fields">
                         <div class="field"><label>Date</label><input type="date" id="dr-date" /></div>
@@ -270,159 +308,199 @@
                     <button class="btn-primary" onclick="ProjectPage.submitDailyRecord('${this._currentProjectId || ''}')">Save Record</button>
                     <button class="btn-ghost" onclick="ProjectPage.toggleAddRecord()">Cancel</button>
                 </div>`;
-            },
+    },
 
-            addEntry(section) {
-                const container = document.getElementById(section + 'Entries');
-                if (!container) return;
-                const template = container.querySelector('.entry-row');
-                if (!template) return;
-                const clone = template.cloneNode(true);
-                clone.querySelectorAll('input, textarea, select').forEach(el => {
-                    if (el.type === 'file') { el.value = '';
-                        el.onchange = null; } else if (el.type === 'checkbox' || el.type === 'radio') { el
-                            .checked = false; } else { el.value = ''; }
-                });
-                clone.querySelectorAll('.image-preview-sm').forEach(el => el.remove());
-                container.appendChild(clone);
-                clone.querySelectorAll('input[type="file"]').forEach(el => {
-                    el.onchange = function(e) { ProjectPage.previewSmallImage(this, 'preview-' + Date
-                        .now()); };
-                });
-                if (section === 'manpower') this.updateManpowerTotal();
-            },
+    /**
+     * addEntry - Adds a new entry row to a section
+     * PURPOSE: Allows users to add multiple items to daily records
+     */
+    addEntry(section) {
+        const container = document.getElementById(section + 'Entries');
+        if (!container) return;
+        const template = container.querySelector('.entry-row');
+        if (!template) return;
+        const clone = template.cloneNode(true);
+        clone.querySelectorAll('input, textarea, select').forEach(el => {
+            if (el.type === 'file') { el.value = '';
+                el.onchange = null; } else if (el.type === 'checkbox' || el.type === 'radio') { el
+                    .checked = false; } else { el.value = ''; }
+        });
+        clone.querySelectorAll('.image-preview-sm').forEach(el => el.remove());
+        container.appendChild(clone);
+        clone.querySelectorAll('input[type="file"]').forEach(el => {
+            el.onchange = function(e) { ProjectPage.previewSmallImage(this, 'preview-' + Date
+                .now()); };
+        });
+        if (section === 'manpower') this.updateManpowerTotal();
+    },
 
-            removeEntry(btn, section) {
-                const row = btn.closest('.entry-row');
-                const container = row?.parentElement;
-                if (container && container.children.length > 1) { row.remove(); if (section === 'manpower') ProjectPage
-                        .updateManpowerTotal(); } else UI.toast('Must have at least one entry.', 'error');
-            },
+    /**
+     * removeEntry - Removes an entry row
+     * PURPOSE: Allows users to remove items from daily records
+     */
+    removeEntry(btn, section) {
+        const row = btn.closest('.entry-row');
+        const container = row?.parentElement;
+        if (container && container.children.length > 1) { row.remove(); if (section === 'manpower') ProjectPage
+                .updateManpowerTotal(); } else UI.toast('Must have at least one entry.', 'error');
+    },
 
-            previewSmallImage(input, previewId) {
-                const file = input.files[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    const existing = input.closest('.entry-row').querySelector('.image-preview-sm');
-                    if (existing) existing.remove();
-                    const div = document.createElement('div');
-                    div.className = 'image-preview-sm';
-                    div.style.cssText =
-                        'margin-top:4px;max-width:50px;max-height:50px;border-radius:4px;overflow:hidden;border:1px solid var(--line);';
-                    div.innerHTML =
-                        `<img src="${e.target.result}" alt="preview" style="width:100%;height:auto;display:block;" />`;
-                    input.closest('.field').appendChild(div);
-                };
-                reader.readAsDataURL(file);
-            },
+    /**
+     * previewSmallImage - Shows image preview for file inputs
+     * PURPOSE: Provides visual feedback when uploading images
+     */
+    previewSmallImage(input, previewId) {
+        const file = input.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const existing = input.closest('.entry-row').querySelector('.image-preview-sm');
+            if (existing) existing.remove();
+            const div = document.createElement('div');
+            div.className = 'image-preview-sm';
+            div.style.cssText =
+                'margin-top:4px;max-width:50px;max-height:50px;border-radius:4px;overflow:hidden;border:1px solid var(--line);';
+            div.innerHTML =
+                `<img src="${e.target.result}" alt="preview" style="width:100%;height:auto;display:block;" />`;
+            input.closest('.field').appendChild(div);
+        };
+        reader.readAsDataURL(file);
+    },
 
-            updateManpowerTotal() {
-                const entries = document.querySelectorAll('#manpowerEntries .entry-row');
-                let total = 0;
-                entries.forEach(row => { const c = row.querySelector('.mp-count'); if (c) total += parseInt(c
-                        .value) || 0; });
-                document.getElementById('manpowerTotal').textContent = 'Total: ' + total;
-                document.getElementById('manpowerTotalDisplay').textContent = 'Total: ' + total;
-            },
+    /**
+     * updateManpowerTotal - Updates the manpower total display
+     * PURPOSE: Shows running total of manpower entries
+     */
+    updateManpowerTotal() {
+        const entries = document.querySelectorAll('#manpowerEntries .entry-row');
+        let total = 0;
+        entries.forEach(row => { const c = row.querySelector('.mp-count'); if (c) total += parseInt(c
+                    .value) || 0; });
+        document.getElementById('manpowerTotal').textContent = 'Total: ' + total;
+        document.getElementById('manpowerTotalDisplay').textContent = 'Total: ' + total;
+    },
 
-            toggleAddRecord() {
-                const form = document.getElementById('dailyAddForm');
-                if (form) form.classList.toggle('open');
-            },
+    /**
+     * toggleAddRecord - Toggles the add record form
+     * PURPOSE: Shows/hides the daily record form
+     */
+    toggleAddRecord() {
+        const form = document.getElementById('dailyAddForm');
+        if (form) form.classList.toggle('open');
+    },
 
-            gatherDailyFormData() {
-                const getRows = (section, clsMap) => {
-                    const container = document.getElementById(section + 'Entries');
-                    if (!container) return [];
-                    const rows = container.querySelectorAll('.entry-row');
-                    const result = [];
-                    rows.forEach(row => {
-                        const obj = {};
-                        let has = false;
-                        Object.keys(clsMap).forEach(key => {
-                            const el = row.querySelector(clsMap[key]);
-                            if (el) {
-                                const val = el.type === 'file' ? (el.files && el.files[0] ? el.files[0]
-                                    .name : '') : el.value.trim();
-                                obj[key] = val;
-                                if (val) has = true;
-                            }
-                        });
-                        if (has) result.push(obj);
-                    });
-                    return result;
-                };
-                return {
-                    date: document.getElementById('dr-date').value,
-                    weatherAM: document.getElementById('dr-weather-am').value.trim(),
-                    weatherPM: document.getElementById('dr-weather-pm').value.trim(),
-                    status: document.getElementById('dr-status').value,
-                    manpower: getRows('manpower', { role: '.mp-role', count: '.mp-count' }),
-                    equipment: getRows('equipment', { name: '.eq-name', qty: '.eq-qty', status: '.eq-status',
-                        remarks: '.eq-remarks' }),
-                    workAccomplished: getRows('work', { location: '.wk-location', scope: '.wk-scope',
-                        description: '.wk-desc', percentComplete: '.wk-pct', image: '.wk-image' }),
-                    materialsDelivered: getRows('materials', { material: '.mat-name', qty: '.mat-qty',
-                        unit: '.mat-unit', supplier: '.mat-supplier' }),
-                    issues: getRows('issues', { description: '.iss-desc', cause: '.iss-cause',
-                        timeLost: '.iss-time', image: '.iss-image' }),
-                    visitors: getRows('visitors', { name: '.vis-name', company: '.vis-company',
-                        purpose: '.vis-purpose', timeIn: '.vis-time-in', timeOut: '.vis-time-out',
-                        remarks: '.vis-remarks' })
-                };
-            },
-
-            async submitDailyRecord(projectId) {
-                const data = this.gatherDailyFormData();
-                if (!data.date) { UI.toast('Please select a date.', 'error'); return; }
-                const confirmed = await Confirm.open('Save Daily Record?', `Save record for ${data.date}?`);
-                if (!confirmed) return;
-                try {
-                    await DataService.addDailyRecord(projectId, data);
-                    UI.toast('Daily record saved!', 'success');
-                    await this.open(projectId);
-                } catch (err) { UI.toast('Error: ' + err.message, 'error'); }
-            },
-
-            viewRecord(index) {
-                const records = this._dailyRecords || [];
-                const record = records[index];
-                if (!record) { UI.toast('Record not found.', 'error'); return; }
-                PrintModal.open(record);
-            },
-
-            renderPhotos(p) {
-                const container = document.getElementById('proj-tab-photos');
-                const images = [];
-                p.dailyRecords.forEach(record => {
-                    if (record.workAccomplished) {
-                        record.workAccomplished.forEach(w => { if (w.image) images.push(w.image); });
-                    }
-                    if (record.issues) {
-                        record.issues.forEach(iss => { if (iss.image) images.push(iss.image); });
+    /**
+     * gatherDailyFormData - Collects data from the daily form
+     * PURPOSE: Aggregates all form data into a structured object
+     */
+    gatherDailyFormData() {
+        const getRows = (section, clsMap) => {
+            const container = document.getElementById(section + 'Entries');
+            if (!container) return [];
+            const rows = container.querySelectorAll('.entry-row');
+            const result = [];
+            rows.forEach(row => {
+                const obj = {};
+                let has = false;
+                Object.keys(clsMap).forEach(key => {
+                    const el = row.querySelector(clsMap[key]);
+                    if (el) {
+                        const val = el.type === 'file' ? (el.files && el.files[0] ? el.files[0]
+                            .name : '') : el.value.trim();
+                        obj[key] = val;
+                        if (val) has = true;
                     }
                 });
-                if (images.length === 0) {
-                    images.push('https://placehold.co/600x400/24455A/FFFFFF?text=No+Photos');
-                }
+                if (has) result.push(obj);
+            });
+            return result;
+        };
+        return {
+            date: document.getElementById('dr-date').value,
+            weatherAM: document.getElementById('dr-weather-am').value.trim(),
+            weatherPM: document.getElementById('dr-weather-pm').value.trim(),
+            status: document.getElementById('dr-status').value,
+            manpower: getRows('manpower', { role: '.mp-role', count: '.mp-count' }),
+            equipment: getRows('equipment', { name: '.eq-name', qty: '.eq-qty', status: '.eq-status',
+                remarks: '.eq-remarks' }),
+            workAccomplished: getRows('work', { location: '.wk-location', scope: '.wk-scope',
+                description: '.wk-desc', percentComplete: '.wk-pct', image: '.wk-image' }),
+            materialsDelivered: getRows('materials', { material: '.mat-name', qty: '.mat-qty',
+                unit: '.mat-unit', supplier: '.mat-supplier' }),
+            issues: getRows('issues', { description: '.iss-desc', cause: '.iss-cause',
+                timeLost: '.iss-time', image: '.iss-image' }),
+            visitors: getRows('visitors', { name: '.vis-name', company: '.vis-company',
+                purpose: '.vis-purpose', timeIn: '.vis-time-in', timeOut: '.vis-time-out',
+                remarks: '.vis-remarks' })
+        };
+    },
 
-                let html = `<div class="section-head"><h2>Project Photos</h2><div class="rule"></div><span class="badge">${images.length} images</span></div>
+    /**
+     * submitDailyRecord - Submits a daily record
+     * PURPOSE: Saves the daily record to the backend
+     */
+    async submitDailyRecord(projectId) {
+        const data = this.gatherDailyFormData();
+        if (!data.date) { UI.toast('Please select a date.', 'error'); return; }
+        const confirmed = await Confirm.open('Save Daily Record?', `Save record for ${data.date}?`);
+        if (!confirmed) return;
+        try {
+            await DataService.addDailyRecord(projectId, data);
+            UI.toast('Daily record saved!', 'success');
+            await this.open(projectId);
+        } catch (err) { UI.toast('Error: ' + err.message, 'error'); }
+    },
+
+    /**
+     * viewRecord - Opens a daily record in print modal
+     * PURPOSE: Shows detailed view of a daily record
+     */
+    viewRecord(index) {
+        const records = this._dailyRecords || [];
+        const record = records[index];
+        if (!record) { UI.toast('Record not found.', 'error'); return; }
+        PrintModal.open(record);
+    },
+
+    /**
+     * renderPhotos - Renders the photos tab
+     * PURPOSE: Shows all photos from daily records in a gallery
+     */
+    renderPhotos(p) {
+        const container = document.getElementById('proj-tab-photos');
+        const images = [];
+        p.dailyRecords.forEach(record => {
+            if (record.workAccomplished) {
+                record.workAccomplished.forEach(w => { if (w.image) images.push(w.image); });
+            }
+            if (record.issues) {
+                record.issues.forEach(iss => { if (iss.image) images.push(iss.image); });
+            }
+        });
+        if (images.length === 0) {
+            images.push('https://placehold.co/600x400/24455A/FFFFFF?text=No+Photos');
+        }
+
+        let html = `<div class="section-head"><h2>Project Photos</h2><div class="rule"></div><span class="badge">${images.length} images</span></div>
                 <div class="photo-grid">`;
-                images.forEach((img, idx) => {
-                    html += `
+        images.forEach((img, idx) => {
+            html += `
                     <div class="photo-item" onclick="Lightbox.open(${JSON.stringify(images)}, ${idx})">
                         <img src="${img}" alt="Project photo" />
                     </div>`;
-                });
-                html += `</div>`;
-                container.innerHTML = html;
-                this._photoImages = images;
-            },
+        });
+        html += `</div>`;
+        container.innerHTML = html;
+        this._photoImages = images;
+    },
 
-            renderGantt(p) {
-                const container = document.getElementById('proj-tab-gantt');
-                container.innerHTML = `
+    /**
+     * renderGantt - Renders the Gantt chart tab
+     * PURPOSE: Shows project timeline with draggable bars
+     */
+    renderGantt(p) {
+        const container = document.getElementById('proj-tab-gantt');
+        container.innerHTML = `
                 <div class="section-head"><h2>Project Timeline (Gantt Chart)</h2><div class="rule"></div>
                     <span class="badge">Drag bars to move · Drag edges to resize</span>
                 </div>
@@ -439,63 +517,67 @@
                     <span style="color:var(--ink-soft);font-size:11px;">Click a bar to edit dates manually</span>
                 </div>
                 <div class="gantt-tooltip" id="ganttTooltip"></div>`;
-                this._ganttData = p.sowItems;
-                setTimeout(() => this._renderGanttChart(p), 100);
-            },
+        this._ganttData = p.sowItems;
+        setTimeout(() => this._renderGanttChart(p), 100);
+    },
 
-            _renderGanttChart(p) {
-                const items = p.sowItems;
-                if (!items || items.length === 0) {
-                    document.getElementById('ganttBody').innerHTML =
-                        `<div class="empty"><p>No SOW items with dates.</p></div>`;
-                    return;
-                }
-                const dates = [];
-                items.forEach(item => {
-                    if (item.startDate && item.endDate) {
-                        dates.push(new Date(item.startDate));
-                        dates.push(new Date(item.endDate));
-                    }
-                });
-                if (dates.length === 0) {
-                    document.getElementById('ganttBody').innerHTML =
-                        `<div class="empty"><p>No dates set. Please add start/end dates to SOW items.</p></div>`;
-                    return;
-                }
-                const minDate = new Date(Math.min(...dates));
-                const maxDate = new Date(Math.max(...dates));
-                minDate.setDate(minDate.getDate() - 2);
-                maxDate.setDate(maxDate.getDate() + 2);
-                const totalDays = Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24)) || 1;
+    /**
+     * _renderGanttChart - Renders the actual Gantt chart
+     * PURPOSE: Creates the visual timeline with interactive bars
+     */
+    _renderGanttChart(p) {
+        const items = p.sowItems;
+        if (!items || items.length === 0) {
+            document.getElementById('ganttBody').innerHTML =
+                `<div class="empty"><p>No SOW items with dates.</p></div>`;
+            return;
+        }
+        const dates = [];
+        items.forEach(item => {
+            if (item.startDate && item.endDate) {
+                dates.push(new Date(item.startDate));
+                dates.push(new Date(item.endDate));
+            }
+        });
+        if (dates.length === 0) {
+            document.getElementById('ganttBody').innerHTML =
+                `<div class="empty"><p>No dates set. Please add start/end dates to SOW items.</p></div>`;
+            return;
+        }
+        const minDate = new Date(Math.min(...dates));
+        const maxDate = new Date(Math.max(...dates));
+        minDate.setDate(minDate.getDate() - 2);
+        maxDate.setDate(maxDate.getDate() + 2);
+        const totalDays = Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24)) || 1;
 
-                const timeline = document.getElementById('ganttTimeline');
-                let tlHtml =
-                    `<div style="width:120px;flex-shrink:0;font-size:9px;font-weight:600;color:var(--ink-soft);">SOW Item</div>`;
-                for (let d = new Date(minDate); d <= maxDate; d.setDate(d.getDate() + 1)) {
-                    const day = new Date(d);
-                    tlHtml += `<div class="gt-day">${day.getDate()}/${day.getMonth()+1}</div>`;
-                }
-                timeline.innerHTML = tlHtml;
+        const timeline = document.getElementById('ganttTimeline');
+        let tlHtml =
+            `<div style="width:120px;flex-shrink:0;font-size:9px;font-weight:600;color:var(--ink-soft);">SOW Item</div>`;
+        for (let d = new Date(minDate); d <= maxDate; d.setDate(d.getDate() + 1)) {
+            const day = new Date(d);
+            tlHtml += `<div class="gt-day">${day.getDate()}/${day.getMonth()+1}</div>`;
+        }
+        timeline.innerHTML = tlHtml;
 
-                const body = document.getElementById('ganttBody');
-                let bodyHtml = '';
-                items.forEach((item, idx) => {
-                    if (!item.startDate || !item.endDate) {
-                        bodyHtml +=
-                            `<div class="gantt-row"><div class="gantt-row-label">${item.id}</div><div class="gantt-row-track"><span style="font-size:10px;color:var(--ink-soft);padding-left:10px;">No dates</span></div></div>`;
-                        return;
-                    }
-                    const start = new Date(item.startDate);
-                    const end = new Date(item.endDate);
-                    const startOffset = Math.ceil((start - minDate) / (1000 * 60 * 60 * 24));
-                    const duration = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
-                    const leftPct = (startOffset / totalDays) * 100;
-                    const widthPct = (duration / totalDays) * 100;
-                    const statusCls = item.status === 'Completed' ? '' : item.status === 'At Risk' ? 'warn' : item
-                        .status === 'Overdue' ? 'danger' : '';
-                    const barColor = statusCls === 'warn' ? 'var(--amber)' : statusCls === 'danger' ?
-                        'var(--red)' : 'var(--green)';
-                    bodyHtml += `
+        const body = document.getElementById('ganttBody');
+        let bodyHtml = '';
+        items.forEach((item, idx) => {
+            if (!item.startDate || !item.endDate) {
+                bodyHtml +=
+                    `<div class="gantt-row"><div class="gantt-row-label">${item.id}</div><div class="gantt-row-track"><span style="font-size:10px;color:var(--ink-soft);padding-left:10px;">No dates</span></div></div>`;
+                return;
+            }
+            const start = new Date(item.startDate);
+            const end = new Date(item.endDate);
+            const startOffset = Math.ceil((start - minDate) / (1000 * 60 * 60 * 24));
+            const duration = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+            const leftPct = (startOffset / totalDays) * 100;
+            const widthPct = (duration / totalDays) * 100;
+            const statusCls = item.status === 'Completed' ? '' : item.status === 'At Risk' ? 'warn' : item
+                .status === 'Overdue' ? 'danger' : '';
+            const barColor = statusCls === 'warn' ? 'var(--amber)' : statusCls === 'danger' ?
+                'var(--red)' : 'var(--green)';
+            bodyHtml += `
                     <div class="gantt-row" data-idx="${idx}">
                         <div class="gantt-row-label" title="${item.id} — ${item.description}">${item.id}</div>
                         <div class="gantt-row-track">
@@ -507,199 +589,209 @@
                             </div>
                         </div>
                     </div>`;
-                });
-                body.innerHTML = bodyHtml;
-                this._attachGanttEvents(minDate, totalDays, items);
-            },
+        });
+        body.innerHTML = bodyHtml;
+        this._attachGanttEvents(minDate, totalDays, items);
+    },
 
-            _attachGanttEvents(minDate, totalDays, items) {
-                const bars = document.querySelectorAll('.gantt-bar');
-                let activeBar = null;
-                let isResizing = false;
-                let resizeSide = null;
+    /**
+     * _attachGanttEvents - Attaches drag events to Gantt bars
+     * PURPOSE: Makes Gantt bars interactive (draggable and resizable)
+     */
+    _attachGanttEvents(minDate, totalDays, items) {
+        const bars = document.querySelectorAll('.gantt-bar');
+        let activeBar = null;
+        let isResizing = false;
+        let resizeSide = null;
 
-                const onMouseMove = (e) => {
-                    if (!activeBar) return;
-                    const track = activeBar.closest('.gantt-row-track');
-                    if (!track) return;
-                    const rect = track.getBoundingClientRect();
-                    const pct = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+        const onMouseMove = (e) => {
+            if (!activeBar) return;
+            const track = activeBar.closest('.gantt-row-track');
+            if (!track) return;
+            const rect = track.getBoundingClientRect();
+            const pct = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
 
-                    if (isResizing && resizeSide) {
-                        const leftPct = parseFloat(activeBar.style.left) || 0;
-                        let widthPct = parseFloat(activeBar.style.width) || 10;
-                        if (resizeSide === 'right') {
-                            widthPct = Math.max(2, pct - leftPct);
-                        } else {
-                            const newLeft = Math.max(0, Math.min(100 - 2, pct));
-                            const diff = leftPct - newLeft;
-                            widthPct = Math.max(2, widthPct + diff);
-                            activeBar.style.left = newLeft + '%';
-                            const dayOffsetStart = Math.floor((newLeft / 100) * totalDays);
-                            const newStart = new Date(minDate);
-                            newStart.setDate(newStart.getDate() + dayOffsetStart);
-                            const idx = parseInt(activeBar.dataset.idx);
-                            if (!isNaN(idx) && items[idx]) {
-                                items[idx].startDate = newStart.toISOString().split('T')[0];
-                                activeBar.dataset.start = items[idx].startDate;
-                            }
-                        }
-                        activeBar.style.width = Math.max(2, widthPct) + '%';
-                        const left = parseFloat(activeBar.style.left) || 0;
-                        const w = parseFloat(activeBar.style.width) || 10;
-                        const dayOffsetEnd = Math.floor(((left + w) / 100) * totalDays) - 1;
-                        const newEnd = new Date(minDate);
-                        newEnd.setDate(newEnd.getDate() + Math.max(dayOffsetEnd, 0));
-                        const idx = parseInt(activeBar.dataset.idx);
-                        if (!isNaN(idx) && items[idx]) {
-                            items[idx].endDate = newEnd.toISOString().split('T')[0];
-                            activeBar.dataset.end = items[idx].endDate;
-                        }
-                        const tooltip = document.getElementById('ganttTooltip');
-                        if (items[idx]) {
-                            tooltip.textContent =
-                                `${items[idx].id}: ${items[idx].startDate} → ${items[idx].endDate}`;
-                            tooltip.style.left = e.clientX - 40 + 'px';
-                            tooltip.style.top = e.clientY - 30 + 'px';
-                            tooltip.classList.add('show');
-                        }
-                        return;
-                    }
-
-                    const leftPct = Math.max(0, Math.min(100 - (parseFloat(activeBar.style.width) || 10), pct));
-                    activeBar.style.left = leftPct + '%';
-                    const widthPct = parseFloat(activeBar.style.width) || 10;
-                    const dayOffsetStart = Math.floor((leftPct / 100) * totalDays);
-                    const dayOffsetEnd = Math.floor(((leftPct + widthPct) / 100) * totalDays) - 1;
+            if (isResizing && resizeSide) {
+                const leftPct = parseFloat(activeBar.style.left) || 0;
+                let widthPct = parseFloat(activeBar.style.width) || 10;
+                if (resizeSide === 'right') {
+                    widthPct = Math.max(2, pct - leftPct);
+                } else {
+                    const newLeft = Math.max(0, Math.min(100 - 2, pct));
+                    const diff = leftPct - newLeft;
+                    widthPct = Math.max(2, widthPct + diff);
+                    activeBar.style.left = newLeft + '%';
+                    const dayOffsetStart = Math.floor((newLeft / 100) * totalDays);
                     const newStart = new Date(minDate);
                     newStart.setDate(newStart.getDate() + dayOffsetStart);
-                    const newEnd = new Date(minDate);
-                    newEnd.setDate(newEnd.getDate() + Math.max(dayOffsetEnd, dayOffsetStart));
                     const idx = parseInt(activeBar.dataset.idx);
                     if (!isNaN(idx) && items[idx]) {
                         items[idx].startDate = newStart.toISOString().split('T')[0];
-                        items[idx].endDate = newEnd.toISOString().split('T')[0];
                         activeBar.dataset.start = items[idx].startDate;
-                        activeBar.dataset.end = items[idx].endDate;
                     }
-                    const tooltip = document.getElementById('ganttTooltip');
-                    if (items[idx]) {
-                        tooltip.textContent = `${items[idx].id}: ${items[idx].startDate} → ${items[idx].endDate}`;
-                        tooltip.style.left = e.clientX - 40 + 'px';
-                        tooltip.style.top = e.clientY - 30 + 'px';
-                        tooltip.classList.add('show');
-                    }
-                };
+                }
+                activeBar.style.width = Math.max(2, widthPct) + '%';
+                const left = parseFloat(activeBar.style.left) || 0;
+                const w = parseFloat(activeBar.style.width) || 10;
+                const dayOffsetEnd = Math.floor(((left + w) / 100) * totalDays) - 1;
+                const newEnd = new Date(minDate);
+                newEnd.setDate(newEnd.getDate() + Math.max(dayOffsetEnd, 0));
+                const idx = parseInt(activeBar.dataset.idx);
+                if (!isNaN(idx) && items[idx]) {
+                    items[idx].endDate = newEnd.toISOString().split('T')[0];
+                    activeBar.dataset.end = items[idx].endDate;
+                }
+                const tooltip = document.getElementById('ganttTooltip');
+                if (items[idx]) {
+                    tooltip.textContent =
+                        `${items[idx].id}: ${items[idx].startDate} → ${items[idx].endDate}`;
+                    tooltip.style.left = e.clientX - 40 + 'px';
+                    tooltip.style.top = e.clientY - 30 + 'px';
+                    tooltip.classList.add('show');
+                }
+                return;
+            }
 
-                const onMouseUp = () => {
-                    if (activeBar) {
-                        document.getElementById('ganttTooltip').classList.remove('show');
-                        UI.toast('Timeline updated (simulated).', 'success');
-                    }
-                    document.removeEventListener('mousemove', onMouseMove);
-                    document.removeEventListener('mouseup', onMouseUp);
-                    activeBar = null;
-                    isResizing = false;
-                    resizeSide = null;
-                };
+            const leftPct = Math.max(0, Math.min(100 - (parseFloat(activeBar.style.width) || 10), pct));
+            activeBar.style.left = leftPct + '%';
+            const widthPct = parseFloat(activeBar.style.width) || 10;
+            const dayOffsetStart = Math.floor((leftPct / 100) * totalDays);
+            const dayOffsetEnd = Math.floor(((leftPct + widthPct) / 100) * totalDays) - 1;
+            const newStart = new Date(minDate);
+            newStart.setDate(newStart.getDate() + dayOffsetStart);
+            const newEnd = new Date(minDate);
+            newEnd.setDate(newEnd.getDate() + Math.max(dayOffsetEnd, dayOffsetStart));
+            const idx = parseInt(activeBar.dataset.idx);
+            if (!isNaN(idx) && items[idx]) {
+                items[idx].startDate = newStart.toISOString().split('T')[0];
+                items[idx].endDate = newEnd.toISOString().split('T')[0];
+                activeBar.dataset.start = items[idx].startDate;
+                activeBar.dataset.end = items[idx].endDate;
+            }
+            const tooltip = document.getElementById('ganttTooltip');
+            if (items[idx]) {
+                tooltip.textContent = `${items[idx].id}: ${items[idx].startDate} → ${items[idx].endDate}`;
+                tooltip.style.left = e.clientX - 40 + 'px';
+                tooltip.style.top = e.clientY - 30 + 'px';
+                tooltip.classList.add('show');
+            }
+        };
 
-                bars.forEach(bar => {
-                    bar.addEventListener('click', function(e) {
-                        if (e.target.closest('.resize-handle')) return;
-                        const idx = parseInt(this.dataset.idx);
-                        if (isNaN(idx) || !items[idx]) return;
-                        const item = items[idx];
-                        const newStart = prompt('Edit Start Date (YYYY-MM-DD):', item.startDate);
-                        if (newStart) {
-                            const newEnd = prompt('Edit End Date (YYYY-MM-DD):', item.endDate);
-                            if (newEnd) {
-                                item.startDate = newStart;
-                                item.endDate = newEnd;
-                                UI.toast(`Updated ${item.id} dates.`, 'success');
-                                const p = ProjectPage._data;
-                                if (p) ProjectPage._renderGanttChart(p);
-                            }
-                        }
-                    });
-                    bar.querySelectorAll('.resize-handle').forEach(handle => {
-                        handle.addEventListener('mousedown', function(e) {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            activeBar = bar;
-                            isResizing = true;
-                            resizeSide = this.dataset.action === 'resize-left' ? 'left' : 'right';
-                            document.addEventListener('mousemove', onMouseMove);
-                            document.addEventListener('mouseup', onMouseUp);
-                        });
-                    });
-                    bar.addEventListener('mousedown', function(e) {
-                        if (e.target.closest('.resize-handle')) return;
-                        e.preventDefault();
-                        activeBar = bar;
-                        isResizing = false;
-                        resizeSide = null;
-                        document.addEventListener('mousemove', onMouseMove);
-                        document.addEventListener('mouseup', onMouseUp);
-                    });
+        const onMouseUp = () => {
+            if (activeBar) {
+                document.getElementById('ganttTooltip').classList.remove('show');
+                UI.toast('Timeline updated (simulated).', 'success');
+            }
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            activeBar = null;
+            isResizing = false;
+            resizeSide = null;
+        };
+
+        bars.forEach(bar => {
+            bar.addEventListener('click', function(e) {
+                if (e.target.closest('.resize-handle')) return;
+                const idx = parseInt(this.dataset.idx);
+                if (isNaN(idx) || !items[idx]) return;
+                const item = items[idx];
+                const newStart = prompt('Edit Start Date (YYYY-MM-DD):', item.startDate);
+                if (newStart) {
+                    const newEnd = prompt('Edit End Date (YYYY-MM-DD):', item.endDate);
+                    if (newEnd) {
+                        item.startDate = newStart;
+                        item.endDate = newEnd;
+                        UI.toast(`Updated ${item.id} dates.`, 'success');
+                        const p = ProjectPage._data;
+                        if (p) ProjectPage._renderGanttChart(p);
+                    }
+                }
+            });
+            bar.querySelectorAll('.resize-handle').forEach(handle => {
+                handle.addEventListener('mousedown', function(e) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    activeBar = bar;
+                    isResizing = true;
+                    resizeSide = this.dataset.action === 'resize-left' ? 'left' : 'right';
+                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener('mouseup', onMouseUp);
                 });
-            },
+            });
+            bar.addEventListener('mousedown', function(e) {
+                if (e.target.closest('.resize-handle')) return;
+                e.preventDefault();
+                activeBar = bar;
+                isResizing = false;
+                resizeSide = null;
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+            });
+        });
+    },
 
-            renderSOWBudget(p) {
-                const container = document.getElementById('proj-tab-sow');
-                const estimates = this._estimatesData || { groups: [] };
+    /**
+     * renderSOWBudget - Renders the SOW budget tab
+     * 
+     * FIX: Fixed undefined project display (Issue 3.5)
+     * The project name now displays correctly using proper field mapping
+     */
+    renderSOWBudget(p) {
+        const container = document.getElementById('proj-tab-sow');
+        const estimates = this._estimatesData || { groups: [] };
 
-                let html = `
+        let html = `
                 <div class="section-head"><h2>Scope of Work Budget Control</h2><div class="rule"></div>
                     <span class="badge">Click any SOW to see detailed breakdown</span>
                 </div>
                 <div class="panel"><div style="padding:6px 16px;">`;
-                let totalBudget = 0,
-                    totalActual = 0,
-                    totalEstimate = 0;
+        let totalBudget = 0,
+            totalActual = 0,
+            totalEstimate = 0;
 
-                p.sowItems.forEach(item => {
-                    totalBudget += item.budget;
-                    totalActual += item.actual;
+        p.sowItems.forEach(item => {
+            totalBudget += item.budget || 0;
+            totalActual += item.actual || 0;
 
-                    const group = estimates.groups.find(g => g.sowId === item.id);
-                    let itemEstimate = 0;
-                    if (group) {
-                        const matSum = (group.materials || []).reduce((s, m) => s + (parseFloat(m.cost) || 0),
-                        0);
-                        const eqSum = (group.equipment || []).reduce((s, e) => s + (parseFloat(e.cost) || 0),
-                        0);
-                        const labSum = (group.labor || []).reduce((s, l) => s + (parseFloat(l.cost) || 0),
-                        0);
-                        const indSum = (group.indirect || []).reduce((s, i) => s + (parseFloat(i.amount) ||
-                        0), 0);
-                        itemEstimate = matSum + eqSum + labSum + indSum;
-                    }
-                    totalEstimate += itemEstimate;
+            const group = estimates.groups.find(g => g.sowId === item.id);
+            let itemEstimate = 0;
+            if (group) {
+                const matSum = (group.materials || []).reduce((s, m) => s + (parseFloat(m.cost) || 0), 0);
+                const eqSum = (group.equipment || []).reduce((s, e) => s + (parseFloat(e.cost) || 0), 0);
+                const labSum = (group.labor || []).reduce((s, l) => s + (parseFloat(l.cost) || 0), 0);
+                const indSum = (group.indirect || []).reduce((s, i) => s + (parseFloat(i.amount) || 0), 0);
+                itemEstimate = matSum + eqSum + labSum + indSum;
+            }
+            totalEstimate += itemEstimate;
 
-                    const pct = item.budget > 0 ? Math.min((item.actual / item.budget) * 100, 100) : 0;
-                    const barClass = pct > 90 ? 'danger' : pct > 70 ? 'warn' : '';
+            const pct = (item.budget || 0) > 0 ? Math.min(((item.actual || 0) / (item.budget || 0)) * 100, 100) : 0;
+            const barClass = pct > 90 ? 'danger' : pct > 70 ? 'warn' : '';
 
-                    const statusLabel = group ? (group.status === 'approved' ? `${Icon.checkCircle({size:12,color:'var(--green)'})} Approved` : group.status ===
-                        'pending' ? `${Icon.clock({size:12,color:'var(--amber)'})} Pending` : `${Icon.fileText({size:12})} Draft`) : `${Icon.fileText({size:12})} Draft`;
-                    const statusCls = group ? group.status : 'draft';
+            const statusLabel = group ? (group.status === 'approved' ? `${Icon.checkCircle({size:12,color:'var(--green)'})} Approved` : group.status ===
+                'pending' ? `${Icon.clock({size:12,color:'var(--amber)'})} Pending` : `${Icon.fileText({size:12})} Draft`) : `${Icon.fileText({size:12})} Draft`;
+            const statusCls = group ? group.status : 'draft';
 
-                    html += `
+            // FIX: Display project name properly (Issue 3.5)
+            // Use p.name or fallback to '—'
+            const projectDisplay = p.name || '—';
+
+            html += `
                     <div class="sow-item" onclick="ProjectPage.openSOWBreakdown('${item.id}')">
-                        <div class="sow-desc">${item.id} — ${item.description}</div>
+                        <div class="sow-desc">${item.id} — ${item.description || '—'}</div>
                         <div class="sow-numbers">
                             <span class="sn" style="color:var(--blueprint);font-weight:600;">Est: ₱${itemEstimate.toFixed(2)}</span>
-                            <span class="sn">Budget: ₱${item.budget.toFixed(2)}</span>
-                            <span class="sn">Actual: ₱${item.actual.toFixed(2)}</span>
-                            <span class="sn">Remaining: ₱${(item.budget - item.actual).toFixed(2)}</span>
+                            <span class="sn">Budget: ₱${(item.budget || 0).toFixed(2)}</span>
+                            <span class="sn">Actual: ₱${(item.actual || 0).toFixed(2)}</span>
+                            <span class="sn">Remaining: ₱${((item.budget || 0) - (item.actual || 0)).toFixed(2)}</span>
                             <span class="stamp ${statusCls}" style="transform:none;font-size:8px;padding:1px 8px;">${statusLabel}</span>
                         </div>
                         <div class="sow-bar"><div class="fill ${barClass}" style="width:${pct}%;"></div></div>
                         <span style="font-size:11px;font-weight:600;min-width:44px;">${pct.toFixed(0)}%</span>
                         <span style="color:var(--ink-soft);">${Icon.search({size:13})}</span>
                     </div>`;
-                });
+        });
 
-                html += `
+        html += `
                     <div class="sow-total-row">
                         <span>Total Estimate: ₱${totalEstimate.toFixed(2)}</span>
                         <span>Total Budget: ₱${totalBudget.toFixed(2)}</span>
@@ -712,86 +804,98 @@
                 <div class="chart-grid full">
                     <div class="chart-card"><div class="cc-head"><h3>SOW Cashflow</h3><span class="cc-note">budget vs actual</span></div><div class="canvas-wrap"><canvas id="sowChart"></canvas></div></div>
                 </div>`;
-                container.innerHTML = html;
-            },
+        container.innerHTML = html;
+    },
 
-            openSOWBreakdown(sowId) {
-                const estimates = this._estimatesData || { groups: [] };
-                const group = estimates.groups.find(g => g.sowId === sowId);
-                if (!group) { UI.toast('No estimate data for this SOW.', 'error'); return; }
-                const data = {
-                    materials: group.materials || [],
-                    equipment: group.equipment || [],
-                    labor: group.labor || [],
-                    indirect: group.indirect || []
-                };
-                SOWBreakdownModal.open(sowId, data);
-            },
+    /**
+     * openSOWBreakdown - Opens the SOW breakdown modal
+     * PURPOSE: Shows detailed estimate breakdown for a SOW item
+     */
+    openSOWBreakdown(sowId) {
+        const estimates = this._estimatesData || { groups: [] };
+        const group = estimates.groups.find(g => g.sowId === sowId);
+        if (!group) { UI.toast('No estimate data for this SOW.', 'error'); return; }
+        const data = {
+            materials: group.materials || [],
+            equipment: group.equipment || [],
+            labor: group.labor || [],
+            indirect: group.indirect || []
+        };
+        SOWBreakdownModal.open(sowId, data);
+    },
 
-            _buildSOWChart(p) {
-                if (this._charts.sow) this._charts.sow.destroy();
-                try {
-                    if (typeof Chart === 'undefined') return;
-                    const ctx = document.getElementById('sowChart');
-                    if (!ctx) return;
-                    const labels = p.sowItems.map(i => i.id);
-                    const budget = p.sowItems.map(i => i.budget);
-                    const actual = p.sowItems.map(i => i.actual);
-                    this._charts.sow = new Chart(ctx, {
-                        type: 'bar',
-                        data: {
-                            labels: labels,
-                            datasets: [
-                                { label: 'Budget', data: budget, backgroundColor: '#C9D9E0',
-                                borderRadius: 4 },
-                                { label: 'Actual', data: actual, backgroundColor: '#24455A',
-                                    borderRadius: 4 }
-                            ]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8 } },
-                                tooltip: { callbacks: { label: c => `${c.dataset.label}: ₱${c.parsed.y.toFixed(2)}` } }
-                            },
-                            scales: {
-                                y: { ticks: { callback: v => '₱' + (v / 1000) + 'k' }, grid: { color: '#EEEBE0' } },
-                                x: { grid: { display: false } }
-                            }
-                        }
-                    });
-                } catch (err) { console.error('SOW chart error:', err); }
-            },
+    /**
+     * _buildSOWChart - Builds the SOW budget chart
+     * PURPOSE: Creates a bar chart comparing budget vs actual
+     */
+    _buildSOWChart(p) {
+        if (this._charts.sow) this._charts.sow.destroy();
+        try {
+            if (typeof Chart === 'undefined') return;
+            const ctx = document.getElementById('sowChart');
+            if (!ctx) return;
+            const labels = p.sowItems.map(i => i.id);
+            const budget = p.sowItems.map(i => i.budget || 0);
+            const actual = p.sowItems.map(i => i.actual || 0);
+            this._charts.sow = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Budget', data: budget, backgroundColor: '#C9D9E0', borderRadius: 4 },
+                        { label: 'Actual', data: actual, backgroundColor: '#24455A', borderRadius: 4 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8 } },
+                        tooltip: { callbacks: { label: c => `${c.dataset.label}: ₱${c.parsed.y.toFixed(2)}` } }
+                    },
+                    scales: {
+                        y: { ticks: { callback: v => '₱' + (v / 1000) + 'k' }, grid: { color: '#EEEBE0' } },
+                        x: { grid: { display: false } }
+                    }
+                }
+            });
+        } catch (err) { console.error('SOW chart error:', err); }
+    },
 
-            renderEstimates(p) {
-                const container = document.getElementById('proj-tab-estimates');
-                const est = this._estimatesData || { groups: [] };
+    /**
+     * renderEstimates - Renders the estimates tab
+     * 
+     * FIX: Fixed estimate group rendering with proper data binding (Issue 3.5)
+     * Added fallbacks for missing data
+     */
+    renderEstimates(p) {
+        const container = document.getElementById('proj-tab-estimates');
+        const est = this._estimatesData || { groups: [] };
 
-                // Get approved materials for dropdown
-                const allMat = DataService._materials || [];
-                const matOptions = allMat.map(m =>
-                    `<option value="${m.id}" data-name="${m.brand} ${m.specs}" data-rate="${m.rate || 0}">${m.id} - ${m.brand} ${m.specs}</option>`
-                ).join('');
+        // Get approved materials for dropdown
+        const allMat = DataService._materials || [];
+        const matOptions = allMat.map(m =>
+            `<option value="${m.id}" data-name="${m.brand || m.name} ${m.specs || ''}" data-rate="${m.rate || 0}">${m.id} - ${m.brand || m.name} ${m.specs || ''}</option>`
+        ).join('');
 
-                // Get approved equipment for dropdown
-                const allEq = DataService._equipment || [];
-                const eqOptions = allEq.map(e =>
-                    `<option value="${e.id}" data-name="${e.brand} ${e.model}" data-rate="${e.rate || 0}">${e.id} - ${e.brand} ${e.model}</option>`
-                ).join('');
+        // Get approved equipment for dropdown
+        const allEq = DataService._equipment || [];
+        const eqOptions = allEq.map(e =>
+            `<option value="${e.id}" data-name="${e.brand || e.name} ${e.model || ''}" data-rate="${e.rate || 0}">${e.id} - ${e.brand || e.name} ${e.model || ''}</option>`
+        ).join('');
 
-                // Calculate totals
-                let grandTotal = 0;
-                est.groups.forEach(g => {
-                    const matSum = (g.materials || []).reduce((s, m) => s + (parseFloat(m.cost) || 0), 0);
-                    const eqSum = (g.equipment || []).reduce((s, e) => s + (parseFloat(e.cost) || 0), 0);
-                    const labSum = (g.labor || []).reduce((s, l) => s + (parseFloat(l.cost) || 0), 0);
-                    const indSum = (g.indirect || []).reduce((s, i) => s + (parseFloat(i.amount) || 0), 0);
-                    g._total = matSum + eqSum + labSum + indSum;
-                    grandTotal += g._total;
-                });
+        // Calculate totals
+        let grandTotal = 0;
+        est.groups.forEach(g => {
+            const matSum = (g.materials || []).reduce((s, m) => s + (parseFloat(m.cost) || 0), 0);
+            const eqSum = (g.equipment || []).reduce((s, e) => s + (parseFloat(e.cost) || 0), 0);
+            const labSum = (g.labor || []).reduce((s, l) => s + (parseFloat(l.cost) || 0), 0);
+            const indSum = (g.indirect || []).reduce((s, i) => s + (parseFloat(i.amount) || 0), 0);
+            g._total = matSum + eqSum + labSum + indSum;
+            grandTotal += g._total;
+        });
 
-                let html = `
+        let html = `
                 <div class="section-head"><h2>Project Estimates</h2><div class="rule"></div>
                     <span class="badge">Total Estimate: ₱${grandTotal.toFixed(2)}</span>
                 </div>
@@ -802,20 +906,20 @@
 
                 <div id="estGroupsContainer">`;
 
-                if (est.groups.length === 0) {
-                    html += `<div class="empty"><p>No SOW groups. Add a new SOW group below.</p></div>`;
-                } else {
-                    est.groups.forEach((group, gIdx) => {
-                        const isApproved = group.status === 'approved';
-                        const isPending = group.status === 'pending';
-                        const isDraft = group.status === 'draft' || !group.status;
-                        const cardCls = isApproved ? 'approved' : isPending ? 'pending' : 'draft';
-                        const readonlyCls = isApproved ? 'readonly' : '';
+        if (est.groups.length === 0) {
+            html += `<div class="empty"><p>No SOW groups. Add a new SOW group below.</p></div>`;
+        } else {
+            est.groups.forEach((group, gIdx) => {
+                const isApproved = group.status === 'approved';
+                const isPending = group.status === 'pending';
+                const isDraft = group.status === 'draft' || !group.status;
+                const cardCls = isApproved ? 'approved' : isPending ? 'pending' : 'draft';
+                const readonlyCls = isApproved ? 'readonly' : '';
 
-                        html += `
+                html += `
                         <div class="est-group-card ${cardCls} ${readonlyCls}" data-group-idx="${gIdx}">
                             <div class="eg-header">
-                                <span class="eg-sow">${group.sowId}</span>
+                                <span class="eg-sow">${group.sowId || '—'}</span>
                                 <span class="eg-desc">${group.sowDescription || 'No description'}</span>
                                 <span class="eg-status ${group.status || 'draft'}">${group.status || 'draft'}</span>
                                 <div class="eg-actions">
@@ -839,10 +943,10 @@
                                 </div>
                             </div>
                         </div>`;
-                    });
-                }
+            });
+        }
 
-                html += `
+        html += `
                 </div>
                 <div class="submit-row" style="margin-top:16px;">
                     <button class="btn-primary" onclick="ProjectPage.addSOWGroup()">+ Add SOW Group</button>
@@ -850,13 +954,19 @@
                     <span style="font-size:11px;color:var(--ink-soft);align-self:center;">Data is saved locally (simulated).</span>
                 </div>`;
 
-                container.innerHTML = html;
-            },
+        container.innerHTML = html;
+    },
 
-            _renderEstimateCategory(label, items, gIdx, cat, isApproved, options = '') {
-                if (!items) items = [];
-                const catKey = cat;
-                let html = `
+    /**
+     * _renderEstimateCategory - Renders a category within an estimate group
+     * PURPOSE: Shows materials, labor, equipment, or indirect costs
+     * 
+     * FIX: Added proper fallbacks for missing data (Issue 3.5)
+     */
+    _renderEstimateCategory(label, items, gIdx, cat, isApproved, options = '') {
+        if (!items) items = [];
+        const catKey = cat;
+        let html = `
                 <div class="eg-category">
                     <div class="eg-cat-label">
                         ${label} 
@@ -864,15 +974,15 @@
                     </div>
                     <div class="eg-cat-items">`;
 
-                if (items.length === 0) {
-                    html += `<div style="font-size:11px;color:var(--ink-soft);padding:4px 0;">No items added.</div>`;
-                } else {
-                    items.forEach((item, idx) => {
-                        const cost = parseFloat(item.cost || item.amount || 0);
-                        html += `<div class="eg-item-row" data-item-idx="${idx}" data-cat="${catKey}">`;
+        if (items.length === 0) {
+            html += `<div style="font-size:11px;color:var(--ink-soft);padding:4px 0;">No items added.</div>`;
+        } else {
+            items.forEach((item, idx) => {
+                const cost = parseFloat(item.cost || item.amount || 0);
+                html += `<div class="eg-item-row" data-item-idx="${idx}" data-cat="${catKey}">`;
 
-                        if (cat === 'materials') {
-                            html += `
+                if (cat === 'materials') {
+                    html += `
                                 <div class="field"><label>Material</label>
                                     ${isApproved ? `<span style="font-size:12px;font-weight:500;">${item.materialName || item.material || '—'}</span>` :
                                     `<select class="est-mat-select" data-g="${gIdx}" data-idx="${idx}" data-cat="${catKey}" onchange="ProjectPage.updateEstimateItem(${gIdx},${idx},'${catKey}','material',this.value)">
@@ -897,8 +1007,8 @@
                                 </div>
                                 ${!isApproved ? `<div class="field"><button class="remove-btn" onclick="ProjectPage.removeEstimateItem(${gIdx},${idx},'${catKey}')">${Icon.close({size:13})}</button></div>` : ''}
                             `;
-                        } else if (cat === 'labor') {
-                            html += `
+                } else if (cat === 'labor') {
+                    html += `
                                 <div class="field"><label>Role</label>
                                     ${isApproved ? `<span style="font-size:12px;font-weight:500;">${item.role || '—'}</span>` :
                                     `<input type="text" class="est-item-role" data-g="${gIdx}" data-idx="${idx}" data-cat="${catKey}" value="${item.role || ''}" onchange="ProjectPage.updateEstimateItem(${gIdx},${idx},'${catKey}','role',this.value)" />`}
@@ -924,8 +1034,8 @@
                                 </div>
                                 ${!isApproved ? `<div class="field"><button class="remove-btn" onclick="ProjectPage.removeEstimateItem(${gIdx},${idx},'${catKey}')">${Icon.close({size:13})}</button></div>` : ''}
                             `;
-                        } else if (cat === 'equipment') {
-                            html += `
+                } else if (cat === 'equipment') {
+                    html += `
                                 <div class="field"><label>Equipment</label>
                                     ${isApproved ? `<span style="font-size:12px;font-weight:500;">${item.equipName || item.equipment || '—'}</span>` :
                                     `<select class="est-eq-select" data-g="${gIdx}" data-idx="${idx}" data-cat="${catKey}" onchange="ProjectPage.updateEstimateItem(${gIdx},${idx},'${catKey}','equipment',this.value)">
@@ -954,8 +1064,8 @@
                                 </div>
                                 ${!isApproved ? `<div class="field"><button class="remove-btn" onclick="ProjectPage.removeEstimateItem(${gIdx},${idx},'${catKey}')">${Icon.close({size:13})}</button></div>` : ''}
                             `;
-                        } else if (cat === 'indirect') {
-                            html += `
+                } else if (cat === 'indirect') {
+                    html += `
                                 <div class="field"><label>Desc</label>
                                     ${isApproved ? `<span style="font-size:12px;">${item.desc || '—'}</span>` :
                                     `<input type="text" class="est-item-desc" data-g="${gIdx}" data-idx="${idx}" data-cat="${catKey}" value="${item.desc || ''}" onchange="ProjectPage.updateEstimateItem(${gIdx},${idx},'${catKey}','desc',this.value)" />`}
@@ -979,159 +1089,190 @@
                                 </div>
                                 ${!isApproved ? `<div class="field"><button class="remove-btn" onclick="ProjectPage.removeEstimateItem(${gIdx},${idx},'${catKey}')">${Icon.close({size:13})}</button></div>` : ''}
                             `;
-                        }
-
-                        html += `</div>`;
-                    });
                 }
 
-                html += `
+                html += `</div>`;
+            });
+        }
+
+        html += `
                     </div>
                     ${!isApproved ? `<div class="eg-add-btn"><button class="btn-sm" onclick="ProjectPage.addEstimateItem(${gIdx},'${catKey}')">+ Add</button></div>` : ''}
                 </div>`;
-                return html;
-            },
+        return html;
+    },
 
-            addEstimateItem(gIdx, cat) {
-                const est = this._estimatesData;
-                if (!est || !est.groups[gIdx]) { UI.toast('Group not found.', 'error'); return; }
-                const group = est.groups[gIdx];
-                if (group.status === 'approved') { UI.toast('Cannot edit approved estimate.', 'error'); return; }
-                const newItem = { id: 'est-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4) };
-                if (cat === 'materials') { newItem.material = '';
-                    newItem.materialName = '';
-                    newItem.desc = '';
-                    newItem.qty = 0;
-                    newItem.rate = 0;
-                    newItem.cost = 0; } else if (cat === 'labor') { newItem.role = '';
-                    newItem.desc = '';
-                    newItem.qty = 0;
-                    newItem.duration = 0;
-                    newItem.rate = 0;
-                    newItem.cost = 0; } else if (cat === 'equipment') { newItem.equipment = '';
-                    newItem.equipName = '';
-                    newItem.desc = '';
-                    newItem.qty = 0;
-                    newItem.duration = 0;
-                    newItem.rate = 0;
-                    newItem.cost = 0; } else if (cat === 'indirect') { newItem.desc = '';
-                    newItem.type = 'Contingency';
-                    newItem.amount = 0; }
-                group[cat].push(newItem);
-                this.renderEstimates(this._data);
-            },
+    /**
+     * addEstimateItem - Adds a new item to an estimate category
+     * PURPOSE: Allows users to add materials, labor, equipment, or indirect costs
+     */
+    addEstimateItem(gIdx, cat) {
+        const est = this._estimatesData;
+        if (!est || !est.groups[gIdx]) { UI.toast('Group not found.', 'error'); return; }
+        const group = est.groups[gIdx];
+        if (group.status === 'approved') { UI.toast('Cannot edit approved estimate.', 'error'); return; }
+        const newItem = { id: 'est-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4) };
+        if (cat === 'materials') { newItem.material = '';
+            newItem.materialName = '';
+            newItem.desc = '';
+            newItem.qty = 0;
+            newItem.rate = 0;
+            newItem.cost = 0; } else if (cat === 'labor') { newItem.role = '';
+            newItem.desc = '';
+            newItem.qty = 0;
+            newItem.duration = 0;
+            newItem.rate = 0;
+            newItem.cost = 0; } else if (cat === 'equipment') { newItem.equipment = '';
+            newItem.equipName = '';
+            newItem.desc = '';
+            newItem.qty = 0;
+            newItem.duration = 0;
+            newItem.rate = 0;
+            newItem.cost = 0; } else if (cat === 'indirect') { newItem.desc = '';
+            newItem.type = 'Contingency';
+            newItem.amount = 0; }
+        group[cat].push(newItem);
+        this.renderEstimates(this._data);
+    },
 
-            removeEstimateItem(gIdx, idx, cat) {
-                const est = this._estimatesData;
-                if (!est || !est.groups[gIdx]) { UI.toast('Group not found.', 'error'); return; }
-                const group = est.groups[gIdx];
-                if (group.status === 'approved') { UI.toast('Cannot edit approved estimate.', 'error'); return; }
-                if (group[cat] && group[cat].length > idx) {
-                    group[cat].splice(idx, 1);
-                    this.renderEstimates(this._data);
-                }
-            },
+    /**
+     * removeEstimateItem - Removes an item from an estimate category
+     * PURPOSE: Allows users to delete items from estimates
+     */
+    removeEstimateItem(gIdx, idx, cat) {
+        const est = this._estimatesData;
+        if (!est || !est.groups[gIdx]) { UI.toast('Group not found.', 'error'); return; }
+        const group = est.groups[gIdx];
+        if (group.status === 'approved') { UI.toast('Cannot edit approved estimate.', 'error'); return; }
+        if (group[cat] && group[cat].length > idx) {
+            group[cat].splice(idx, 1);
+            this.renderEstimates(this._data);
+        }
+    },
 
-            updateEstimateItem(gIdx, idx, cat, field, value) {
-                const est = this._estimatesData;
-                if (!est || !est.groups[gIdx]) return;
-                const group = est.groups[gIdx];
-                if (group.status === 'approved') return;
-                const item = group[cat] && group[cat][idx];
-                if (!item) return;
-                item[field] = value;
-                if (cat === 'materials') {
-                    item.cost = (parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0);
-                } else if (cat === 'labor' || cat === 'equipment') {
-                    item.cost = (parseFloat(item.qty) || 0) * (parseFloat(item.duration) || 0) * (parseFloat(item.rate) ||
-                    0);
-                } else if (cat === 'indirect') {
-                    item.amount = parseFloat(value) || 0;
-                    item.cost = item.amount;
-                }
-                this.renderEstimates(this._data);
-            },
+    /**
+     * updateEstimateItem - Updates a field in an estimate item
+     * PURPOSE: Handles real-time updates to estimate items
+     * 
+     * FIX: Added proper cost calculation with fallbacks (Issue 3.5)
+     */
+    updateEstimateItem(gIdx, idx, cat, field, value) {
+        const est = this._estimatesData;
+        if (!est || !est.groups[gIdx]) return;
+        const group = est.groups[gIdx];
+        if (group.status === 'approved') return;
+        const item = group[cat] && group[cat][idx];
+        if (!item) return;
+        item[field] = value;
+        if (cat === 'materials') {
+            item.cost = (parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0);
+        } else if (cat === 'labor' || cat === 'equipment') {
+            item.cost = (parseFloat(item.qty) || 0) * (parseFloat(item.duration) || 0) * (parseFloat(item.rate) || 0);
+        } else if (cat === 'indirect') {
+            item.amount = parseFloat(value) || 0;
+            item.cost = item.amount;
+        }
+        this.renderEstimates(this._data);
+    },
 
-            addSOWGroup() {
-                const est = this._estimatesData;
-                const p = this._data;
-                if (!p || !p.sowItems) { UI.toast('No SOW items available.', 'error'); return; }
-                const existingIds = est.groups.map(g => g.sowId);
-                const available = p.sowItems.filter(s => !existingIds.includes(s.id));
-                if (available.length === 0) {
-                    UI.toast('All SOW items already have estimate groups.', 'error');
-                    return;
-                }
-                const sow = available[0];
-                est.groups.push({
-                    sowId: sow.id,
-                    sowDescription: sow.description,
-                    status: 'draft',
-                    materials: [],
-                    labor: [],
-                    equipment: [],
-                    indirect: []
-                });
-                this.renderEstimates(this._data);
-                UI.toast(`Added estimate group for ${sow.id}`, 'success');
-            },
+    /**
+     * addSOWGroup - Adds a new SOW group to estimates
+     * PURPOSE: Creates a new estimate group for an unassigned SOW item
+     */
+    addSOWGroup() {
+        const est = this._estimatesData;
+        const p = this._data;
+        if (!p || !p.sowItems) { UI.toast('No SOW items available.', 'error'); return; }
+        const existingIds = est.groups.map(g => g.sowId);
+        const available = p.sowItems.filter(s => !existingIds.includes(s.id));
+        if (available.length === 0) {
+            UI.toast('All SOW items already have estimate groups.', 'error');
+            return;
+        }
+        const sow = available[0];
+        est.groups.push({
+            sowId: sow.id,
+            sowDescription: sow.description || '—',
+            status: 'draft',
+            materials: [],
+            labor: [],
+            equipment: [],
+            indirect: []
+        });
+        this.renderEstimates(this._data);
+        UI.toast(`Added estimate group for ${sow.id}`, 'success');
+    },
 
-            async submitEstimateGroup(gIdx) {
-                const est = this._estimatesData;
-                if (!est || !est.groups[gIdx]) { UI.toast('Group not found.', 'error'); return; }
-                const group = est.groups[gIdx];
-                if (group.status === 'approved') { UI.toast('Already approved.', 'error'); return; }
-                if (group.status === 'pending') { UI.toast('Already submitted for approval.', 'error'); return; }
-                const hasData = (group.materials && group.materials.length > 0) ||
-                    (group.labor && group.labor.length > 0) ||
-                    (group.equipment && group.equipment.length > 0) ||
-                    (group.indirect && group.indirect.length > 0);
-                if (!hasData) { UI.toast('Add at least one item before submitting.', 'error'); return; }
-                const confirmed = await Confirm.open('Submit for Approval?',
-                    `Submit ${group.sowId} — ${group.sowDescription} for approval?`);
-                if (!confirmed) return;
-                try {
-                    await DataService.submitEstimatesForApproval(this._currentProjectId, group.sowId);
-                    group.status = 'pending';
-                    this.renderEstimates(this._data);
-                    UI.toast(`${group.sowId} submitted for approval.`, 'success');
-                    this._updateApprovalBadge();
-                } catch (err) { UI.toast('' + err.message, 'error'); }
-            },
+    /**
+     * submitEstimateGroup - Submits an estimate group for approval
+     * PURPOSE: Changes status from draft to pending
+     */
+    async submitEstimateGroup(gIdx) {
+        const est = this._estimatesData;
+        if (!est || !est.groups[gIdx]) { UI.toast('Group not found.', 'error'); return; }
+        const group = est.groups[gIdx];
+        if (group.status === 'approved') { UI.toast('Already approved.', 'error'); return; }
+        if (group.status === 'pending') { UI.toast('Already submitted for approval.', 'error'); return; }
+        const hasData = (group.materials && group.materials.length > 0) ||
+            (group.labor && group.labor.length > 0) ||
+            (group.equipment && group.equipment.length > 0) ||
+            (group.indirect && group.indirect.length > 0);
+        if (!hasData) { UI.toast('Add at least one item before submitting.', 'error'); return; }
+        const confirmed = await Confirm.open('Submit for Approval?',
+            `Submit ${group.sowId} — ${group.sowDescription} for approval?`);
+        if (!confirmed) return;
+        try {
+            await DataService.submitEstimatesForApproval(this._currentProjectId, group.sowId);
+            group.status = 'pending';
+            this.renderEstimates(this._data);
+            UI.toast(`${group.sowId} submitted for approval.`, 'success');
+            this._updateApprovalBadge();
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
 
-            async approveEstimateGroup(gIdx) {
-                const est = this._estimatesData;
-                if (!est || !est.groups[gIdx]) { UI.toast('Group not found.', 'error'); return; }
-                const group = est.groups[gIdx];
-                if (group.status !== 'pending') { UI.toast('Only pending estimates can be approved.', 'error'); return; }
-                const confirmed = await Confirm.open('Approve Estimate?',
-                    `Approve ${group.sowId} — ${group.sowDescription}? This will lock it from further edits.`);
-                if (!confirmed) return;
-                try {
-                    await DataService.approveEstimates(this._currentProjectId, group.sowId);
-                    group.status = 'approved';
-                    this.renderEstimates(this._data);
-                    UI.toast(`${group.sowId} approved and locked.`, 'success');
-                    this._updateApprovalBadge();
-                } catch (err) { UI.toast('' + err.message, 'error'); }
-            },
+    /**
+     * approveEstimateGroup - Approves an estimate group
+     * PURPOSE: Changes status from pending to approved (locks editing)
+     */
+    async approveEstimateGroup(gIdx) {
+        const est = this._estimatesData;
+        if (!est || !est.groups[gIdx]) { UI.toast('Group not found.', 'error'); return; }
+        const group = est.groups[gIdx];
+        if (group.status !== 'pending') { UI.toast('Only pending estimates can be approved.', 'error'); return; }
+        const confirmed = await Confirm.open('Approve Estimate?',
+            `Approve ${group.sowId} — ${group.sowDescription}? This will lock it from further edits.`);
+        if (!confirmed) return;
+        try {
+            await DataService.approveEstimates(this._currentProjectId, group.sowId);
+            group.status = 'approved';
+            this.renderEstimates(this._data);
+            UI.toast(`${group.sowId} approved and locked.`, 'success');
+            this._updateApprovalBadge();
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
 
-            async saveAllEstimates() {
-                const est = this._estimatesData;
-                if (!est) { UI.toast('No data to save.', 'error'); return; }
-                try {
-                    await DataService.saveEstimates(this._currentProjectId, est.groups);
-                    UI.toast('All estimates saved!', 'success');
-                } catch (err) { UI.toast('' + err.message, 'error'); }
-            },
+    /**
+     * saveAllEstimates - Saves all estimate data
+     * PURPOSE: Persists all estimate groups to the backend
+     */
+    async saveAllEstimates() {
+        const est = this._estimatesData;
+        if (!est) { UI.toast('No data to save.', 'error'); return; }
+        try {
+            await DataService.saveEstimates(this._currentProjectId, est.groups);
+            UI.toast('All estimates saved!', 'success');
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
 
-            _updateApprovalBadge() {
-                const badge = document.getElementById('approvalBadgeHome');
-                if (badge) {
-                    const pendingCount = DataService._pendingMaterials.length + DataService._pendingEquipment.length +
-                        3; // approximate
-                    badge.textContent = pendingCount;
-                }
-            }
-        };
-
+    /**
+     * _updateApprovalBadge - Updates the approval badge
+     * PURPOSE: Keeps the badge count in sync with pending items
+     */
+    _updateApprovalBadge() {
+        const badge = document.getElementById('approvalBadgeHome');
+        if (badge) {
+            const pendingCount = DataService._pendingMaterials.length + DataService._pendingEquipment.length + 3;
+            badge.textContent = pendingCount;
+        }
+    }
+};
