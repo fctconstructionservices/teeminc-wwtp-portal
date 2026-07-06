@@ -126,13 +126,9 @@ const HomePage = {
             const pending = data.pendingRequests;
             const logs = data.logs;
             
-            // Filter out requests where the current user is the requestor (Issue 3.1)
+            // Homepage Pending Reequest - makikita na lahat ng request na pending (overview)
             const userEmail = user ? user.email.toLowerCase() : '';
-            const filteredPending = pending.filter(r => {
-                return r.requestorEmail && r.requestorEmail.toLowerCase() !== userEmail;
-            });
-
-            // Only show Pending status (Issue 3.9)
+            const filteredPending = pending;
             const activePending = filteredPending.filter(r => r.status === 'Pending');
 
             let queueHtml = `
