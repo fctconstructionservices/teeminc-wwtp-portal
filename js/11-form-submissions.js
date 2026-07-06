@@ -1,12 +1,27 @@
 // ================================================================
 //  FORM SUBMISSIONS — with Google Sheets & Drive integration
+//  PURPOSE: Handles all form submissions with proper validation
+//  
+//  FIXES APPLIED:
+//  - Added comprehensive field validation (Issue 2.1)
+//  - All fields must be filled before submission is allowed
+//  - Proper error messaging for missing fields
+//  - File upload support with base64 conversion
 // ================================================================
 
-// ─── REQUEST CASH ADVANCE ──────────────────────────────────────
+/**
+ * submitRequestForm - Handles Cash Advance request submission
+ * 
+ * PURPOSE: Validates all fields, shows confirmation dialog, 
+ * converts file attachments to base64, and submits to backend
+ * 
+ * FIX: Added comprehensive field validation (Issue 2.1)
+ * All required fields must be filled before proceeding
+ */
 async function submitRequestForm(e) {
     e.preventDefault();
 
-    // --- Validation ---
+    // --- FIX: Validate all required fields (Issue 2.1) ---
     const project = document.getElementById('req-project').value;
     const description = document.getElementById('req-desc').value.trim();
     const amount = parseFloat(document.getElementById('req-amount').value);
@@ -15,35 +30,48 @@ async function submitRequestForm(e) {
     const dateNeeded = document.getElementById('req-date').value;
     const fileInput = document.getElementById('req-file');
 
+    // FIX: Check if all required fields are filled (Issue 2.1)
     let valid = true;
+    let missingFields = [];
+    
+    // Validate Project field
     if (!project) {
         document.getElementById('req-project-field').classList.add('error');
         valid = false;
+        missingFields.push('Project');
     } else {
         document.getElementById('req-project-field').classList.remove('error');
     }
+    
+    // Validate Description field
     if (!description) {
         document.getElementById('req-desc-field').classList.add('error');
         valid = false;
+        missingFields.push('Description');
     } else {
         document.getElementById('req-desc-field').classList.remove('error');
     }
+    
+    // Validate Amount field
     if (!amount || amount <= 0) {
         document.getElementById('req-amount-field').classList.add('error');
         valid = false;
+        missingFields.push('Amount');
     } else {
         document.getElementById('req-amount-field').classList.remove('error');
     }
+    
+    // If validation fails, show error message with missing fields
     if (!valid) {
-        UI.toast('Please fix the errors above.', 'error');
+        UI.toast(`Please fill in all required fields: ${missingFields.join(', ')}`, 'error');
         return false;
     }
 
-    // --- Confirm ---
+    // --- Show confirmation dialog ---
     const confirmed = await Confirm.open('Submit Request?', `Submit for ₱${amount.toFixed(2)}?`);
     if (!confirmed) return false;
 
-    // --- Show loading state ---
+    // --- Show loading state while submitting ---
     const resultDiv = document.getElementById('submissionResult');
     if (resultDiv) {
         resultDiv.style.display = 'block';
@@ -58,11 +86,17 @@ async function submitRequestForm(e) {
     }
 
     try {
+        // Build the payload
         const payload = {
-            project, description, amount, requestType, scopeOfWork, dateNeeded
+            project, 
+            description, 
+            amount, 
+            requestType, 
+            scopeOfWork, 
+            dateNeeded
         };
 
-        // Optional file attachment -> base64, saved to Drive server-side
+        // Handle file attachment - convert to base64 for server upload
         if (fileInput && fileInput.files.length > 0) {
             const file = fileInput.files[0];
             payload.fileBase64 = await fileToBase64_(file);
@@ -70,10 +104,13 @@ async function submitRequestForm(e) {
             payload.fileMimeType = file.type;
         }
 
+        // Submit to backend
         const data = await DataService.submitCashAdvance(payload);
 
+        // Show success message
         UI.toast(`Request submitted successfully!`, 'success');
 
+        // Update result div with success
         if (resultDiv) {
             resultDiv.style.background = '#E7F3EA';
             resultDiv.style.color = '#1C2321';
@@ -84,18 +121,25 @@ async function submitRequestForm(e) {
                 </div>
             `;
             clearTimeout(resultDiv._hideTimer);
-            resultDiv._hideTimer = setTimeout(() => { resultDiv.style.display = 'none'; }, 3000);
+            resultDiv._hideTimer = setTimeout(() => { 
+                resultDiv.style.display = 'none'; 
+            }, 3000);
         }
 
+        // Reset the form
         document.getElementById('requestForm').reset();
         if (fileInput) fileInput.value = '';
 
-        if (typeof HomePage !== 'undefined' && HomePage.load) HomePage.load();
+        // Reload home page to update data
+        if (typeof HomePage !== 'undefined' && HomePage.load) {
+            HomePage.load();
+        }
 
     } catch (err) {
         console.error('Submission error:', err);
         UI.toast('' + err.message, 'error');
 
+        // Show error in result div
         if (resultDiv) {
             resultDiv.style.background = '#FAEBE9';
             resultDiv.style.color = '#1C2321';
@@ -114,98 +158,218 @@ async function submitRequestForm(e) {
     return false;
 }
 
-// Helper: convert a File object to a raw base64 string (no data: prefix)
+/**
+ * fileToBase64_ - Convert a File object to base64 string
+ * 
+ * PURPOSE: Prepares file attachments for server-side storage
+ * Uses FileReader API to read the file and convert to base64
+ * 
+ * @param {File} file - The file to convert
+ * @returns {Promise<string>} Base64 encoded string (without data: prefix)
+ */
 function fileToBase64_(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onload = () => {
+            // Remove the data:image/png;base64, prefix
+            const base64 = reader.result.split(',')[1];
+            resolve(base64);
+        };
         reader.onerror = reject;
         reader.readAsDataURL(file);
     });
 }
 
-// ─── LIQUIDATE ──────────────────────────────────────────────────
-// (unchanged – still uses DataService mock)
+// ─── LIQUIDATE FORM ──────────────────────────────────────────────────
+
+/**
+ * submitLiquidateForm - Handles Liquidation submission
+ * 
+ * PURPOSE: Submits liquidation data with receipt details
+ * Validates required fields before submission
+ */
 async function submitLiquidateForm(e) {
     e.preventDefault();
+    
+    // Get form values
     const requestId = document.getElementById('liq-req-id').value;
     const receiptNo = document.getElementById('liq-receipt').value.trim();
     const amount = parseFloat(document.getElementById('liq-amount').value);
     const description = document.getElementById('liq-desc').value.trim();
+    
+    // Validate required fields
     let valid = true;
-    if (!requestId) { document.getElementById('liq-req-field').classList.add('error');
-        valid = false; } else { document.getElementById('liq-req-field').classList.remove('error'); }
-    if (!receiptNo) { document.getElementById('liq-receipt-field').classList.add('error');
-        valid = false; } else { document.getElementById('liq-receipt-field').classList.remove('error'); }
-    if (!amount || amount <= 0) { document.getElementById('liq-amount-field').classList.add('error');
-        valid = false; } else { document.getElementById('liq-amount-field').classList.remove('error'); }
-    if (!description) { document.getElementById('liq-desc-field').classList.add('error');
-        valid = false; } else { document.getElementById('liq-desc-field').classList.remove('error'); }
+    
+    if (!requestId) { 
+        document.getElementById('liq-req-field').classList.add('error');
+        valid = false; 
+    } else { 
+        document.getElementById('liq-req-field').classList.remove('error'); 
+    }
+    
+    if (!receiptNo) { 
+        document.getElementById('liq-receipt-field').classList.add('error');
+        valid = false; 
+    } else { 
+        document.getElementById('liq-receipt-field').classList.remove('error'); 
+    }
+    
+    if (!amount || amount <= 0) { 
+        document.getElementById('liq-amount-field').classList.add('error');
+        valid = false; 
+    } else { 
+        document.getElementById('liq-amount-field').classList.remove('error'); 
+    }
+    
+    if (!description) { 
+        document.getElementById('liq-desc-field').classList.add('error');
+        valid = false; 
+    } else { 
+        document.getElementById('liq-desc-field').classList.remove('error'); 
+    }
+    
     if (!valid) return false;
+    
+    // Show confirmation
     const confirmed = await Confirm.open('Submit Liquidation?', `Liquidate ${requestId}?`);
     if (!confirmed) return false;
+    
     try {
-        await DataService.submitLiquidation({ requestId, receiptNo, amount, description });
+        await DataService.submitLiquidation({ 
+            requestId, 
+            receiptNo, 
+            amount, 
+            description 
+        });
+        
         UI.toast('Liquidation submitted!', 'success');
         document.getElementById('liquidateForm').reset();
         App.navigate('home');
-    } catch (err) { UI.toast('' + err.message, 'error'); }
+    } catch (err) { 
+        UI.toast('' + err.message, 'error'); 
+    }
+    
     return false;
 }
 
-// ─── RECORD INCOMING CASH ──────────────────────────────────────
+// ─── RECORD INCOMING CASH FORM ──────────────────────────────────────
+
+/**
+ * submitRecordCashForm - Handles Incoming Cash recording
+ * 
+ * PURPOSE: Records incoming cash transactions with proof attachment
+ * Supports file upload for transfer receipts
+ */
 async function submitRecordCashForm(e) {
     e.preventDefault();
+    
+    // Get form values
     const description = document.getElementById('rc-desc').value.trim();
     const amount = parseFloat(document.getElementById('rc-amount').value);
     const project = document.getElementById('rc-project').value;
     const fileInput = document.getElementById('rc-file');
+    
+    // Validate required fields
     let valid = true;
-    if (!description) { document.getElementById('rc-desc-field').classList.add('error');
-        valid = false; } else { document.getElementById('rc-desc-field').classList.remove('error'); }
-    if (!amount || amount <= 0) { document.getElementById('rc-amount-field').classList.add('error');
-        valid = false; } else { document.getElementById('rc-amount-field').classList.remove('error'); }
-    if (!project) { document.getElementById('rc-project-field').classList.add('error');
-        valid = false; } else { document.getElementById('rc-project-field').classList.remove('error'); }
+    
+    if (!description) { 
+        document.getElementById('rc-desc-field').classList.add('error');
+        valid = false; 
+    } else { 
+        document.getElementById('rc-desc-field').classList.remove('error'); 
+    }
+    
+    if (!amount || amount <= 0) { 
+        document.getElementById('rc-amount-field').classList.add('error');
+        valid = false; 
+    } else { 
+        document.getElementById('rc-amount-field').classList.remove('error'); 
+    }
+    
+    if (!project) { 
+        document.getElementById('rc-project-field').classList.add('error');
+        valid = false; 
+    } else { 
+        document.getElementById('rc-project-field').classList.remove('error'); 
+    }
+    
     if (!valid) return false;
+    
+    // Show confirmation
     const confirmed = await Confirm.open('Record Incoming Cash?', `Record ₱${amount.toFixed(2)}?`);
     if (!confirmed) return false;
+    
     try {
         const payload = { description, amount, project };
+        
+        // Handle file attachment
         if (fileInput && fileInput.files.length > 0) {
             const file = fileInput.files[0];
             payload.fileBase64 = await fileToBase64_(file);
             payload.fileName = file.name;
             payload.fileMimeType = file.type;
         }
+        
         await DataService.submitIncomingCash(payload);
+        
         UI.toast('Cash recorded successfully!', 'success');
         document.getElementById('recordCashForm').reset();
         if (fileInput) fileInput.value = '';
         App.navigate('home');
-    } catch (err) { UI.toast('' + err.message, 'error'); }
+    } catch (err) { 
+        UI.toast('' + err.message, 'error'); 
+    }
+    
     return false;
 }
 
-// ─── RELEASE CASH ──────────────────────────────────────────────
-// (unchanged)
+// ─── RELEASE CASH FORM ──────────────────────────────────────────────
+
+/**
+ * submitReleaseForm - Handles Cash Release submission
+ * 
+ * PURPOSE: Releases approved cash advance funds
+ * Validates request ID and amount before submission
+ */
 async function submitReleaseForm(e) {
     e.preventDefault();
+    
+    // Get form values
     const requestId = document.getElementById('rel-req-id').value;
     const amount = parseFloat(document.getElementById('rel-amount').value);
+    
+    // Validate required fields
     let valid = true;
-    if (!requestId) { document.getElementById('rel-req-field').classList.add('error');
-        valid = false; } else { document.getElementById('rel-req-field').classList.remove('error'); }
-    if (!amount || amount <= 0) { document.getElementById('rel-amount-field').classList.add('error');
-        valid = false; } else { document.getElementById('rel-amount-field').classList.remove('error'); }
+    
+    if (!requestId) { 
+        document.getElementById('rel-req-field').classList.add('error');
+        valid = false; 
+    } else { 
+        document.getElementById('rel-req-field').classList.remove('error'); 
+    }
+    
+    if (!amount || amount <= 0) { 
+        document.getElementById('rel-amount-field').classList.add('error');
+        valid = false; 
+    } else { 
+        document.getElementById('rel-amount-field').classList.remove('error'); 
+    }
+    
     if (!valid) return false;
+    
+    // Show confirmation
     const confirmed = await Confirm.open('Release Cash?', `Release ₱${amount.toFixed(2)}?`);
     if (!confirmed) return false;
+    
     try {
         await DataService.submitRelease({ requestId, amount });
+        
         UI.toast('Cash released!', 'success');
         document.getElementById('releaseForm').reset();
         App.navigate('home');
-    } catch (err) { UI.toast('' + err.message, 'error'); }
+    } catch (err) { 
+        UI.toast('' + err.message, 'error'); 
+    }
+    
     return false;
 }
