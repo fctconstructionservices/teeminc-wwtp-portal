@@ -404,7 +404,7 @@ async function submitReleaseForm(e) {
     }
     
     return false;
-
+}
     /**
     * loadReleaseDropdown - I-load ang approved cash advances sa dropdown
      * 
@@ -448,5 +448,4 @@ async function submitReleaseForm(e) {
       select.innerHTML = '<option value="">— Error loading requests —</option>';
     }
   }
-}
 }
