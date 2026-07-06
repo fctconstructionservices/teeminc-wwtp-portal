@@ -190,7 +190,7 @@ const DataService = {
     },
     async submitRelease(payload) {
         return await gasCall('submitRelease', payload);
-    }
+    },
 
     // ─── RELEASE CASH ──────────────────────────────────────────────
     async getApprovedCashAdvancesForRelease() {
