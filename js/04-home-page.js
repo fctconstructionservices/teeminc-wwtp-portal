@@ -75,22 +75,14 @@ const HomePage = {
             const visibleTickets = tickets.filter(t => t.roles.includes(userRole));
 
             // Compute pending count for badge
-            // Kunin ang lahat ng pending requests at i-filter
-            const pendingData = await DataService.getPendingApprovals();
-            const userEmail = user ? user.email.toLowerCase() : '';
-            const pendingRequestsForApproval = pendingData.requests.filter(function(r) {
-                const notSelf = r.requestorEmail && r.requestorEmail.toLowerCase() !== userEmail;
-                const notActed = !r.userActed;  // ← Dapat ay nasa Code.gs na ito
-                return notSelf && notActed;
-});
-            const pendingCount = pendingRequestsForApproval.length;
+            const myRequests = await DataService.getMyPendingRequests();
+            const pendingCount = myRequests.length;
 
             let ticketHtml = `<div class="tickets">`;
             visibleTickets.forEach(t => {
                 const isApproval = t.id === 'approvals';
                 const safetyClass = t.id === 'request' ? 'safety' : '';
                 const approvalClass = isApproval ? 'approval-ticket' : '';
-                //red badge
                 const badgeHtml = isApproval ? `<span class="t-badge" id="approvalBadgeHome">${pendingCount}</span>` : '';
                 const borderStyle = t.id === 'materials' ? 'border-color:var(--blueprint);' :
                                     t.id === 'equipment' ? 'border-color:var(--amber);' :
