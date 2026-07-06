@@ -1,5 +1,6 @@
 // ================================================================
 //  HOME PAGE - Complete with fixes for Issues 1.1, 3.5, 3.6, 3.10
+//  FIX: Added App.updateUserBadges() after rendering tickets
 // ================================================================
 
 /**
@@ -10,6 +11,7 @@
  * - Pending requests now disappear when approved (Issue 3.9)
  * - Fixed undefined project display (Issue 3.5)
  * - Unified ticker count with approvals page (Issue 3.10)
+ * - ✅ Added updateUserBadges() after rendering tickets
  */
 const HomePage = {
     _loaded: false,
@@ -72,7 +74,7 @@ const HomePage = {
             const userRole = user ? user.role : 'request-only';
             const visibleTickets = tickets.filter(t => t.roles.includes(userRole));
 
-            // FIX: Compute pending count for badge (Issue 3.10)
+            // Compute pending count for badge
             const myRequests = await DataService.getMyPendingRequests();
             const pendingCount = myRequests.length;
 
@@ -81,7 +83,6 @@ const HomePage = {
                 const isApproval = t.id === 'approvals';
                 const safetyClass = t.id === 'request' ? 'safety' : '';
                 const approvalClass = isApproval ? 'approval-ticket' : '';
-                // FIX: Use unified pending count (Issue 3.10)
                 const badgeHtml = isApproval ? `<span class="t-badge" id="approvalBadgeHome">${pendingCount}</span>` : '';
                 const borderStyle = t.id === 'materials' ? 'border-color:var(--blueprint);' :
                                     t.id === 'equipment' ? 'border-color:var(--amber);' :
@@ -117,18 +118,21 @@ const HomePage = {
                 }
             }
 
+            // ✅ FIX: Update user badges after rendering tickets
+            App.updateUserBadges();
+
             // ─── Approval Queue ─────────────────────────────────
-            // FIX: Changed from "My Approval Queue" to "Approval Que" (Issue 3.6)
+            // Changed from "My Approval Queue" to "Approval Que" (Issue 3.6)
             const pending = data.pendingRequests;
             const logs = data.logs;
             
-            // FIX: Filter out requests where the current user is the requestor (Issue 3.1)
+            // Filter out requests where the current user is the requestor (Issue 3.1)
             const userEmail = user ? user.email.toLowerCase() : '';
             const filteredPending = pending.filter(r => {
                 return r.requestorEmail && r.requestorEmail.toLowerCase() !== userEmail;
             });
 
-            // FIX: Pending requests should not show approved ones (Issue 3.9)
+            // Only show Pending status (Issue 3.9)
             const activePending = filteredPending.filter(r => r.status === 'Pending');
 
             let queueHtml = `
@@ -139,7 +143,6 @@ const HomePage = {
             } else {
                 queueHtml += `<table><thead><tr><th>Request</th><th>Project</th><th style="text-align:right">Amount</th><th>Status</th></tr></thead><tbody>`;
                 activePending.slice(0, 10).forEach(r => {
-                    // FIX: Use proper project display (Issue 3.5)
                     const projectDisplay = r.projectId || r.project || '—';
                     queueHtml += `<tr><td><span class="req-id">${r.id}</span><br><span style="color:var(--ink-soft);font-size:11px">${r.requestor}</span></td><td>${projectDisplay}</td><td class="amt">₱${(r.amount || 0).toFixed(2)}</td><td><span class="stamp pending">${r.status}</span></td></tr>`;
                 });
@@ -155,7 +158,7 @@ const HomePage = {
             queueHtml += `</div></div>`;
             UI.setContent(approvalContainer, queueHtml);
 
-            // FIX: Update approval badge with unified count (Issue 3.10)
+            // ✅ FIX: Update approval badge with unified count (Issue 3.10)
             const badge = document.getElementById('approvalBadgeHome');
             if (badge) badge.textContent = pendingCount;
 
