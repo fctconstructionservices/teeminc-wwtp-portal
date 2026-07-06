@@ -1,6 +1,6 @@
 // ================================================================
 //  DATA SERVICE — fetch() bridge to Google Apps Script API
-//  PURPOSE: Provides a clean JavaScript API for all backend operations
+//  PURPOSE: Provides a clean JavaScript API for all backend operations 
 // ================================================================
 
 // PALITAN ITO ng iyong Apps Script Web App URL (nagtatapos sa /exec)
