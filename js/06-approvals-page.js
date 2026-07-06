@@ -150,7 +150,9 @@ const ApprovalsPage = {
             // FIX: Filter out self-requests from pending for approvers (Issue 3.1, 3.9)
             const userEmail = user ? user.email.toLowerCase() : '';
             const filteredRequests = pendingData.requests.filter(function(r) {
-                return r.requestorEmail && r.requestorEmail.toLowerCase() !== userEmail;
+                const notSelf = r.requestorEmail && r.requestorEmail.toLowerCase() !== userEmail;
+                const notActed = !r.userActed;
+                return notSelf && notActed ; 
             });
             const filteredMaterials = pendingData.materials.filter(function(m) {
                 return m.requestedBy && m.requestedBy.toLowerCase() !== userEmail;
