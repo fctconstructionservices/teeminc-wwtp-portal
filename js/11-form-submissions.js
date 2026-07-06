@@ -391,4 +391,49 @@ async function submitReleaseForm(e) {
     }
     
     return false;
+
+    /**
+    * loadReleaseDropdown - I-load ang approved cash advances sa dropdown
+     * 
+     * PURPOSE: Populate ang #rel-req-id dropdown na may available na cash advances
+     */
+    async function loadReleaseDropdown() {
+      try {
+        const select = document.getElementById('rel-req-id');
+        if (!select) return;
+    
+    //  Kunin ang data mula sa backend
+    const advances = await DataService.getApprovedCashAdvancesForRelease();
+    
+    //  I-clear ang options (except ang default placeholder)
+    select.innerHTML = '<option value="">— Select approved request —</option>';
+    
+    //  Kung walang available, magpakita ng message
+    if (!advances || advances.length === 0) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = '— No approved cash advances available —';
+      option.disabled = true;
+      select.appendChild(option);
+      return;
+    }
+    
+    //  Idagdag ang mga options
+    advances.forEach(function(ca) {
+      const option = document.createElement('option');
+      option.value = ca.id;
+      const dateStr = ca.date ? new Date(ca.date).toLocaleDateString() : 'N/A';
+      option.textContent = `${ca.id} · ${ca.requestor} · ₱${ca.amount.toFixed(2)} · ${dateStr}`;
+      select.appendChild(option);
+    });
+    
+  } catch (err) {
+    console.error('Error loading release dropdown:', err);
+    // Magpakita ng error message sa dropdown
+    const select = document.getElementById('rel-req-id');
+    if (select) {
+      select.innerHTML = '<option value="">— Error loading requests —</option>';
+    }
+  }
+}
 }
