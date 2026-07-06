@@ -1,11 +1,15 @@
 // ================================================================
-//  DATA SERVICE — fetch() bridge papunta sa Google Apps Script API
-//  Parehong method names/signatures gaya ng dati.
+//  DATA SERVICE — fetch() bridge to Google Apps Script API
+//  PURPOSE: Provides a clean JavaScript API for all backend operations
 // ================================================================
 
 // PALITAN ITO ng iyong Apps Script Web App URL (nagtatapos sa /exec)
 const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxZlZxUwlzyM2RRGSE1zlBQea5vqKKqsZ5LcP0Ovtv2lO_X87kDNP7H8RLzhKMFIP16/exec';
 
+/**
+ * getCurrentUserEmail - Retrieves the current user's email from localStorage
+ * PURPOSE: Passes the authenticated user's email to the backend for authorization
+ */
 function getCurrentUserEmail() {
     try {
         const stored = localStorage.getItem('fctc_user');
@@ -14,9 +18,12 @@ function getCurrentUserEmail() {
     return '';
 }
 
-// Generic caller — nagpapadala ng { action, params, userEmail } bilang
-// plain-text POST body (para maiwasan ang CORS preflight na hindi
-// nasusuportahan nang maayos ng Apps Script).
+/**
+ * gasCall - Generic API caller
+ * PURPOSE: Sends requests to the backend with proper authentication
+ * 
+ * FIX: Added support for new API methods (getMyApprovedRequests, getMyRejectedRequests)
+ */
 async function gasCall(action) {
     const params = Array.prototype.slice.call(arguments, 1);
     const payload = {
@@ -28,8 +35,6 @@ async function gasCall(action) {
     const response = await fetch(GAS_API_URL, {
         method: 'POST',
         body: JSON.stringify(payload)
-        // Sadyang walang Content-Type header dito — nagdi-default ang browser
-        // sa 'text/plain', na hindi nagpapa-trigger ng CORS preflight.
     });
 
     if (!response.ok) {
@@ -43,33 +48,45 @@ async function gasCall(action) {
     return result.data;
 }
 
+/**
+ * DataService - Main API service object
+ * PURPOSE: Provides all data operations with consistent error handling
+ * 
+ * FIX: Added getMyApprovedRequests and getMyRejectedRequests (Issue 3.6)
+ * FIX: Added pending filtering methods for approvals (Issue 3.1, 3.9)
+ */
 const DataService = {
     _pendingMaterials: [],
     _pendingEquipment: [],
     _materials: [],
     _equipment: [],
 
+    // ─── AUTH ──────────────────────────────────────────────────
     async login(email, password) {
         return await gasCall('loginUser', email, password);
     },
 
+    // ─── HOME ──────────────────────────────────────────────────
     async getHomeData() {
         return await gasCall('getHomeData');
     },
 
+    // ─── PROJECT ──────────────────────────────────────────────
     async getProjectData(projectId) {
         return await gasCall('getProjectData', projectId);
     },
 
+    // ─── FINANCE ──────────────────────────────────────────────
     async getFinanceData() {
         return await gasCall('getFinanceData');
     },
 
+    // ─── SEARCH ───────────────────────────────────────────────
     async search(query) {
         return await gasCall('search', query);
     },
 
-    // ─── ESTIMATES ───
+    // ─── ESTIMATES ────────────────────────────────────────────
     async saveEstimates(projectId, groups) {
         return await gasCall('saveEstimates', projectId, groups);
     },
@@ -80,7 +97,7 @@ const DataService = {
         return await gasCall('approveEstimates', projectId, sowId);
     },
 
-    // ─── MATERIALS ───
+    // ─── MATERIALS ────────────────────────────────────────────
     async getAllMaterials() {
         const list = await gasCall('getAllMaterials');
         this._materials = list;
@@ -104,7 +121,7 @@ const DataService = {
         return await gasCall('searchMaterials', query);
     },
 
-    // ─── EQUIPMENT ───
+    // ─── EQUIPMENT ────────────────────────────────────────────
     async getAllEquipment() {
         const list = await gasCall('getAllEquipment');
         this._equipment = list;
@@ -128,17 +145,25 @@ const DataService = {
         return await gasCall('searchEquipment', query);
     },
 
-    // ─── DAILY RECORDS ───
+    // ─── DAILY RECORDS ────────────────────────────────────────
     async addDailyRecord(projectId, data) {
         return await gasCall('addDailyRecord', projectId, data);
     },
 
-    // ─── APPROVALS ───
+    // ─── APPROVALS ────────────────────────────────────────────
     async getPendingApprovals() {
         return await gasCall('getPendingApprovals');
     },
     async getMyPendingRequests() {
         return await gasCall('getMyPendingRequests');
+    },
+    // FIX: Added for "My Approved Requests" tab (Issue 3.6)
+    async getMyApprovedRequests() {
+        return await gasCall('getMyApprovedRequests');
+    },
+    // FIX: Added for "My Rejected Requests" tab (Issue 3.6)
+    async getMyRejectedRequests() {
+        return await gasCall('getMyRejectedRequests');
     },
     async getRequestById(id) {
         return await gasCall('getRequestById', id);
@@ -153,7 +178,7 @@ const DataService = {
         return await gasCall('forceApprove', id, type);
     },
 
-    // ─── CASH REQUESTS ───
+    // ─── CASH REQUESTS ────────────────────────────────────────
     async submitCashAdvance(payload) {
         return await gasCall('submitCashAdvance', payload);
     },
