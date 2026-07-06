@@ -156,6 +156,13 @@ const App = {
             if (!user) return;
             
             const pendingData = await DataService.getPendingApprovals();
+            const userEmail = this.getUser().email.toLowerCase();
+
+            // filtering request that are not from the requestor
+            const pendingForApproval = pendingData.requests.filter(function(r) {
+                return r.requestorEmail && r.requestorEmail.toLowerCase() !== userEmail;
+            });
+            
             this._pendingCount = pendingForApproval.length;
             
             // Update all approval badges with the same count
