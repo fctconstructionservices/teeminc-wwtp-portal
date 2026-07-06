@@ -155,8 +155,8 @@ const App = {
             const user = this.getUser();
             if (!user) return;
             
-            const myRequests = await DataService.getMyPendingRequests();
-            this._pendingCount = myRequests.length;
+            const pendingData = await DataService.getPendingApprovals();
+            this._pendingCount = pendingForApproval.length;
             
             // Update all approval badges with the same count
             document.querySelectorAll('.t-badge, #approvalBadgeHome').forEach(el => {
