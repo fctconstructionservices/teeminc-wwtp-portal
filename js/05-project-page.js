@@ -7,6 +7,9 @@
 //  - Fixed SOW breakdown display
 //  - Fixed estimate group rendering
 //  - Added proper error handling for missing data
+//  - Daily Records approval system (Draft → Pending → Approved/Rejected)
+//  - Photo upload and display fix
+//  - SOW management with Gantt integration
 // ================================================================
 
 const ProjectPage = {
@@ -19,8 +22,6 @@ const ProjectPage = {
     /**
      * open - Load and display a project
      * PURPOSE: Fetches project data and renders all tabs
-     * 
-     * FIX: Added better error handling and fallback for undefined data (Issue 3.5)
      */
     async open(projectId) {
         this._currentProjectId = projectId;
@@ -37,7 +38,7 @@ const ProjectPage = {
             this._data = p;
             this._estimatesData = p.estimates || { groups: [] };
             
-            // FIX: Ensure SOW items have corresponding estimate groups (Issue 3.5)
+            // Ensure SOW items have corresponding estimate groups
             p.sowItems.forEach(sow => {
                 if (!this._estimatesData.groups.find(g => g.sowId === sow.id)) {
                     this._estimatesData.groups.push({
@@ -52,7 +53,6 @@ const ProjectPage = {
                 }
             });
             
-            // FIX: Use proper project name display (Issue 3.5)
             document.getElementById('proj-name').textContent = p.name || 'Unnamed Project';
             document.getElementById('proj-status').textContent = p.status || '—';
             document.getElementById('proj-crumb').textContent = p.name || '—';
@@ -104,7 +104,6 @@ const ProjectPage = {
 
     /**
      * switchTab - Switch between project tabs
-     * PURPOSE: Shows/hides tab content and initializes charts
      */
     switchTab(tab) {
         document.querySelectorAll('.project-tabs button').forEach(b => b.classList.remove('active'));
@@ -123,7 +122,6 @@ const ProjectPage = {
 
     /**
      * renderOverview - Renders the overview tab
-     * PURPOSE: Shows project summary with charts and request lists
      */
     renderOverview(p) {
         const container = document.getElementById('proj-tab-overview');
@@ -161,7 +159,6 @@ const ProjectPage = {
 
     /**
      * _buildOverviewCharts - Builds the overview charts
-     * PURPOSE: Creates status doughnut chart and cash bar chart
      */
     _buildOverviewCharts(p) {
         if (this._charts.status) this._charts.status.destroy();
@@ -218,8 +215,8 @@ const ProjectPage = {
     },
 
     /**
-     * renderDailyRecords - Renders the daily records tab
-     * PURPOSE: Shows all daily site logs with add form
+     * renderDailyRecords - Renders the daily records tab with status and approval actions
+     * FIX: Added status badges and approval buttons
      */
     renderDailyRecords(p) {
         const container = document.getElementById('proj-tab-daily');
@@ -234,24 +231,47 @@ const ProjectPage = {
         if (p.dailyRecords.length === 0) html += `<div class="empty"><p>No daily records yet.</p></div>`;
         else {
             p.dailyRecords.slice().reverse().forEach((r, idx) => {
-                const statusCls = r.status === 'On Track' ? 'ontrack' : r.status === 'Delayed' ?
-                    'delayed' : 'completed';
-                const totalManpower = r.manpower ? r.manpower.reduce((s, m) => s + (parseInt(m
-                    .count) || 0), 0) : 0;
+                const statusCls = r.status === 'On Track' ? 'ontrack' : r.status === 'Delayed' ? 'delayed' : 'completed';
+                const totalManpower = r.manpower ? r.manpower.reduce((s, m) => s + (parseInt(m.count) || 0), 0) : 0;
                 const day = r.date ? r.date.split('-')[2] || '' : '';
+                
+                // Status badge
+                const statusBadge = r.status === 'draft' ? 
+                    '<span class="stamp draft" style="transform:none;padding:1px 8px;font-size:9px;">Draft</span>' :
+                    r.status === 'pending' ? 
+                    '<span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">Pending</span>' :
+                    r.status === 'approved' ? 
+                    '<span class="stamp approved" style="transform:none;padding:1px 8px;font-size:9px;">Approved</span>' :
+                    r.status === 'rejected' ? 
+                    '<span class="stamp rejected" style="transform:none;padding:1px 8px;font-size:9px;">Rejected</span>' : '';
+                
+                // Action buttons based on status
+                let actionsHtml = '';
+                if (r.status === 'draft') {
+                    actionsHtml = `<button class="btn-sm primary" onclick="ProjectPage.submitDailyForApproval('${r.id}')">Submit</button>`;
+                } else if (r.status === 'pending' && App.isApprover()) {
+                    actionsHtml = `
+                        <button class="btn-sm success" onclick="ProjectPage.approveDailyRecord('${r.id}')">Approve</button>
+                        <button class="btn-sm danger" onclick="ProjectPage.rejectDailyRecord('${r.id}')">Reject</button>
+                    `;
+                }
+                
                 html += `
-                        <div class="daily-record-item" onclick="ProjectPage.viewRecord(${p.dailyRecords.length - 1 - idx})">
-                            <div class="dr-badge">${day}</div>
-                            <div class="dr-body">
-                                <div class="dr-title">${r.status || '—'} · ${r.weatherAM || '—'} / ${r.weatherPM || '—'}</div>
-                                <div class="dr-meta">
-                                    <time>${r.date || '—'}</time>
-                                    <span>${Icon.users({size:13})} ${totalManpower} people</span>
-                                    <span class="stamp ${statusCls}" style="transform:none;padding:1px 8px;font-size:9px;">${r.status || '—'}</span>
-                                </div>
+                    <div class="daily-record-item">
+                        <div class="dr-badge">${day}</div>
+                        <div class="dr-body">
+                            <div class="dr-title">${r.status || '—'} · ${r.weatherAM || '—'} / ${r.weatherPM || '—'}</div>
+                            <div class="dr-meta">
+                                <time>${r.date || '—'}</time>
+                                <span>${Icon.users({size:13})} ${totalManpower} people</span>
+                                ${statusBadge}
                             </div>
-                            <div class="dr-arrow">›</div>
-                        </div>`;
+                        </div>
+                        <div class="dr-actions" style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
+                            ${actionsHtml}
+                            <button class="btn-sm" onclick="ProjectPage.viewRecord(${p.dailyRecords.length - 1 - idx})">${Icon.search({size:13})}</button>
+                        </div>
+                    </div>`;
             });
         }
         html += `</div></div>`;
@@ -260,8 +280,7 @@ const ProjectPage = {
     },
 
     /**
-     * _buildDailyFormHTML - Builds the daily record form HTML
-     * PURPOSE: Creates the form for adding new daily records
+     * _buildDailyFormHTML - Builds the daily record form HTML with photo upload support
      */
     _buildDailyFormHTML() {
         return `
@@ -270,7 +289,13 @@ const ProjectPage = {
                         <div class="field"><label>Date</label><input type="date" id="dr-date" /></div>
                         <div class="field"><label>Weather AM</label><input type="text" id="dr-weather-am" placeholder="e.g. Sunny" /></div>
                         <div class="field"><label>Weather PM</label><input type="text" id="dr-weather-pm" placeholder="e.g. Cloudy" /></div>
-                        <div class="field"><label>Status</label><select id="dr-status"><option>On Track</option><option>Delayed</option><option>Completed</option></select></div>
+                        <div class="field"><label>Status</label>
+                            <select id="dr-status">
+                                <option value="draft">Draft</option>
+                                <option value="pending">Pending Approval</option>
+                                <option value="approved">Approved</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
                 <div class="daily-form-section" id="manpowerSection">
@@ -286,7 +311,7 @@ const ProjectPage = {
                 </div>
                 <div class="daily-form-section" id="workSection">
                     <div class="section-label">Work Accomplished <span class="rule"></span></div>
-                    <div id="workEntries"><div class="entry-row"><div class="field"><label>Location</label><input type="text" class="wk-location" /></div><div class="field"><label>Scope</label><input type="text" class="wk-scope" /></div><div class="field" style="grid-column:1/-1;"><label>Description</label><textarea class="wk-desc" rows="1"></textarea></div><div class="field"><label>% Complete</label><input type="number" class="wk-pct" min="0" max="100" /></div><div class="field"><label>Photo</label><input type="file" accept="image/*" class="wk-image" onchange="ProjectPage.previewSmallImage(this,'wk-preview-${Date.now()}')" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'work')">${Icon.close({size:13})}</button></div></div></div>
+                    <div id="workEntries"><div class="entry-row"><div class="field"><label>Location</label><input type="text" class="wk-location" /></div><div class="field"><label>Scope</label><input type="text" class="wk-scope" /></div><div class="field" style="grid-column:1/-1;"><label>Description</label><textarea class="wk-desc" rows="1"></textarea></div><div class="field"><label>% Complete</label><input type="number" class="wk-pct" min="0" max="100" /></div><div class="field"><label>Photo</label><input type="file" accept="image/*" class="wk-image" data-photo onchange="ProjectPage.previewSmallImage(this,'wk-preview-${Date.now()}')" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'work')">${Icon.close({size:13})}</button></div></div></div>
                     <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('work')">+ Add Work Item</button></div>
                 </div>
                 <div class="daily-form-section" id="materialsSection">
@@ -296,13 +321,18 @@ const ProjectPage = {
                 </div>
                 <div class="daily-form-section" id="issuesSection">
                     <div class="section-label">Issues / Delays <span class="rule"></span></div>
-                    <div id="issuesEntries"><div class="entry-row"><div class="field"><label>Description</label><input type="text" class="iss-desc" /></div><div class="field"><label>Cause</label><input type="text" class="iss-cause" /></div><div class="field"><label>Time Lost (hrs)</label><input type="number" class="iss-time" min="0" step="0.5" /></div><div class="field"><label>Photo</label><input type="file" accept="image/*" class="iss-image" onchange="ProjectPage.previewSmallImage(this,'iss-preview-${Date.now()}')" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'issues')">${Icon.close({size:13})}</button></div></div></div>
+                    <div id="issuesEntries"><div class="entry-row"><div class="field"><label>Description</label><input type="text" class="iss-desc" /></div><div class="field"><label>Cause</label><input type="text" class="iss-cause" /></div><div class="field"><label>Time Lost (hrs)</label><input type="number" class="iss-time" min="0" step="0.5" /></div><div class="field"><label>Photo</label><input type="file" accept="image/*" class="iss-image" data-photo onchange="ProjectPage.previewSmallImage(this,'iss-preview-${Date.now()}')" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'issues')">${Icon.close({size:13})}</button></div></div></div>
                     <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('issues')">+ Add Issue</button></div>
                 </div>
                 <div class="daily-form-section" id="visitorsSection">
                     <div class="section-label">Visitors <span class="rule"></span></div>
                     <div id="visitorsEntries"><div class="entry-row"><div class="field"><label>Name</label><input type="text" class="vis-name" /></div><div class="field"><label>Company / Role</label><input type="text" class="vis-company" /></div><div class="field"><label>Purpose</label><input type="text" class="vis-purpose" /></div><div class="field"><label>Time In</label><input type="time" class="vis-time-in" /></div><div class="field"><label>Time Out</label><input type="time" class="vis-time-out" /></div><div class="field"><label>Remarks</label><input type="text" class="vis-remarks" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'visitors')">${Icon.close({size:13})}</button></div></div></div>
                     <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('visitors')">+ Add Visitor</button></div>
+                </div>
+                <div class="daily-form-section" id="photosSection">
+                    <div class="section-label">Additional Photos <span class="rule"></span></div>
+                    <div id="photosEntries"><div class="entry-row"><div class="field"><label>Photo</label><input type="file" accept="image/*" class="photo-input" data-photo onchange="ProjectPage.previewSmallImage(this,'photo-preview-${Date.now()}')" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'photos')">${Icon.close({size:13})}</button></div></div></div>
+                    <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('photos')">+ Add Photo</button></div>
                 </div>
                 <div class="submit-row">
                     <button class="btn-primary" onclick="ProjectPage.submitDailyRecord('${this._currentProjectId || ''}')">Save Record</button>
@@ -312,7 +342,6 @@ const ProjectPage = {
 
     /**
      * addEntry - Adds a new entry row to a section
-     * PURPOSE: Allows users to add multiple items to daily records
      */
     addEntry(section) {
         const container = document.getElementById(section + 'Entries');
@@ -336,7 +365,6 @@ const ProjectPage = {
 
     /**
      * removeEntry - Removes an entry row
-     * PURPOSE: Allows users to remove items from daily records
      */
     removeEntry(btn, section) {
         const row = btn.closest('.entry-row');
@@ -347,7 +375,6 @@ const ProjectPage = {
 
     /**
      * previewSmallImage - Shows image preview for file inputs
-     * PURPOSE: Provides visual feedback when uploading images
      */
     previewSmallImage(input, previewId) {
         const file = input.files[0];
@@ -369,7 +396,6 @@ const ProjectPage = {
 
     /**
      * updateManpowerTotal - Updates the manpower total display
-     * PURPOSE: Shows running total of manpower entries
      */
     updateManpowerTotal() {
         const entries = document.querySelectorAll('#manpowerEntries .entry-row');
@@ -382,7 +408,6 @@ const ProjectPage = {
 
     /**
      * toggleAddRecord - Toggles the add record form
-     * PURPOSE: Shows/hides the daily record form
      */
     toggleAddRecord() {
         const form = document.getElementById('dailyAddForm');
@@ -391,7 +416,6 @@ const ProjectPage = {
 
     /**
      * gatherDailyFormData - Collects data from the daily form
-     * PURPOSE: Aggregates all form data into a structured object
      */
     gatherDailyFormData() {
         const getRows = (section, clsMap) => {
@@ -431,17 +455,36 @@ const ProjectPage = {
                 timeLost: '.iss-time', image: '.iss-image' }),
             visitors: getRows('visitors', { name: '.vis-name', company: '.vis-company',
                 purpose: '.vis-purpose', timeIn: '.vis-time-in', timeOut: '.vis-time-out',
-                remarks: '.vis-remarks' })
+                remarks: '.vis-remarks' }),
+            photos: [] // Will be filled with uploaded photo URLs
         };
     },
 
     /**
-     * submitDailyRecord - Submits a daily record
-     * PURPOSE: Saves the daily record to the backend
+     * submitDailyRecord - Submits a daily record with photo uploads
+     * FIX: Uploads photos to Drive before saving
      */
     async submitDailyRecord(projectId) {
         const data = this.gatherDailyFormData();
         if (!data.date) { UI.toast('Please select a date.', 'error'); return; }
+        
+        // Upload photos from the photos section
+        const photoInputs = document.querySelectorAll('#photosEntries input[type="file"][data-photo]');
+        const photoPromises = [];
+        photoInputs.forEach(input => {
+            if (input.files && input.files.length > 0) {
+                const file = input.files[0];
+                photoPromises.push(fileToBase64_(file).then(base64 => {
+                    return DataService.uploadImage(base64, file.name, file.type);
+                }).catch(err => {
+                    console.error('Photo upload error:', err);
+                    return null;
+                }));
+            }
+        });
+        const photoResults = await Promise.all(photoPromises);
+        data.photos = photoResults.filter(r => r && r.url).map(r => r.url);
+        
         const confirmed = await Confirm.open('Save Daily Record?', `Save record for ${data.date}?`);
         if (!confirmed) return;
         try {
@@ -453,7 +496,6 @@ const ProjectPage = {
 
     /**
      * viewRecord - Opens a daily record in print modal
-     * PURPOSE: Shows detailed view of a daily record
      */
     viewRecord(index) {
         const records = this._dailyRecords || [];
@@ -463,12 +505,71 @@ const ProjectPage = {
     },
 
     /**
-     * renderPhotos - Renders the photos tab
-     * PURPOSE: Shows all photos from daily records in a gallery
+     * viewRecordById - Opens a daily record by ID
+     */
+    async viewRecordById(id) {
+        const p = this._data;
+        if (!p) { UI.toast('Project data not loaded.', 'error'); return; }
+        const record = p.dailyRecords.find(r => r.id === id);
+        if (!record) { UI.toast('Record not found.', 'error'); return; }
+        PrintModal.open(record);
+    },
+
+    /**
+     * submitDailyForApproval - Submit a daily record for approval
+     */
+    async submitDailyForApproval(recordId) {
+        const confirmed = await Confirm.open('Submit for Approval?', 'Submit this daily record for approval?');
+        if (!confirmed) return;
+        try {
+            await DataService.submitDailyRecordForApproval(recordId);
+            UI.toast('Daily record submitted for approval.', 'success');
+            await this.open(this._currentProjectId);
+        } catch (err) {
+            UI.toast('' + err.message, 'error');
+        }
+    },
+
+    /**
+     * approveDailyRecord - Approve a daily record
+     */
+    async approveDailyRecord(recordId) {
+        const confirmed = await Confirm.open('Approve Daily Record?', 'Approve this daily record?');
+        if (!confirmed) return;
+        try {
+            await DataService.approveDailyRecord(recordId);
+            UI.toast('Daily record approved.', 'success');
+            await this.open(this._currentProjectId);
+            if (typeof ApprovalsPage !== 'undefined' && ApprovalsPage.load) ApprovalsPage.load();
+        } catch (err) {
+            UI.toast('' + err.message, 'error');
+        }
+    },
+
+    /**
+     * rejectDailyRecord - Reject a daily record
+     */
+    async rejectDailyRecord(recordId) {
+        const confirmed = await Confirm.open('Reject Daily Record?', 'Reject this daily record?');
+        if (!confirmed) return;
+        try {
+            await DataService.rejectDailyRecord(recordId);
+            UI.toast('Daily record rejected.', 'error');
+            await this.open(this._currentProjectId);
+            if (typeof ApprovalsPage !== 'undefined' && ApprovalsPage.load) ApprovalsPage.load();
+        } catch (err) {
+            UI.toast('' + err.message, 'error');
+        }
+    },
+
+    /**
+     * renderPhotos - Renders the photos tab with images from daily records
+     * FIX: Uses photos from daily records and workAccomplished/issues
      */
     renderPhotos(p) {
         const container = document.getElementById('proj-tab-photos');
-        const images = [];
+        const images = p.photos || [];
+        // Also collect from workAccomplished and issues
         p.dailyRecords.forEach(record => {
             if (record.workAccomplished) {
                 record.workAccomplished.forEach(w => { if (w.image) images.push(w.image); });
@@ -495,14 +596,15 @@ const ProjectPage = {
     },
 
     /**
-     * renderGantt - Renders the Gantt chart tab
-     * PURPOSE: Shows project timeline with draggable bars
+     * renderGantt - Renders the Gantt chart tab with Add SOW button
+     * FIX: Added Add SOW button
      */
     renderGantt(p) {
         const container = document.getElementById('proj-tab-gantt');
         container.innerHTML = `
                 <div class="section-head"><h2>Project Timeline (Gantt Chart)</h2><div class="rule"></div>
                     <span class="badge">Drag bars to move · Drag edges to resize</span>
+                    <button class="btn-primary" onclick="ProjectPage.showAddSOWModal()" style="padding:4px 14px;font-size:11px;margin-left:auto;">+ Add SOW</button>
                 </div>
                 <div class="gantt-wrapper" id="ganttWrapper">
                     <div class="gantt-container" id="ganttContainer">
@@ -523,7 +625,6 @@ const ProjectPage = {
 
     /**
      * _renderGanttChart - Renders the actual Gantt chart
-     * PURPOSE: Creates the visual timeline with interactive bars
      */
     _renderGanttChart(p) {
         const items = p.sowItems;
@@ -596,7 +697,6 @@ const ProjectPage = {
 
     /**
      * _attachGanttEvents - Attaches drag events to Gantt bars
-     * PURPOSE: Makes Gantt bars interactive (draggable and resizable)
      */
     _attachGanttEvents(minDate, totalDays, items) {
         const bars = document.querySelectorAll('.gantt-bar');
@@ -731,10 +831,64 @@ const ProjectPage = {
     },
 
     /**
+     * showAddSOWModal - Shows modal for adding a new SOW item
+     */
+    showAddSOWModal() {
+        const modal = document.createElement('div');
+        modal.className = 'print-modal-overlay open';
+        modal.id = 'addSOWModal';
+        modal.innerHTML = `
+            <div class="print-modal-content" style="max-width:500px;">
+                <button class="close-modal" onclick="document.getElementById('addSOWModal').remove()">${Icon.close({size:18})}</button>
+                <div class="print-header"><h2>Add SOW Item</h2></div>
+                <form id="addSOWForm" onsubmit="return ProjectPage.submitAddSOW(event)">
+                    <div class="field"><label>SOW ID *</label><input type="text" id="sow-id" placeholder="e.g. A.1, B.2" required /></div>
+                    <div class="field"><label>Description *</label><input type="text" id="sow-desc" placeholder="Description of work" required /></div>
+                    <div class="field"><label>Start Date *</label><input type="date" id="sow-start" required /></div>
+                    <div class="field"><label>End Date *</label><input type="date" id="sow-end" required /></div>
+                    <div class="field"><label>Budget (₱)</label><input type="number" id="sow-budget" step="0.01" value="0" /></div>
+                    <div class="submit-row">
+                        <button type="submit" class="btn-primary">Add SOW</button>
+                        <button type="button" class="btn-ghost" onclick="document.getElementById('addSOWModal').remove()">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    },
+
+    /**
+     * submitAddSOW - Handles SOW addition form submission
+     */
+    async submitAddSOW(e) {
+        e.preventDefault();
+        const id = document.getElementById('sow-id').value.trim();
+        const description = document.getElementById('sow-desc').value.trim();
+        const startDate = document.getElementById('sow-start').value;
+        const endDate = document.getElementById('sow-end').value;
+        const budget = parseFloat(document.getElementById('sow-budget').value) || 0;
+        
+        if (!id || !description || !startDate || !endDate) {
+            UI.toast('Please fill in all required fields.', 'error');
+            return false;
+        }
+        
+        const confirmed = await Confirm.open('Add SOW?', `Add SOW ${id} - ${description}?`);
+        if (!confirmed) return false;
+        
+        try {
+            await DataService.addSOWItem(this._currentProjectId, { id, description, startDate, endDate, budget });
+            UI.toast('SOW added successfully!', 'success');
+            document.getElementById('addSOWModal').remove();
+            await this.open(this._currentProjectId);
+        } catch (err) {
+            UI.toast('' + err.message, 'error');
+        }
+        return false;
+    },
+
+    /**
      * renderSOWBudget - Renders the SOW budget tab
-     * 
-     * FIX: Fixed undefined project display (Issue 3.5)
-     * The project name now displays correctly using proper field mapping
      */
     renderSOWBudget(p) {
         const container = document.getElementById('proj-tab-sow');
@@ -771,10 +925,6 @@ const ProjectPage = {
                 'pending' ? `${Icon.clock({size:12,color:'var(--amber)'})} Pending` : `${Icon.fileText({size:12})} Draft`) : `${Icon.fileText({size:12})} Draft`;
             const statusCls = group ? group.status : 'draft';
 
-            // FIX: Display project name properly (Issue 3.5)
-            // Use p.name or fallback to '—'
-            const projectDisplay = p.name || '—';
-
             html += `
                     <div class="sow-item" onclick="ProjectPage.openSOWBreakdown('${item.id}')">
                         <div class="sow-desc">${item.id} — ${item.description || '—'}</div>
@@ -809,7 +959,6 @@ const ProjectPage = {
 
     /**
      * openSOWBreakdown - Opens the SOW breakdown modal
-     * PURPOSE: Shows detailed estimate breakdown for a SOW item
      */
     openSOWBreakdown(sowId) {
         const estimates = this._estimatesData || { groups: [] };
@@ -826,7 +975,6 @@ const ProjectPage = {
 
     /**
      * _buildSOWChart - Builds the SOW budget chart
-     * PURPOSE: Creates a bar chart comparing budget vs actual
      */
     _buildSOWChart(p) {
         if (this._charts.sow) this._charts.sow.destroy();
@@ -864,27 +1012,21 @@ const ProjectPage = {
 
     /**
      * renderEstimates - Renders the estimates tab
-     * 
-     * FIX: Fixed estimate group rendering with proper data binding (Issue 3.5)
-     * Added fallbacks for missing data
      */
     renderEstimates(p) {
         const container = document.getElementById('proj-tab-estimates');
         const est = this._estimatesData || { groups: [] };
 
-        // Get approved materials for dropdown
         const allMat = DataService._materials || [];
         const matOptions = allMat.map(m =>
             `<option value="${m.id}" data-name="${m.brand || m.name} ${m.specs || ''}" data-rate="${m.rate || 0}">${m.id} - ${m.brand || m.name} ${m.specs || ''}</option>`
         ).join('');
 
-        // Get approved equipment for dropdown
         const allEq = DataService._equipment || [];
         const eqOptions = allEq.map(e =>
             `<option value="${e.id}" data-name="${e.brand || e.name} ${e.model || ''}" data-rate="${e.rate || 0}">${e.id} - ${e.brand || e.name} ${e.model || ''}</option>`
         ).join('');
 
-        // Calculate totals
         let grandTotal = 0;
         est.groups.forEach(g => {
             const matSum = (g.materials || []).reduce((s, m) => s + (parseFloat(m.cost) || 0), 0);
@@ -959,9 +1101,6 @@ const ProjectPage = {
 
     /**
      * _renderEstimateCategory - Renders a category within an estimate group
-     * PURPOSE: Shows materials, labor, equipment, or indirect costs
-     * 
-     * FIX: Added proper fallbacks for missing data (Issue 3.5)
      */
     _renderEstimateCategory(label, items, gIdx, cat, isApproved, options = '') {
         if (!items) items = [];
@@ -1104,7 +1243,6 @@ const ProjectPage = {
 
     /**
      * addEstimateItem - Adds a new item to an estimate category
-     * PURPOSE: Allows users to add materials, labor, equipment, or indirect costs
      */
     addEstimateItem(gIdx, cat) {
         const est = this._estimatesData;
@@ -1137,7 +1275,6 @@ const ProjectPage = {
 
     /**
      * removeEstimateItem - Removes an item from an estimate category
-     * PURPOSE: Allows users to delete items from estimates
      */
     removeEstimateItem(gIdx, idx, cat) {
         const est = this._estimatesData;
@@ -1152,9 +1289,6 @@ const ProjectPage = {
 
     /**
      * updateEstimateItem - Updates a field in an estimate item
-     * PURPOSE: Handles real-time updates to estimate items
-     * 
-     * FIX: Added proper cost calculation with fallbacks (Issue 3.5)
      */
     updateEstimateItem(gIdx, idx, cat, field, value) {
         const est = this._estimatesData;
@@ -1177,7 +1311,6 @@ const ProjectPage = {
 
     /**
      * addSOWGroup - Adds a new SOW group to estimates
-     * PURPOSE: Creates a new estimate group for an unassigned SOW item
      */
     addSOWGroup() {
         const est = this._estimatesData;
@@ -1205,7 +1338,6 @@ const ProjectPage = {
 
     /**
      * submitEstimateGroup - Submits an estimate group for approval
-     * PURPOSE: Changes status from draft to pending
      */
     async submitEstimateGroup(gIdx) {
         const est = this._estimatesData;
@@ -1232,7 +1364,6 @@ const ProjectPage = {
 
     /**
      * approveEstimateGroup - Approves an estimate group
-     * PURPOSE: Changes status from pending to approved (locks editing)
      */
     async approveEstimateGroup(gIdx) {
         const est = this._estimatesData;
@@ -1253,7 +1384,6 @@ const ProjectPage = {
 
     /**
      * saveAllEstimates - Saves all estimate data
-     * PURPOSE: Persists all estimate groups to the backend
      */
     async saveAllEstimates() {
         const est = this._estimatesData;
@@ -1266,7 +1396,6 @@ const ProjectPage = {
 
     /**
      * _updateApprovalBadge - Updates the approval badge
-     * PURPOSE: Keeps the badge count in sync with pending items
      */
     _updateApprovalBadge() {
         const badge = document.getElementById('approvalBadgeHome');
