@@ -54,6 +54,9 @@ async function gasCall(action) {
  * 
  * FIX: Added getMyApprovedRequests and getMyRejectedRequests (Issue 3.6)
  * FIX: Added pending filtering methods for approvals (Issue 3.1, 3.9)
+ * FIX: Added daily record approval methods
+ * FIX: Added SOW management methods
+ * FIX: Added photo upload method
  */
 const DataService = {
     _pendingMaterials: [],
@@ -149,6 +152,35 @@ const DataService = {
     async addDailyRecord(projectId, data) {
         return await gasCall('addDailyRecord', projectId, data);
     },
+    // NEW: Daily record approval
+    async submitDailyRecordForApproval(recordId) {
+        return await gasCall('submitDailyRecordForApproval', recordId);
+    },
+    async approveDailyRecord(recordId) {
+        return await gasCall('approveDailyRecord', recordId);
+    },
+    async rejectDailyRecord(recordId) {
+        return await gasCall('rejectDailyRecord', recordId);
+    },
+    async getPendingDailyRecords() {
+        return await gasCall('getPendingDailyRecords');
+    },
+
+    // ─── SOW MANAGEMENT ────────────────────────────────────────
+    async addSOWItem(projectId, data) {
+        return await gasCall('addSOWItem', projectId, data);
+    },
+    async updateSOWItem(projectId, sowId, data) {
+        return await gasCall('updateSOWItem', projectId, sowId, data);
+    },
+    async deleteSOWItem(projectId, sowId) {
+        return await gasCall('deleteSOWItem', projectId, sowId);
+    },
+
+    // ─── PHOTO UPLOAD ──────────────────────────────────────────
+    async uploadImage(base64Data, fileName, mimeType) {
+        return await gasCall('uploadImage', base64Data, fileName, mimeType);
+    },
 
     // ─── APPROVALS ────────────────────────────────────────────
     async getPendingApprovals() {
@@ -157,11 +189,9 @@ const DataService = {
     async getMyPendingRequests() {
         return await gasCall('getMyPendingRequests');
     },
-    // FIX: Added for "My Approved Requests" tab (Issue 3.6)
     async getMyApprovedRequests() {
         return await gasCall('getMyApprovedRequests');
     },
-    // FIX: Added for "My Rejected Requests" tab (Issue 3.6)
     async getMyRejectedRequests() {
         return await gasCall('getMyRejectedRequests');
     },
@@ -192,9 +222,8 @@ const DataService = {
         return await gasCall('submitRelease', payload);
     },
 
-    // ─── RELEASE CASH ──────────────────────────────────────────────
+    // ─── RELEASE CASH ──────────────────────────────────────────
     async getApprovedCashAdvancesForRelease() {
         return await gasCall('getApprovedCashAdvancesForRelease');
     }
-    
 };
