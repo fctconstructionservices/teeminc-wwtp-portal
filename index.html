@@ -620,5 +620,100 @@
     <script src="js/10-search.js"></script>
     <script src="js/11-form-submissions.js"></script>
     <script src="js/12-init.js"></script>
+
+    <!-- ════════════════════════════════════════════════════════════════ -->
+    <!--  DYNAMIC TOPBAR USER LABEL UPDATER                            -->
+    <!--  Ina-update ang "Managing Partner — J.Fabon"                  -->
+    <!--  sa aktwal na nakalog-in na user                              -->
+    <!-- ════════════════════════════════════════════════════════════════ -->
+    <script>
+        (function() {
+            'use strict';
+
+            /**
+             * updateTopbarUserLabel - Ina-update ang home-user-label
+             * gamit ang pangalan at role ng kasalukuyang user
+             */
+            function updateTopbarUserLabel() {
+                try {
+                    const stored = localStorage.getItem('fctc_user');
+                    if (!stored) return;
+
+                    const user = JSON.parse(stored);
+                    if (!user || !user.name) return;
+
+                    const userName = user.name;
+                    const roleLabel = user.roleLabel || user.role || 'User';
+
+                    // I-update ang topbar label
+                    const label = document.getElementById('home-user-label');
+                    if (label) {
+                        label.textContent = roleLabel + ' — ' + userName;
+                    }
+
+                    // I-update din ang lahat ng requester badges (kung mayroon)
+                    document.querySelectorAll('.requester-badge').forEach(function(el) {
+                        const strong = el.querySelector('strong');
+                        if (strong) {
+                            strong.textContent = userName;
+                        } else {
+                            const text = el.textContent;
+                            const colonIndex = text.indexOf(':');
+                            if (colonIndex > -1) {
+                                const prefix = text.substring(0, colonIndex + 1);
+                                el.textContent = prefix + ' ' + userName;
+                            } else {
+                                el.textContent = 'Requesting as: ' + userName;
+                            }
+                        }
+                    });
+
+                } catch (_) { /* ignore errors */ }
+            }
+
+            // ─── Execute on page load ──────────────────────────
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', updateTopbarUserLabel);
+            } else {
+                updateTopbarUserLabel();
+            }
+
+            // ─── Listen for localStorage changes (cross-tab) ──
+            window.addEventListener('storage', function(e) {
+                if (e.key === 'fctc_user') {
+                    updateTopbarUserLabel();
+                }
+            });
+
+            // ─── Expose function para sa manual calls ──────────
+            window.updateTopbarUserLabel = updateTopbarUserLabel;
+
+            // ─── Patch App.navigate para mag-update pagkatapos ng navigation ──
+            if (typeof App !== 'undefined' && App && App.navigate) {
+                const originalNavigate = App.navigate;
+                App.navigate = function(page) {
+                    // Tawagin ang original
+                    const result = originalNavigate.call(this, page);
+                    // I-update ang label pagkatapos ng navigation
+                    setTimeout(updateTopbarUserLabel, 100);
+                    return result;
+                };
+            }
+
+            // ─── Patch handleLogin para mag-update pagkatapos mag-login ──
+            if (typeof handleLogin === 'function') {
+                const originalLogin = handleLogin;
+                window.handleLogin = async function(e) {
+                    const result = await originalLogin(e);
+                    setTimeout(updateTopbarUserLabel, 150);
+                    return result;
+                };
+            }
+
+            console.log('✅ Dynamic topbar user label updater loaded.');
+        })();
+    </script>
+</body>
+</html>
 </body>
 </html>
