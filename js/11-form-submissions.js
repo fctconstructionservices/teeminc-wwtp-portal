@@ -389,6 +389,19 @@ async function submitReleaseForm(e) {
     } catch (err) { 
         UI.toast('' + err.message, 'error'); 
     }
+
+     try {
+        await DataService.submitRelease({ requestId, amount });
+        UI.toast('Cash released!', 'success');
+        document.getElementById('releaseForm').reset();
+        
+        // ✅ I-reload ang dropdown para mawala ang na-release na
+        await loadReleaseDropdown();
+        
+        App.navigate('home');
+    } catch (err) { 
+        UI.toast('' + err.message, 'error'); 
+    }
     
     return false;
 
