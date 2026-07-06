@@ -31,7 +31,7 @@ const App = {
         if (theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
     },
 
-    navigate(page) {
+    async navigate(page) {
         const restrictedPages = ['release-cash', 'record-cash'];
         if (restrictedPages.includes(page) && !this.isApprover()) {
             UI.toast('Access denied. Approvers only.', 'error');
