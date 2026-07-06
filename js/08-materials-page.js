@@ -1,41 +1,42 @@
 // ================================================================
-        //  MATERIALS DATABASE PAGE (with role-based Approve button)
-        // ================================================================
+//  MATERIALS DATABASE PAGE (with role-based Approve button)
+//  FIX: After submission, automatically switch to Pending tab (Bug #1)
+// ================================================================
 
-        const MaterialsPage = {
-            _allMaterials: [],
-            _currentFilter: 'approved',
-            _searchResults: null, // null means use filter
+const MaterialsPage = {
+    _allMaterials: [],
+    _currentFilter: 'approved',
+    _searchResults: null, // null means use filter
 
-            async load() {
-                this._searchResults = null; // clear search
-                const container = document.getElementById('materialsContent');
-                UI.showLoading(container);
-                try {
-                    this._allMaterials = await DataService.getAllMaterials();
-                    this.render(container);
-                } catch (err) { console.error('Materials error:', err);
-                    UI.toast('Error loading materials.', 'error'); }
-            },
+    async load() {
+        this._searchResults = null; // clear search
+        const container = document.getElementById('materialsContent');
+        UI.showLoading(container);
+        try {
+            this._allMaterials = await DataService.getAllMaterials();
+            this.render(container);
+        } catch (err) { console.error('Materials error:', err);
+            UI.toast('Error loading materials.', 'error'); }
+    },
 
-            render(container, items = null) {
-                // If items provided, use them; else use filtered list
-                let list = items;
-                if (!list) {
-                    const approved = this._allMaterials.filter(m => m.status === 'approved');
-                    const pending = this._allMaterials.filter(m => m.status === 'pending');
-                    list = this._currentFilter === 'approved' ? approved : pending;
-                }
-                // If searchResults is set, use that instead (override)
-                if (this._searchResults !== null) {
-                    list = this._searchResults;
-                }
+    render(container, items = null) {
+        // If items provided, use them; else use filtered list
+        let list = items;
+        if (!list) {
+            const approved = this._allMaterials.filter(m => m.status === 'approved');
+            const pending = this._allMaterials.filter(m => m.status === 'pending');
+            list = this._currentFilter === 'approved' ? approved : pending;
+        }
+        // If searchResults is set, use that instead (override)
+        if (this._searchResults !== null) {
+            list = this._searchResults;
+        }
 
-                const approved = this._allMaterials.filter(m => m.status === 'approved');
-                const pending = this._allMaterials.filter(m => m.status === 'pending');
+        const approved = this._allMaterials.filter(m => m.status === 'approved');
+        const pending = this._allMaterials.filter(m => m.status === 'pending');
 
-                // Build HTML: add form first, then list
-                let html = `
+        // Build HTML: add form first, then list
+        let html = `
                 <div class="section-head"><h2>Material Database</h2><div class="rule"></div>
                     <button class="btn-primary" onclick="MaterialsPage.showAddForm()" style="padding:6px 14px;font-size:11px;">+ Add New Material</button>
                 </div>
@@ -98,92 +99,97 @@
                 }
                 html += `</div>`;
                 UI.setContent(container, html);
-            },
+    },
 
-            setFilter(filter) {
-                this._currentFilter = filter;
-                this._searchResults = null; // clear search
-                this.load();
-            },
+    setFilter(filter) {
+        this._currentFilter = filter;
+        this._searchResults = null; // clear search
+        this.load();
+    },
 
-            clearSearch() {
-                this._searchResults = null;
-                this.load();
-            },
+    clearSearch() {
+        this._searchResults = null;
+        this.load();
+    },
 
-            search() {
-                const query = document.getElementById('matSearch').value;
-                if (!query.trim()) {
-                    this._searchResults = null;
-                    this.load();
-                    return;
-                }
-                const container = document.getElementById('materialsContent');
-                UI.showLoading(container);
-                setTimeout(async () => {
-                    const results = await DataService.searchMaterials(query);
-                    this._searchResults = results;
-                    this.render(container);
-                }, 300);
-            },
+    search() {
+        const query = document.getElementById('matSearch').value;
+        if (!query.trim()) {
+            this._searchResults = null;
+            this.load();
+            return;
+        }
+        const container = document.getElementById('materialsContent');
+        UI.showLoading(container);
+        setTimeout(async () => {
+            const results = await DataService.searchMaterials(query);
+            this._searchResults = results;
+            this.render(container);
+        }, 300);
+    },
 
-            showAddForm() { const f = document.getElementById('matAddForm'); if (f) f.style.display = 'block'; },
-            hideAddForm() { const f = document.getElementById('matAddForm'); if (f) f.style.display = 'none'; },
-            previewMatImage(e) {
-                const file = e.target.files[0];
-                const preview = document.getElementById('matImagePreview');
-                const img = document.getElementById('matImagePreviewImg');
-                if (file) { const r = new FileReader();
-                    r.onload = function(ev) { img.src = ev.target.result;
-                        preview.classList.add('open'); };
-                    r.readAsDataURL(file); } else preview.classList.remove('open');
-            },
-            async submitMaterial(e) {
-                e.preventDefault();
-                const data = {
-                    category: document.getElementById('mat-category').value,
-                    subcategory: document.getElementById('mat-subcategory').value,
-                    unit: document.getElementById('mat-unit').value,
-                    brand: document.getElementById('mat-brand').value.trim(),
-                    model: document.getElementById('mat-model').value.trim(),
-                    specs: document.getElementById('mat-specs').value.trim(),
-                    grade: document.getElementById('mat-grade').value.trim(),
-                    size: document.getElementById('mat-size').value.trim(),
-                    length: document.getElementById('mat-length').value.trim(),
-                    thickness: document.getElementById('mat-thickness').value.trim(),
-                    weight: document.getElementById('mat-weight').value.trim(),
-                    standardCode: document.getElementById('mat-standard').value.trim(),
-                    application: document.getElementById('mat-application').value.trim(),
-                    notes: document.getElementById('mat-notes').value.trim(),
-                    image: document.getElementById('matImagePreviewImg').src || 'https://placehold.co/600x400/5B6360/FFFFFF?text=Material'
-                };
-                if (!data.category || !data.brand || !data.unit) { UI.toast('Required: Category, Brand, Unit.',
-                        'error'); return; }
-                const confirmed = await Confirm.open('Submit for Approval?', '');
-                if (!confirmed) return;
-                try { const result = await DataService.requestMaterial(data);
-                    UI.toast(`${result.id} submitted for approval!`, 'success');
-                    document.getElementById('matForm').reset();
-                    document.getElementById('matImagePreview').classList.remove('open');
-                    this.hideAddForm();
-                    this._allMaterials = await DataService.getAllMaterials();
-                    this._searchResults = null;
-                    this.load(); } catch (err) { UI.toast('' + err.message, 'error'); }
-                return false;
-            },
-            async approveMaterial(id) {
-                const confirmed = await Confirm.open('Approve Material?', '');
-                if (!confirmed) return;
-                try { await DataService.approveMaterial(id);
-                    UI.toast('Material approved!', 'success');
-                    this._allMaterials = await DataService.getAllMaterials();
-                    this._searchResults = null;
-                    this.load(); } catch (err) { UI.toast('' + err.message, 'error'); }
-            },
-            async viewMaterial(id) {
-                const all = await DataService.getAllMaterials();
-                const mat = all.find(m => m.id === id);
-                if (!mat) { UI.toast('Not found.', 'error'); return; }
-                MatPrintModal.open(mat);
-            }
+    showAddForm() { const f = document.getElementById('matAddForm'); if (f) f.style.display = 'block'; },
+    hideAddForm() { const f = document.getElementById('matAddForm'); if (f) f.style.display = 'none'; },
+    previewMatImage(e) {
+        const file = e.target.files[0];
+        const preview = document.getElementById('matImagePreview');
+        const img = document.getElementById('matImagePreviewImg');
+        if (file) { const r = new FileReader();
+            r.onload = function(ev) { img.src = ev.target.result;
+                preview.classList.add('open'); };
+            r.readAsDataURL(file); } else preview.classList.remove('open');
+    },
+    async submitMaterial(e) {
+        e.preventDefault();
+        const data = {
+            category: document.getElementById('mat-category').value,
+            subcategory: document.getElementById('mat-subcategory').value,
+            unit: document.getElementById('mat-unit').value,
+            brand: document.getElementById('mat-brand').value.trim(),
+            model: document.getElementById('mat-model').value.trim(),
+            specs: document.getElementById('mat-specs').value.trim(),
+            grade: document.getElementById('mat-grade').value.trim(),
+            size: document.getElementById('mat-size').value.trim(),
+            length: document.getElementById('mat-length').value.trim(),
+            thickness: document.getElementById('mat-thickness').value.trim(),
+            weight: document.getElementById('mat-weight').value.trim(),
+            standardCode: document.getElementById('mat-standard').value.trim(),
+            application: document.getElementById('mat-application').value.trim(),
+            notes: document.getElementById('mat-notes').value.trim(),
+            image: document.getElementById('matImagePreviewImg').src || 'https://placehold.co/600x400/5B6360/FFFFFF?text=Material'
         };
+        if (!data.category || !data.brand || !data.unit) { UI.toast('Required: Category, Brand, Unit.',
+                'error'); return; }
+        const confirmed = await Confirm.open('Submit for Approval?', '');
+        if (!confirmed) return;
+        try { 
+            const result = await DataService.requestMaterial(data);
+            UI.toast(`${result.id} submitted for approval!`, 'success');
+            document.getElementById('matForm').reset();
+            document.getElementById('matImagePreview').classList.remove('open');
+            this.hideAddForm();
+            this._allMaterials = await DataService.getAllMaterials();
+            this._searchResults = null;
+            
+            // ✅ FIX: Automatically switch to Pending tab after submission (Bug #1)
+            this._currentFilter = 'pending';
+            this.load();
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+        return false;
+    },
+    async approveMaterial(id) {
+        const confirmed = await Confirm.open('Approve Material?', '');
+        if (!confirmed) return;
+        try { await DataService.approveMaterial(id);
+            UI.toast('Material approved!', 'success');
+            this._allMaterials = await DataService.getAllMaterials();
+            this._searchResults = null;
+            this.load(); } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
+    async viewMaterial(id) {
+        const all = await DataService.getAllMaterials();
+        const mat = all.find(m => m.id === id);
+        if (!mat) { UI.toast('Not found.', 'error'); return; }
+        MatPrintModal.open(mat);
+    }
+};
