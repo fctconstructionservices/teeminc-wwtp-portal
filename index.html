@@ -345,15 +345,17 @@
                         <input type="number" id="req-amount" placeholder="0.00" step="0.01" />
                         <div class="error-msg">Please enter a valid amount greater than 0.</div>
                     </div>
-                    <div class="field">
+                    <div class="field" id="req-date-field">
                         <label>Date Needed</label>
-                        <input type="date" id="req-date" />
+                        <input type="date" id="req-date" required />
+                        <div class="error-msg">Please select when is this request needed.</div>
                     </div>
-                    <div class="field">
+                    <div class="field" id="req-file-field">
                         <label>Quotation / Basis</label>
                         <div class="file-drop">
-                            <input type="file" accept="image/*,.pdf" id="req-file" />
+                            <input type="file" accept="image/*,.pdf" id="req-file" required />
                             <span class="file-drop-hint">Upload quotation, screenshot, or basis — JPG, PNG, or PDF</span>
+                         <div class="error-msg">Please upload a qoutation or basis document.</div>
                         </div>
                     </div>
                     <div class="submit-row">
