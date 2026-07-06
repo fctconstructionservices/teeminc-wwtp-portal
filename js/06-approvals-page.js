@@ -1,15 +1,11 @@
 // ================================================================
 //  APPROVALS PAGE - Complete with fixes for Issues 3.1-3.10
+//  FIX: Added daily records to pending approvals
 // ================================================================
 
 // ─── REQUEST DETAIL MODAL ──────────────────────────────────────
 /**
  * RequestDetailModal - Displays detailed view of a request
- * 
- * FIXES APPLIED:
- * - Shows attachments (Issue 3.3)
- * - Hides Approve/Reject for requestor, shows for approvers (Issue 3.2)
- * - Shows proper buttons for materials approval (Issue 3.4)
  */
 const RequestDetailModal = {
     _currentId: null,
@@ -38,7 +34,6 @@ const RequestDetailModal = {
             if (type === 'request') {
                 data = await DataService.getRequestById(id);
                 if (!data) {
-                    // Try to find in pending approvals if not found directly
                     const pending = await DataService.getPendingApprovals();
                     const found = pending.requests.find(r => r.id === id);
                     if (found) data = found;
@@ -60,12 +55,6 @@ const RequestDetailModal = {
         }
     },
     
-    /**
-     * _renderDetails - Renders the detailed view
-     * 
-     * FIX: Shows attachments if present (Issue 3.3)
-     * FIX: Hides Approve/Reject for requestor (Issue 3.2)
-     */
     _renderDetails(data) {
         const user = App.currentUser;
         const isApprover = App.isApprover();
@@ -73,7 +62,6 @@ const RequestDetailModal = {
             user.email.toLowerCase() === data.requestorEmail.toLowerCase();
         const statusCls = data.status === 'Approved' ? 'approved' : data.status === 'Pending' ? 'pending' : 'rejected';
         
-        // FIX: Parse attachments if they exist (Issue 3.3)
         let attachmentsHtml = '';
         if (data.attachments && data.attachments.length > 0) {
             attachmentsHtml = `
@@ -107,7 +95,6 @@ const RequestDetailModal = {
         <div class="print-actions">
             <button class="btn-primary" onclick="window.print()">${Icon.printer({size:14})} Print</button>
             ${!isRequestor && isApprover && data.status === 'Pending' ? `
-                <!-- FIX: Only show Approve/Reject if user is NOT the requestor (Issue 3.2) -->
                 <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${data.id}','request', true)">Approve</button>
                 <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${data.id}','request', true)">Reject</button>
             ` : ''}
@@ -120,15 +107,6 @@ const RequestDetailModal = {
 // ─── APPROVALS PAGE ────────────────────────────────────────────
 /**
  * ApprovalsPage - Main approvals dashboard
- * 
- * FIXES APPLIED:
- * - Proper role-based tabs (Issue 3.2, 3.6)
- * - "My Pending Approvals" renamed from "Pending" (Issue 3.6)
- * - "My Pending Requests" renamed from "My Requests" (Issue 3.6)
- * - Added "My Approved Requests" tab (Issue 3.6)
- * - Added "My Rejected Requests" tab (Issue 3.6)
- * - Show Approve/Reject for materials approval (Issue 3.4)
- * - Filter out requestor's own requests from pending (Issue 3.1, 3.9)
  */
 const ApprovalsPage = {
     _loaded: false,
@@ -141,17 +119,15 @@ const ApprovalsPage = {
             const user = App.currentUser;
             const isApprover = App.isApprover();
 
-            // Get all request data
             const pendingData = await DataService.getPendingApprovals();
             const myRequests = await DataService.getMyPendingRequests();
             const myApproved = await DataService.getMyApprovedRequests ? await DataService.getMyApprovedRequests() : [];
             const myRejected = await DataService.getMyRejectedRequests ? await DataService.getMyRejectedRequests() : [];
 
-            // FIX: Filter out self-requests from pending for approvers (Issue 3.1, 3.9)
             const userEmail = user ? user.email.toLowerCase() : '';
             const filteredRequests = pendingData.requests.filter(function(r) {
                 const notSelf = r.requestorEmail && r.requestorEmail.toLowerCase() !== userEmail;
-                const notActed = !r.userActed;  // ← HINDI pa na-act ng user
+                const notActed = !r.userActed;
                 return notSelf && notActed; 
             });
             const filteredMaterials = pendingData.materials.filter(function(m) {
@@ -160,11 +136,15 @@ const ApprovalsPage = {
             const filteredEquipment = pendingData.equipment.filter(function(e) {
                 return e.requestedBy && e.requestedBy.toLowerCase() !== userEmail;
             });
+            // Daily records: filter out self-submitted
+            const filteredDailyRecords = pendingData.dailyRecords ? pendingData.dailyRecords.filter(function(d) {
+                return d.createdBy && d.createdBy.toLowerCase() !== userEmail;
+            }) : [];
 
             const totalPending = filteredRequests.length + filteredMaterials.length +
-                filteredEquipment.length + pendingData.estimates.length;
+                filteredEquipment.length + (pendingData.estimates ? pendingData.estimates.length : 0) +
+                filteredDailyRecords.length;
 
-            // FIX: Updated tab names (Issue 3.6)
             let html = `
             <div class="section-head"><h2>Approval Dashboard</h2><div class="rule"></div>
                 <span class="badge">${isApprover ? totalPending + ' pending' : myRequests.length + ' my requests'}</span>
@@ -177,7 +157,7 @@ const ApprovalsPage = {
                 <button data-tab="rejected" onclick="ApprovalsPage.switchTab('rejected')">${Icon.xCircle({size:14})} My Rejected Requests (${myRejected.length})</button>
             </div>
 
-            ${isApprover ? `<div id="approval-tab-pending" class="approval-tab-content active">${this._renderPendingTab({requests: filteredRequests, materials: filteredMaterials, equipment: filteredEquipment, estimates: pendingData.estimates})}</div>` : ''}
+            ${isApprover ? `<div id="approval-tab-pending" class="approval-tab-content active">${this._renderPendingTab({requests: filteredRequests, materials: filteredMaterials, equipment: filteredEquipment, estimates: pendingData.estimates || [], dailyRecords: filteredDailyRecords})}</div>` : ''}
             <div id="approval-tab-myrequests" class="approval-tab-content ${!isApprover ? 'active' : ''}">${this._renderMyRequestsTab(myRequests, 'pending')}</div>
             <div id="approval-tab-approved" class="approval-tab-content">${this._renderMyRequestsTab(myApproved, 'approved')}</div>
             <div id="approval-tab-rejected" class="approval-tab-content">${this._renderMyRequestsTab(myRejected, 'rejected')}</div>`;
@@ -201,9 +181,7 @@ const ApprovalsPage = {
 
     /**
      * _renderPendingTab - Renders the pending approvals tab
-     * 
-     * FIX: Shows Approve/Reject buttons for materials (Issue 3.4)
-     * FIX: Shows Approve/Reject buttons for equipment (Issue 3.4)
+     * FIX: Added daily records section
      */
     _renderPendingTab(data) {
         let html = `<div class="section-head"><h3>Cash Advance Requests</h3><div class="rule"></div></div>`;
@@ -224,7 +202,6 @@ const ApprovalsPage = {
                             <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${r.status}</span>
                         </div>
                     </div>
-                    <!-- FIX: Show Approve/Reject buttons for approvers (Issue 3.2) -->
                     <div class="ar-actions">
                         <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${r.id}','request')">Approve</button>
                         <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${r.id}','request')">Reject</button>
@@ -234,7 +211,6 @@ const ApprovalsPage = {
             html += `</div></div>`;
         }
 
-        // FIX: Materials with Approve/Reject buttons (Issue 3.4)
         html += `<div class="section-head"><h3>Materials Pending Approval</h3><div class="rule"></div></div>`;
         if (data.materials.length === 0) {
             html += `<div class="empty"><p>No pending materials.</p></div>`;
@@ -252,7 +228,6 @@ const ApprovalsPage = {
                             <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${m.status}</span>
                         </div>
                     </div>
-                    <!-- FIX: Added Approve/Reject for materials (Issue 3.4) -->
                     <div class="ar-actions">
                         <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${m.id}','material')">Approve</button>
                         <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${m.id}','material')">Reject</button>
@@ -262,7 +237,6 @@ const ApprovalsPage = {
             html += `</div></div>`;
         }
 
-        // FIX: Equipment with Approve/Reject buttons (Issue 3.4)
         html += `<div class="section-head"><h3>Equipment Pending Approval</h3><div class="rule"></div></div>`;
         if (data.equipment.length === 0) {
             html += `<div class="empty"><p>No pending equipment.</p></div>`;
@@ -280,7 +254,6 @@ const ApprovalsPage = {
                             <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${e.status}</span>
                         </div>
                     </div>
-                    <!-- FIX: Added Approve/Reject for equipment (Issue 3.4) -->
                     <div class="ar-actions">
                         <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${e.id}','equipment')">Approve</button>
                         <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${e.id}','equipment')">Reject</button>
@@ -317,13 +290,38 @@ const ApprovalsPage = {
             html += `</div></div>`;
         }
 
+        // DAILY RECORDS - NEW SECTION
+        html += `<div class="section-head"><h3>Daily Records Pending Approval</h3><div class="rule"></div></div>`;
+        if (!data.dailyRecords || data.dailyRecords.length === 0) {
+            html += `<div class="empty"><p>No pending daily records.</p></div>`;
+        } else {
+            html += `<div class="panel"><div style="padding:4px 0;">`;
+            data.dailyRecords.forEach(d => {
+                html += `
+                <div class="approval-request-item" style="cursor:pointer;">
+                    <div class="ar-icon">${Icon.clipboardList({size:16})}</div>
+                    <div class="ar-body" onclick="ProjectPage.viewRecordById('${d.id}')">
+                        <div class="ar-title">Daily Record — ${d.date || 'No date'} (${d.projectId || '—'})</div>
+                        <div class="ar-meta">
+                            <span class="ar-id">${d.id}</span>
+                            <span>${d.weatherAM || ''} / ${d.weatherPM || ''}</span>
+                            <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">Pending</span>
+                        </div>
+                    </div>
+                    <div class="ar-actions">
+                        <button class="btn-sm success" onclick="ApprovalsPage.approveDailyRecord('${d.id}')">Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectDailyRecord('${d.id}')">Reject</button>
+                    </div>
+                </div>`;
+            });
+            html += `</div></div>`;
+        }
+
         return html;
     },
 
     /**
      * _renderMyRequestsTab - Renders the user's own requests
-     * 
-     * FIX: Shows different tabs for pending, approved, rejected (Issue 3.6)
      */
     _renderMyRequestsTab(requests, statusType) {
         const statusLabel = statusType === 'pending' ? 'Pending' : statusType === 'approved' ? 'Approved' : 'Rejected';
@@ -363,8 +361,6 @@ const ApprovalsPage = {
 
     /**
      * approveItem - Handle approval action
-     * 
-     * FIX: Properly updates status so item disappears from pending (Issue 3.9)
      */
     async approveItem(id, type, closeModal = false) {
         const confirmed = await Confirm.open('Approve Item?', `Approve ${id}?`);
@@ -393,14 +389,12 @@ const ApprovalsPage = {
                 await DataService.approveItemGeneric(id, 'request');
                 UI.toast(`Request ${id} approved.`, 'success');
                 if (closeModal) RequestDetailModal.close();
-                // FIX: Reload to reflect status change (Issue 3.9)
                 this.load();
                 HomePage.load();
                 return;
             }
             UI.toast(`${id} approved!`, 'success');
             if (closeModal) RequestDetailModal.close();
-            // FIX: Reload to reflect status change (Issue 3.9)
             this.load();
             HomePage.load();
         } catch (err) { 
@@ -410,8 +404,6 @@ const ApprovalsPage = {
 
     /**
      * rejectItem - Handle rejection action
-     * 
-     * FIX: Properly updates status so item disappears from pending (Issue 3.9)
      */
     async rejectItem(id, type, closeModal = false) {
         const confirmed = await Confirm.open('Reject Item?', `Reject ${id}?`);
@@ -428,11 +420,42 @@ const ApprovalsPage = {
             }
             UI.toast(`${id} rejected.`, 'error');
             if (closeModal) RequestDetailModal.close();
-            // FIX: Reload to reflect status change (Issue 3.9)
             this.load();
             HomePage.load();
         } catch (err) { 
             UI.toast('' + err.message, 'error'); 
+        }
+    },
+
+    /**
+     * approveDailyRecord - Approve a daily record
+     */
+    async approveDailyRecord(id) {
+        const confirmed = await Confirm.open('Approve Daily Record?', 'Approve this daily record?');
+        if (!confirmed) return;
+        try {
+            await DataService.approveDailyRecord(id);
+            UI.toast('Daily record approved.', 'success');
+            this.load();
+            HomePage.load();
+        } catch (err) {
+            UI.toast('' + err.message, 'error');
+        }
+    },
+
+    /**
+     * rejectDailyRecord - Reject a daily record
+     */
+    async rejectDailyRecord(id) {
+        const confirmed = await Confirm.open('Reject Daily Record?', 'Reject this daily record?');
+        if (!confirmed) return;
+        try {
+            await DataService.rejectDailyRecord(id);
+            UI.toast('Daily record rejected.', 'error');
+            this.load();
+            HomePage.load();
+        } catch (err) {
+            UI.toast('' + err.message, 'error');
         }
     }
 };
