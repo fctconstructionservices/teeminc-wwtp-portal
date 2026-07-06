@@ -49,14 +49,14 @@ const App = {
             target.focus({ preventScroll: false });
             window.scrollTo({ top: 0, behavior: 'instant' });
         }
-        if (page === 'home') HomePage.load();
-        if (page === 'finance') FinancePage.load();
-        if (page === 'materials') MaterialsPage.load();
-        if (page === 'equipment') EquipmentPage.load();
-        if (page === 'approvals') ApprovalsPage.load();
+        if (page === 'home') await HomePage.load();
+        if (page === 'finance') await FinancePage.load();
+        if (page === 'materials') await MaterialsPage.load();
+        if (page === 'equipment') await EquipmentPage.load();
+        if (page === 'approvals') await ApprovalsPage.load();
 
         this.updateUserBadges();
-        this.updateApprovalBadge();
+        await this.updateApprovalBadge();
 
         document.querySelectorAll('.topbar .actions').forEach(el => el.classList.remove('open'));
     },
