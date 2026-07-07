@@ -192,6 +192,80 @@ const ProjectPage = {
     }, 100);
 },
     /**
+     * submitAddProject - I-submit ang bagong project
+     */
+    async submitAddProject(e) {
+        e.preventDefault();
+
+    // Kunin ang values
+    let id = document.getElementById('proj-id').value.trim();
+    const name = document.getElementById('proj-name').value.trim();
+    const status = document.getElementById('proj-status').value;
+    const revenue = parseFloat(document.getElementById('proj-revenue').value) || 0;
+
+    // ✅ Validate: ID
+    if (!id) {
+        document.getElementById('proj-id').closest('.field').classList.add('error');
+        UI.toast('Project ID is required.', 'error');
+        return false;
+    } else {
+        document.getElementById('proj-id').closest('.field').classList.remove('error');
+    }
+
+    // I-format ang ID: lowercase, replace spaces with dash
+    id = id.toLowerCase().replace(/\s+/g, '-');
+
+    // Validate kung may special characters maliban sa dash at underscore
+    if (!/^[a-z0-9_-]+$/.test(id)) {
+        UI.toast('Project ID can only contain letters, numbers, dash (-), and underscore (_).', 'error');
+        return false;
+    }
+
+    // ✅ Validate: Name
+    if (!name) {
+        document.getElementById('proj-name').closest('.field').classList.add('error');
+        UI.toast('Project Name is required.', 'error');
+        return false;
+    } else {
+        document.getElementById('proj-name').closest('.field').classList.remove('error');
+    }
+
+    // ✅ Confirmation
+    const confirmed = await Confirm.open('Add Project?', 
+        `Add "${name}" (${id}) with initial revenue of ₱${revenue.toFixed(2)}?`
+    );
+    if (!confirmed) return false;
+
+    // ✅ Show loading sa button
+    const submitBtn = document.querySelector('#addProjectForm .btn-primary');
+    const originalText = submitBtn.textContent;
+    submitBtn.textContent = 'Adding...';
+    submitBtn.disabled = true;
+
+    try {
+        // Tawag sa backend
+        await DataService.addProject(id, name, status, revenue, 0, revenue);
+        
+        UI.toast(`Project "${name}" added successfully!`, 'success');
+        
+        // Isara ang modal
+        document.getElementById('addProjectModal').remove();
+        
+        // I-refresh ang home page
+        await HomePage.load();
+        
+        // I-update ang approval badge
+        App.updateApprovalBadge();
+        
+    } catch (err) {
+        UI.toast('' + err.message, 'error');
+        submitBtn.textContent = originalText;
+        submitBtn.disabled = false;
+    }
+
+    return false;
+},
+    /**
      * renderOverview - Renders the overview tab
      */
     renderOverview(p) {
