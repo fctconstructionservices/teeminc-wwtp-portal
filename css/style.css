@@ -1089,7 +1089,7 @@
             transition: opacity .25s, transform .25s;
             font-family: 'Oswald', sans-serif;
             letter-spacing: .03em;
-            z-index: 999;
+            z-index: 9999;
             max-width: 90vw;
             text-align: center;
             box-shadow: 0 8px 30px rgba(0, 0, 0, .3);
