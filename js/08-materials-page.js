@@ -45,7 +45,7 @@ const MaterialsPage = {
                     <div style="padding:16px;">
                         <form id="matForm" onsubmit="return MaterialsPage.submitMaterial(event)">
                             <div class="db-form-grid">
-                                <div class="field"><label>Material Name *</label><input type="text" id="mat-model" required /></div>
+                                <div class="field"><label>Material Name *</label><input type="text" id="mat-name" required /></div>
                                 <div class="field full"><label>Material Description *</label><input type="text" id= "mat-desc" required /></div>
                                 <div class="field"><label>Category *</label><select id="mat-category" required><option value="">Select...</option><option>Structural Steel</option><option>Concrete</option><option>Finishing</option><option>Electrical</option><option>Plumbing</option><option>Safety</option><option>Other</option></select></div>
                                 <div class="field"><label>Subcategory</label><select id="mat-subcategory"><option value="">Select...</option><option>Rebar</option><option>Cement</option><option>Aggregates</option><option>Pipes</option><option>Wires</option><option>Paint</option><option>Other</option></select></div>
