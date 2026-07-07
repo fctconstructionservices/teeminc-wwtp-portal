@@ -190,7 +190,7 @@ const ProjectPage = {
         const input = document.getElementById('proj-id');
         if (input) input.focus();
     }, 100);
-}
+},
     /**
      * renderOverview - Renders the overview tab
      */
