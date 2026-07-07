@@ -151,7 +151,6 @@ const HomePage = {
             const logs = data.logs;
             
             // Homepage Pending Reequest - makikita na lahat ng request na pending (overview)
-            const userEmail = user ? user.email.toLowerCase() : '';
             const filteredPending = pending;
             const activePending = filteredPending.filter(r => r.status === 'Pending');
 
