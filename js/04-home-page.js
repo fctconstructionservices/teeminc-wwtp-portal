@@ -37,6 +37,15 @@ const HomePage = {
             ` : '';
 
             // ─── Projects ────────────────────────────────────────
+            let projHtml = `<div class="section-head">
+                <h2>Projects</h2>
+                <div class="rule"></div>
+                <button class="btn-primary" onclick="ProjectPage.showAddProjectModal()" style="padding:4px 14px;font-size:11px;margin-left:auto;">
+                    + Add Project
+                </button>   // <-- ITO ANG BUTTON!
+            </div>
+            <div class="projects-grid">`;
+
             let projHtml = `<div class="projects-grid">`;
             data.projects.forEach(p => {
                 projHtml += `
