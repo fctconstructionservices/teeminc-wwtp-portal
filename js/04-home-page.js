@@ -27,25 +27,8 @@ const HomePage = {
         try {
             const data = await DataService.getHomeData();
             const user = App.currentUser;
-            const isSuperAdmin = user && user.role === 'superadmin';
-
-            // ✅ Super Admin lang ang makakakita ng "+ Add Project" button
-            const addButtonHtml = isSuperAdmin ? `
-                <button class="btn-primary" onclick="ProjectPage.showAddProjectModal()" style="padding:4px 14px;font-size:11px;margin-left:auto;">
-                + Add Project
-                </button>
-            ` : '';
 
             // ─── Projects ────────────────────────────────────────
-            let projAdd = `<div class="section-head">
-                <h2>Projects</h2>
-                <div class="rule"></div>
-                <button class="btn-primary" onclick="ProjectPage.showAddProjectModal()" style="padding:4px 14px;font-size:11px;margin-left:auto;">
-                    + Add Project
-                </button>   // <-- ITO ANG BUTTON!
-            </div>
-            <div class="projects-grid">`;
-
             let projHtml = `<div class="projects-grid">`;
             data.projects.forEach(p => {
                 projHtml += `
