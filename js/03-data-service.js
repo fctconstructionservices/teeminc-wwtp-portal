@@ -79,6 +79,11 @@ const DataService = {
         return await gasCall('getProjectData', projectId);
     },
 
+    // addProject - Magdagdag ng bagong project
+    async addProject(id, name, status, revenue, expenses, cashPosition) {
+        return await gasCall('addProject', id, name, status, revenue, expenses, cashPosition);
+    },
+
     // ─── FINANCE ──────────────────────────────────────────────
     async getFinanceData() {
         return await gasCall('getFinanceData');
