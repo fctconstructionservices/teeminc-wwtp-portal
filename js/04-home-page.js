@@ -74,8 +74,8 @@ const HomePage = {
             const userRole = user ? user.role : 'request-only';
             const visibleTickets = tickets.filter(t => t.roles.includes(userRole));
 
-            // Compute pending count for badge
-            const myRequests = await DataService.getMyPendingRequests();
+            // eto yung red circle Compute pending count for badge
+            const myRequests = await DataService.getPendingApprovals();
             const pendingCount = myRequests.length;
 
             let ticketHtml = `<div class="tickets">`;
