@@ -119,19 +119,13 @@ const ProjectPage = {
             this.renderEstimates(this._data);
         }
     },
-     /**
-     * showAddProjectModal - Magpakita ng modal para mag-add ng project
-     * ✅ Only Super Admin allowed
-     */
-    showAddProjectModal() {
-    // ✅ CHECK: Super Admin lang ang pwedeng mag-add
+     showAddProjectModal() {
     const user = App.currentUser;
     if (!user || user.role !== 'superadmin') {
         UI.toast('Only Super Admin can add new projects.', 'error');
         return;
     }
 
-    // Tiyaking hindi duplicate ang modal
     const existing = document.getElementById('addProjectModal');
     if (existing) existing.remove();
 
@@ -152,18 +146,18 @@ const ProjectPage = {
             <form id="addProjectForm" onsubmit="return ProjectPage.submitAddProject(event)">
                 <div class="field">
                     <label>Project ID *</label>
-                    <input type="text" id="proj-id" placeholder="e.g. new-construction" required />
+                    <input type="text" id="add-proj-id" placeholder="e.g. new-construction" required />
                     <span style="font-size:10px;color:var(--ink-soft);">No spaces. Use dash (-) or underscore (_).</span>
                     <div class="error-msg">Project ID is required.</div>
                 </div>
                 <div class="field">
                     <label>Project Name *</label>
-                    <input type="text" id="proj-name" placeholder="e.g. New Construction Project" required />
+                    <input type="text" id="add-proj-name" placeholder="e.g. New Construction Project" required />
                     <div class="error-msg">Project Name is required.</div>
                 </div>
                 <div class="field">
                     <label>Status</label>
-                    <select id="proj-status">
+                    <select id="add-proj-status">
                         <option value="Ongoing">Ongoing</option>
                         <option value="On Hold">On Hold</option>
                         <option value="Completed">Completed</option>
@@ -171,7 +165,7 @@ const ProjectPage = {
                 </div>
                 <div class="field">
                     <label>Initial Revenue (₱)</label>
-                    <input type="number" id="proj-revenue" value="0" step="0.01" min="0" />
+                    <input type="number" id="add-proj-revenue" value="0" step="0.01" min="0" />
                 </div>
                 <div class="system-check-note" style="margin-top:12px;font-size:11px;">
                     <strong>Note:</strong> New project will appear in the Projects list immediately after creation.
@@ -185,78 +179,58 @@ const ProjectPage = {
     `;
     document.body.appendChild(modal);
 
-    // Auto-focus sa first field
     setTimeout(() => {
-        const input = document.getElementById('proj-id');
+        const input = document.getElementById('add-proj-id');
         if (input) input.focus();
     }, 100);
 },
-    /**
-     * submitAddProject - I-submit ang bagong project
-     */
-    async submitAddProject(e) {
-        e.preventDefault();
+   async submitAddProject(e) {
+    e.preventDefault();
 
-    // Kunin ang values
-    let id = document.getElementById('proj-id').value.trim();
-    const name = document.getElementById('proj-name').value.trim();
-    const status = document.getElementById('proj-status').value;
-    const revenue = parseFloat(document.getElementById('proj-revenue').value) || 0;
+    let id = document.getElementById('add-proj-id').value.trim();
+    const name = document.getElementById('add-proj-name').value.trim();
+    const status = document.getElementById('add-proj-status').value;
+    const revenue = parseFloat(document.getElementById('add-proj-revenue').value) || 0;
 
-    // ✅ Validate: ID
     if (!id) {
-        document.getElementById('proj-id').closest('.field').classList.add('error');
+        document.getElementById('add-proj-id').closest('.field').classList.add('error');
         UI.toast('Project ID is required.', 'error');
         return false;
     } else {
-        document.getElementById('proj-id').closest('.field').classList.remove('error');
+        document.getElementById('add-proj-id').closest('.field').classList.remove('error');
     }
 
-    // I-format ang ID: lowercase, replace spaces with dash
     id = id.toLowerCase().replace(/\s+/g, '-');
 
-    // Validate kung may special characters maliban sa dash at underscore
     if (!/^[a-z0-9_-]+$/.test(id)) {
         UI.toast('Project ID can only contain letters, numbers, dash (-), and underscore (_).', 'error');
         return false;
     }
 
-    // ✅ Validate: Name
     if (!name) {
-        document.getElementById('proj-name').closest('.field').classList.add('error');
+        document.getElementById('add-proj-name').closest('.field').classList.add('error');
         UI.toast('Project Name is required.', 'error');
         return false;
     } else {
-        document.getElementById('proj-name').closest('.field').classList.remove('error');
+        document.getElementById('add-proj-name').closest('.field').classList.remove('error');
     }
 
-    // ✅ Confirmation
     const confirmed = await Confirm.open('Add Project?', 
         `Add "${name}" (${id}) with initial revenue of ₱${revenue.toFixed(2)}?`
     );
     if (!confirmed) return false;
 
-    // ✅ Show loading sa button
     const submitBtn = document.querySelector('#addProjectForm .btn-primary');
     const originalText = submitBtn.textContent;
     submitBtn.textContent = 'Adding...';
     submitBtn.disabled = true;
 
     try {
-        // Tawag sa backend
         await DataService.addProject(id, name, status, revenue, 0, revenue);
-        
         UI.toast(`Project "${name}" added successfully!`, 'success');
-        
-        // Isara ang modal
         document.getElementById('addProjectModal').remove();
-        
-        // I-refresh ang home page
         await HomePage.load();
-        
-        // I-update ang approval badge
         App.updateApprovalBadge();
-        
     } catch (err) {
         UI.toast('' + err.message, 'error');
         submitBtn.textContent = originalText;
