@@ -75,9 +75,33 @@ const HomePage = {
             const visibleTickets = tickets.filter(t => t.roles.includes(userRole));
 
             // eto yung red circle Compute pending count for badge
-            const myRequests = await DataService.getPendingApprovals();
-            const pendingCount = myRequests.length;
+            const userEmail = user ? user.email.toLowerCase() : '';
+            const pendingData = await DataService.getPendingApprovals();
 
+            const filteredRequests = pendingData.requests.filter(function(r) {
+            const notSelf = r.requestorEmail && r.requestorEmail.toLowerCase() !== userEmail;
+            const notActed = !r.userActed;
+                return notSelf && notActed;
+            });
+
+            const filteredMaterials = pendingData.materials.filter(function(m) {
+                return m.requestedBy && m.requestedBy.toLowerCase() !== userEmail;
+            });
+
+            const filteredEquipment = pendingData.equipment.filter(function(e) {
+            return e.requestedBy && e.requestedBy.toLowerCase() !== userEmail;
+            });
+
+            const filteredDailyRecords = pendingData.dailyRecords ? pendingData.dailyRecords.filter(function(d) {
+                return d.createdBy && d.createdBy.toLowerCase() !== userEmail;
+            }) : [];
+
+            const pendingCount = filteredRequests.length + 
+                    filteredMaterials.length +
+                    filteredEquipment.length + 
+                    (pendingData.estimates ? pendingData.estimates.length : 0) +
+                    filteredDailyRecords.length;
+            
             let ticketHtml = `<div class="tickets">`;
             visibleTickets.forEach(t => {
                 const isApproval = t.id === 'approvals';
