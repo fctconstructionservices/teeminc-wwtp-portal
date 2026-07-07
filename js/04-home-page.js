@@ -27,8 +27,34 @@ const HomePage = {
         try {
             const data = await DataService.getHomeData();
             const user = App.currentUser;
-
+            const isSuperAdmin = user && user.role === 'superadmin';
+            
             // ─── Projects ────────────────────────────────────────
+            // ✅ I-update ang section head
+            const sectionHead = document.getElementById('projectsSectionHead');
+                if (sectionHead) {
+                    let rightContent = '';
+    
+                if (isSuperAdmin) {
+            // ✅ Super Admin: May "+ Add Project" button
+                    rightContent = `
+                        <button class="btn-primary" onclick="ProjectPage.showAddProjectModal()" 
+                            style="padding:4px 14px;font-size:11px;margin-left:auto;">
+                            + Add Project
+                        </button>
+                `;
+            } else {
+            // ✅ Hindi Super Admin: Ipakita ang bilang ng projects
+            const projectCount = data.projects ? data.projects.length : 0;
+            rightContent = `<span class="badge">${projectCount} projects</span>`;
+            }
+
+            sectionHead.innerHTML = `
+                <h2>Projects</h2>
+                <div class="rule"></div>
+                ${rightContent}
+                `;
+            }
             let projHtml = `<div class="projects-grid">`;
             data.projects.forEach(p => {
                 projHtml += `
