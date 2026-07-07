@@ -119,7 +119,78 @@ const ProjectPage = {
             this.renderEstimates(this._data);
         }
     },
+     /**
+     * showAddProjectModal - Magpakita ng modal para mag-add ng project
+     * ✅ Only Super Admin allowed
+     */
+    showAddProjectModal() {
+    // ✅ CHECK: Super Admin lang ang pwedeng mag-add
+    const user = App.currentUser;
+    if (!user || user.role !== 'superadmin') {
+        UI.toast('Only Super Admin can add new projects.', 'error');
+        return;
+    }
 
+    // Tiyaking hindi duplicate ang modal
+    const existing = document.getElementById('addProjectModal');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.className = 'print-modal-overlay open';
+    modal.id = 'addProjectModal';
+    modal.innerHTML = `
+        <div class="print-modal-content" style="max-width:500px;">
+            <button class="close-modal" onclick="document.getElementById('addProjectModal').remove()">
+                ${Icon.close({size:18})}
+            </button>
+            <div class="print-header">
+                <h2>Add New Project</h2>
+                <div class="print-meta" style="font-size:11px;color:var(--ink-soft);">
+                    ⚠️ Super Admin only
+                </div>
+            </div>
+            <form id="addProjectForm" onsubmit="return ProjectPage.submitAddProject(event)">
+                <div class="field">
+                    <label>Project ID *</label>
+                    <input type="text" id="proj-id" placeholder="e.g. new-construction" required />
+                    <span style="font-size:10px;color:var(--ink-soft);">No spaces. Use dash (-) or underscore (_).</span>
+                    <div class="error-msg">Project ID is required.</div>
+                </div>
+                <div class="field">
+                    <label>Project Name *</label>
+                    <input type="text" id="proj-name" placeholder="e.g. New Construction Project" required />
+                    <div class="error-msg">Project Name is required.</div>
+                </div>
+                <div class="field">
+                    <label>Status</label>
+                    <select id="proj-status">
+                        <option value="Ongoing">Ongoing</option>
+                        <option value="On Hold">On Hold</option>
+                        <option value="Completed">Completed</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Initial Revenue (₱)</label>
+                    <input type="number" id="proj-revenue" value="0" step="0.01" min="0" />
+                </div>
+                <div class="system-check-note" style="margin-top:12px;font-size:11px;">
+                    <strong>Note:</strong> New project will appear in the Projects list immediately after creation.
+                </div>
+                <div class="submit-row">
+                    <button type="submit" class="btn-primary">Add Project</button>
+                    <button type="button" class="btn-ghost" onclick="document.getElementById('addProjectModal').remove()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    // Auto-focus sa first field
+    setTimeout(() => {
+        const input = document.getElementById('proj-id');
+        if (input) input.focus();
+    }, 100);
+}
     /**
      * renderOverview - Renders the overview tab
      */
