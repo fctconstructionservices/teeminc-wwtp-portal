@@ -45,6 +45,8 @@ const MaterialsPage = {
                     <div style="padding:16px;">
                         <form id="matForm" onsubmit="return MaterialsPage.submitMaterial(event)">
                             <div class="db-form-grid">
+                                <div class="field"><label>Material Name *</label><input type="text" id="mat-model" required /></div>
+                                <div class="field full"><label>Material Description *</label><input type="text" id= "mat-desc" required /></div>
                                 <div class="field"><label>Category *</label><select id="mat-category" required><option value="">Select...</option><option>Structural Steel</option><option>Concrete</option><option>Finishing</option><option>Electrical</option><option>Plumbing</option><option>Safety</option><option>Other</option></select></div>
                                 <div class="field"><label>Subcategory</label><select id="mat-subcategory"><option value="">Select...</option><option>Rebar</option><option>Cement</option><option>Aggregates</option><option>Pipes</option><option>Wires</option><option>Paint</option><option>Other</option></select></div>
                                 <div class="field"><label>Unit *</label><select id="mat-unit" required><option value="">Select...</option><option>pcs</option><option>kg</option><option>tons</option><option>m</option><option>sqm</option><option>cu.m</option><option>liters</option><option>bags</option><option>rolls</option></select></div>
@@ -142,6 +144,8 @@ const MaterialsPage = {
     async submitMaterial(e) {
         e.preventDefault();
         const data = {
+            name: document.getElementById('mat-name').value,
+            description: document.getElementById('mat-desc').value,
             category: document.getElementById('mat-category').value,
             subcategory: document.getElementById('mat-subcategory').value,
             unit: document.getElementById('mat-unit').value,
@@ -158,7 +162,7 @@ const MaterialsPage = {
             notes: document.getElementById('mat-notes').value.trim(),
             image: document.getElementById('matImagePreviewImg').src || 'https://placehold.co/600x400/5B6360/FFFFFF?text=Material'
         };
-        if (!data.category || !data.brand || !data.unit) { UI.toast('Required: Category, Brand, Unit.',
+        if (!data.name || !data.description || !data.category || !data.brand || !data.unit) { UI.toast('Required: Material Name, Description,Category, Brand, Unit.',
                 'error'); return; }
         const confirmed = await Confirm.open('Submit for Approval?', '');
         if (!confirmed) return;
