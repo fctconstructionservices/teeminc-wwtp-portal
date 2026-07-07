@@ -37,7 +37,7 @@ const HomePage = {
             ` : '';
 
             // ─── Projects ────────────────────────────────────────
-            let projHtml = `<div class="section-head">
+            let projAdd = `<div class="section-head">
                 <h2>Projects</h2>
                 <div class="rule"></div>
                 <button class="btn-primary" onclick="ProjectPage.showAddProjectModal()" style="padding:4px 14px;font-size:11px;margin-left:auto;">
