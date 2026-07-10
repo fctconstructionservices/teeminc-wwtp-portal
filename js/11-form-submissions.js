@@ -516,4 +516,17 @@ async function loadSOWItemsForRequest() {
         UI.toast('Failed to load SOW items for this project.', 'error');
     }
 }
+    // Sa ibaba ng 11-form-submissions.js (o sa 12-init.js)
+
+    document.addEventListener('DOMContentLoaded', function() {
+    const projectSelect = document.getElementById('req-project');
+    if (projectSelect) {
+        // Kapag nagbago ang project, i-reload ang SOW dropdown
+        projectSelect.addEventListener('change', loadSOWItemsForRequest);
+        
+        // Initial load para sa default na project (unang load ng page)
+        // Maghintay ng konti para siguradong handa na ang DOM
+        setTimeout(loadSOWItemsForRequest, 200);
+    }
+});
      
