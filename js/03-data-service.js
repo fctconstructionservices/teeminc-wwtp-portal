@@ -217,6 +217,12 @@ const DataService = {
     async submitCashAdvance(payload) {
         return await gasCall('submitCashAdvance', payload);
     },
+
+    // NEW: Kunin ang SOW items ng isang project (lightweight)
+    async getSOWItemsForProject(projectId) {
+    return await gasCall('getSOWItemsForProject', projectId);
+    },
+    
     async submitLiquidation(payload) {
         return await gasCall('submitLiquidation', payload);
     },
