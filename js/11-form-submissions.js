@@ -449,3 +449,24 @@ async function submitReleaseForm(e) {
     }
   }
 }
+    // updated project project list at Cash advacne request form
+    async function loadProjectsDropdown() {
+    try {
+        const data = await DataService.getHomeData(); // or create a dedicated getAllProjects action
+        const select = document.getElementById('req-project');
+        if (!select) return;
+        
+        // Clear existing options (keep the first one as placeholder if needed)
+        select.innerHTML = '';
+        
+        data.projects.forEach(function(proj) {
+            const option = document.createElement('option');
+            option.value = proj.id;
+            option.textContent = proj.name;
+            select.appendChild(option);
+        });
+    } catch (err) {
+        console.error('Error loading projects:', err);
+    }
+}
+     
