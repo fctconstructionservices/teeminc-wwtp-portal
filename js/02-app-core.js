@@ -32,6 +32,9 @@ const App = {
      */
     async navigate(page) {
         const restrictedPages = ['release-cash', 'record-cash'];
+        if (page === 'request') {
+            loadProjectsDropdown(); // tawagin mo rito
+        }
         if (restrictedPages.includes(page) && !this.isApprover()) {
             UI.toast('Access denied. Approvers only.', 'error');
             if (page !== 'home') {
