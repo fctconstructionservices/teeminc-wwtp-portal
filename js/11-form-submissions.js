@@ -449,7 +449,7 @@ async function submitReleaseForm(e) {
     }
   }
 }
-    // updated project project list at Cash advacne request form
+    // updated project project list at Cash advance request form
     async function loadProjectsDropdown() {
     try {
         const data = await DataService.getHomeData(); // or create a dedicated getAllProjects action
@@ -467,6 +467,53 @@ async function submitReleaseForm(e) {
         });
     } catch (err) {
         console.error('Error loading projects:', err);
+    }
+}
+/**
+ * loadSOWItemsForRequest - Punoan ang SOW dropdown base sa napiling project
+ */
+async function loadSOWItemsForRequest() {
+    const projectSelect = document.getElementById('req-project');
+    const scopeSelect = document.getElementById('req-scope');
+    if (!projectSelect || !scopeSelect) return;
+
+    const projectId = projectSelect.value;
+    if (!projectId) {
+        scopeSelect.innerHTML = '<option value="">— Select SOW Item —</option>';
+        scopeSelect.disabled = false;
+        return;
+    }
+
+    // I-disable muna habang naglo-load
+    scopeSelect.innerHTML = '<option value="">Loading SOW items...</option>';
+    scopeSelect.disabled = true;
+
+    try {
+        // Tawag sa bagong lightweight API
+        const sowItems = await DataService.getSOWItemsForProject(projectId);
+
+        // I-clear at punuan ang dropdown
+        scopeSelect.innerHTML = '';
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = '— Select SOW Item —';
+        scopeSelect.appendChild(defaultOption);
+
+        sowItems.forEach(function(item) {
+            const option = document.createElement('option');
+            option.value = item.id;  // Hal. "A.1"
+            // Display: "A.1 - Construction of Tempfacil"
+            option.textContent = item.id + ' - ' + (item.description || 'No description');
+            scopeSelect.appendChild(option);
+        });
+
+        scopeSelect.disabled = false;
+
+    } catch (err) {
+        console.error('Error loading SOW items:', err);
+        scopeSelect.innerHTML = '<option value="">Error loading SOW items</option>';
+        scopeSelect.disabled = false;
+        UI.toast('Failed to load SOW items for this project.', 'error');
     }
 }
      
