@@ -340,9 +340,12 @@
                         <textarea id="req-desc" rows="3" placeholder="e.g. Expenses for Permits"></textarea>
                         <div class="error-msg">Description is required.</div>
                     </div>
-                    <div class="field">
-                        <label>Scope of Work Item Number</label>
-                        <input type="text" id="req-scope" placeholder="e.g. A.1, GA-EX-01" />
+                    <div class="field" id="req-scope-field">
+                        <label>Scope of Work Item</label>
+                        <select id="req-scope">
+                        <option value="">— Select SOW Item —</option>
+                        </select>
+                    <div class="error-msg">Please select a SOW item.</div>
                     </div>
                     <div class="field" id="req-amount-field">
                         <label>Amount (₱)</label>
