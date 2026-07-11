@@ -7,7 +7,129 @@
 //  - All fields must be filled before submission is allowed
 //  - Proper error messaging for missing fields
 //  - File upload support with base64 conversion
+//  - NEW: Project dropdown shows only Ongoing projects
+//  - NEW: SOW dropdown dynamically loads based on selected project
 // ================================================================
+
+/**
+ * loadProjectsDropdown - Punoan ang project dropdown ng ongoing projects lang
+ * PURPOSE: I-filter ang projects para Ongoing lang ang lumabas sa dropdown
+ */
+async function loadProjectsDropdown() {
+    try {
+        // Kunin ang lahat ng projects
+        const data = await DataService.getHomeData();
+        const select = document.getElementById('req-project');
+        if (!select) return;
+        
+        // ✅ I-filter: Ongoing projects lang (case-insensitive)
+        const ongoingProjects = data.projects.filter(function(p) {
+            const status = p.status ? p.status.toLowerCase() : '';
+            return status === 'ongoing';
+        });
+        
+        // I-clear ang existing options
+        select.innerHTML = '';
+        
+        // Magdagdag ng default/placeholder option
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = '— Select Ongoing Project —';
+        defaultOption.disabled = true;
+        defaultOption.selected = true;
+        select.appendChild(defaultOption);
+        
+        // Magdagdag ng ongoing projects
+        if (ongoingProjects.length === 0) {
+            const noOption = document.createElement('option');
+            noOption.value = '';
+            noOption.textContent = '— No ongoing projects available —';
+            noOption.disabled = true;
+            select.appendChild(noOption);
+        } else {
+            ongoingProjects.forEach(function(proj) {
+                const option = document.createElement('option');
+                option.value = proj.id;
+                option.textContent = proj.name + ' (' + proj.status + ')';
+                select.appendChild(option);
+            });
+        }
+        
+        // ✅ I-trigger ang SOW dropdown update pagkatapos mag-load ng projects
+        const firstSelected = select.value;
+        if (firstSelected) {
+            await loadSOWItemsForRequest();
+        }
+        
+        console.log('✅ Ongoing projects loaded:', ongoingProjects.length);
+        
+    } catch (err) {
+        console.error('Error loading ongoing projects:', err);
+        const select = document.getElementById('req-project');
+        if (select) {
+            select.innerHTML = '<option value="">Error loading projects</option>';
+        }
+    }
+}
+
+/**
+ * loadSOWItemsForRequest - Punoan ang SOW dropdown base sa napiling project
+ * PURPOSE: I-load ang SOW items ng napiling project para sa scope of work dropdown
+ */
+async function loadSOWItemsForRequest() {
+    const projectSelect = document.getElementById('req-project');
+    const scopeSelect = document.getElementById('req-scope');
+    if (!projectSelect || !scopeSelect) return;
+
+    const projectId = projectSelect.value;
+    if (!projectId) {
+        scopeSelect.innerHTML = '<option value="">— Select SOW Item —</option>';
+        scopeSelect.disabled = false;
+        return;
+    }
+
+    // I-disable muna habang naglo-load
+    scopeSelect.innerHTML = '<option value="">Loading SOW items...</option>';
+    scopeSelect.disabled = true;
+
+    try {
+        // Tawag sa lightweight API
+        const sowItems = await DataService.getSOWItemsForProject(projectId);
+
+        // I-clear at punuan ang dropdown
+        scopeSelect.innerHTML = '';
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = '— Select SOW Item —';
+        defaultOption.disabled = true;
+        defaultOption.selected = true;
+        scopeSelect.appendChild(defaultOption);
+
+        if (sowItems.length === 0) {
+            const noOption = document.createElement('option');
+            noOption.value = '';
+            noOption.textContent = '— No SOW items for this project —';
+            noOption.disabled = true;
+            scopeSelect.appendChild(noOption);
+        } else {
+            sowItems.forEach(function(item) {
+                const option = document.createElement('option');
+                option.value = item.id;  // Hal. "A.1"
+                // Display: "A.1 - Construction of Tempfacil"
+                option.textContent = item.id + ' - ' + (item.description || 'No description');
+                scopeSelect.appendChild(option);
+            });
+        }
+
+        scopeSelect.disabled = false;
+
+    } catch (err) {
+        console.error('Error loading SOW items:', err);
+        scopeSelect.innerHTML = '<option value="">Error loading SOW items</option>';
+        scopeSelect.disabled = false;
+        UI.toast('Failed to load SOW items for this project.', 'error');
+    }
+}
 
 /**
  * submitRequestForm - Handles Cash Advance request submission
@@ -58,7 +180,7 @@ async function submitRequestForm(e) {
         valid = false;
         missingFields.push('SOW Item');
     } else {
-    document.getElementById('req-scope-field').classList.remove('error');
+        document.getElementById('req-scope-field').classList.remove('error');
     }
     
     // Validate Amount field
@@ -69,26 +191,26 @@ async function submitRequestForm(e) {
     } else {
         document.getElementById('req-amount-field').classList.remove('error');
     }
-    // Validate Date Needed
     
+    // Validate Date Needed
     if (!dateNeeded) {
         document.getElementById('req-date-field').classList.add('error');
         valid = false;
         missingFields.push('Date Needed');
     } else {
-    document.getElementById('req-date-field').classList.remove('error');
+        document.getElementById('req-date-field').classList.remove('error');
     }
 
     // Validate File Upload
-
     const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
     if (!hasFile) {
         document.getElementById('req-file-field').classList.add('error');
         valid = false;
         missingFields.push('Quotation/Basis file');
     } else {
-    document.getElementById('req-file-field').classList.remove('error');
-}
+        document.getElementById('req-file-field').classList.remove('error');
+    }
+    
     // If validation fails, show error message with missing fields
     if (!valid) {
         UI.toast(`Please fill in all required fields: ${missingFields.join(', ')}`, 'error');
@@ -391,16 +513,6 @@ async function submitReleaseForm(e) {
     
     try {
         await DataService.submitRelease({ requestId, amount });
-        
-        UI.toast('Cash released!', 'success');
-        document.getElementById('releaseForm').reset();
-        App.navigate('home');
-    } catch (err) { 
-        UI.toast('' + err.message, 'error'); 
-    }
-
-     try {
-        await DataService.submitRelease({ requestId, amount });
         UI.toast('Cash released!', 'success');
         document.getElementById('releaseForm').reset();
         
@@ -414,134 +526,61 @@ async function submitReleaseForm(e) {
     
     return false;
 }
+
 /**
- * loadProjectsDropdown - Punoan ang project dropdown ng ongoing projects lang
+ * loadReleaseDropdown - I-load ang approved cash advances sa dropdown
+ * 
+ * PURPOSE: Populate ang #rel-req-id dropdown na may available na cash advances
  */
-async function loadProjectsDropdown() {
+async function loadReleaseDropdown() {
     try {
-        // Kunin ang lahat ng projects
-        const data = await DataService.getHomeData();
-        const select = document.getElementById('req-project');
+        const select = document.getElementById('rel-req-id');
         if (!select) return;
+    
+        // Kunin ang data mula sa backend
+        const advances = await DataService.getApprovedCashAdvancesForRelease();
         
-        // ✅ I-filter: Ongoing projects lang
-        const ongoingProjects = data.projects.filter(function(p) {
-            return p.status && p.status.toLowerCase() === 'ongoing';
-        });
+        // I-clear ang options (except ang default placeholder)
+        select.innerHTML = '<option value="">— Select approved request —</option>';
         
-        // I-clear ang existing options
-        select.innerHTML = '';
-        
-        // Magdagdag ng default/placeholder option
-        const defaultOption = document.createElement('option');
-        defaultOption.value = '';
-        defaultOption.textContent = '— Select Ongoing Project —';
-        defaultOption.disabled = true;
-        defaultOption.selected = true;
-        select.appendChild(defaultOption);
-        
-        // Magdagdag ng ongoing projects
-        if (ongoingProjects.length === 0) {
-            const noOption = document.createElement('option');
-            noOption.value = '';
-            noOption.textContent = '— No ongoing projects available —';
-            noOption.disabled = true;
-            select.appendChild(noOption);
-        } else {
-            ongoingProjects.forEach(function(proj) {
-                const option = document.createElement('option');
-                option.value = proj.id;
-                option.textContent = proj.name + ' (' + proj.status + ')';
-                select.appendChild(option);
-            });
-        }
-        
-    } catch (err) {
-        console.error('Error loading ongoing projects:', err);
-        const select = document.getElementById('req-project');
-        if (select) {
-            select.innerHTML = '<option value="">Error loading projects</option>';
-        }
-    }
-}
-// updated project project list at Cash advance request form
-    async function loadProjectsDropdown() {
-    try {
-        const data = await DataService.getHomeData(); // or create a dedicated getAllProjects action
-        const select = document.getElementById('req-project');
-        if (!select) return;
-        
-        // Clear existing options (keep the first one as placeholder if needed)
-        select.innerHTML = '';
-        
-        data.projects.forEach(function(proj) {
+        // Kung walang available, magpakita ng message
+        if (!advances || advances.length === 0) {
             const option = document.createElement('option');
-            option.value = proj.id;
-            option.textContent = proj.name;
+            option.value = '';
+            option.textContent = '— No approved cash advances available —';
+            option.disabled = true;
+            select.appendChild(option);
+            return;
+        }
+        
+        // Idagdag ang mga options
+        advances.forEach(function(ca) {
+            const option = document.createElement('option');
+            option.value = ca.id;
+            const dateStr = ca.date ? new Date(ca.date).toLocaleDateString() : 'N/A';
+            option.textContent = `${ca.id} · ${ca.requestor} · ₱${ca.amount.toFixed(2)} · ${dateStr}`;
             select.appendChild(option);
         });
+        
     } catch (err) {
-        console.error('Error loading projects:', err);
+        console.error('Error loading release dropdown:', err);
+        const select = document.getElementById('rel-req-id');
+        if (select) {
+            select.innerHTML = '<option value="">— Error loading requests —</option>';
+        }
     }
 }
-/**
- * loadSOWItemsForRequest - Punoan ang SOW dropdown base sa napiling project
- */
-async function loadSOWItemsForRequest() {
-    const projectSelect = document.getElementById('req-project');
-    const scopeSelect = document.getElementById('req-scope');
-    if (!projectSelect || !scopeSelect) return;
 
-    const projectId = projectSelect.value;
-    if (!projectId) {
-        scopeSelect.innerHTML = '<option value="">— Select SOW Item —</option>';
-        scopeSelect.disabled = false;
-        return;
-    }
+// ─── DOM EVENT LISTENERS ───────────────────────────────────────────
 
-    // I-disable muna habang naglo-load
-    scopeSelect.innerHTML = '<option value="">Loading SOW items...</option>';
-    scopeSelect.disabled = true;
-
-    try {
-        // Tawag sa bagong lightweight API
-        const sowItems = await DataService.getSOWItemsForProject(projectId);
-
-        // I-clear at punuan ang dropdown
-        scopeSelect.innerHTML = '';
-        const defaultOption = document.createElement('option');
-        defaultOption.value = '';
-        defaultOption.textContent = '— Select SOW Item —';
-        scopeSelect.appendChild(defaultOption);
-
-        sowItems.forEach(function(item) {
-            const option = document.createElement('option');
-            option.value = item.id;  // Hal. "A.1"
-            // Display: "A.1 - Construction of Tempfacil"
-            option.textContent = item.id + ' - ' + (item.description || 'No description');
-            scopeSelect.appendChild(option);
-        });
-
-        scopeSelect.disabled = false;
-
-    } catch (err) {
-        console.error('Error loading SOW items:', err);
-        scopeSelect.innerHTML = '<option value="">Error loading SOW items</option>';
-        scopeSelect.disabled = false;
-        UI.toast('Failed to load SOW items for this project.', 'error');
-    }
-}
-    // Sa ibaba ng 11-form-submissions.js (o sa 12-init.js)
-
-    document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function() {
+    // Project dropdown - load ongoing projects
     const projectSelect = document.getElementById('req-project');
     if (projectSelect) {
+        // Load projects initially
+        loadProjectsDropdown();
+        
         // Kapag nagbago ang project, i-reload ang SOW dropdown
         projectSelect.addEventListener('change', loadSOWItemsForRequest);
-        
-        // Initial load para sa default na project (unang load ng page)
-        // Maghintay ng konti para siguradong handa na ang DOM
-        setTimeout(loadSOWItemsForRequest, 200);
     }
 });
-     
