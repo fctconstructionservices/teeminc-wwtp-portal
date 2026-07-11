@@ -539,14 +539,10 @@ renderDailyRecords(p) {
                 r.status === 'rejected' ? 
                 '<span class="stamp rejected" style="transform:none;padding:1px 8px;font-size:9px;">Rejected</span>' : '';
 
-            // Determine action buttons based on role
             let actionsHtml = '';
             const user = App.getUser();
-            // FALLBACK: kung walang createdBy, i-assume na ang current user ang creator
-            const isCreator = user && (
-                !r.createdBy || 
-                user.email.toLowerCase() === r.createdBy.toLowerCase()
-            );
+            // ✅ Tama: walang fallback – kailangan may createdBy at match
+            const isCreator = user && r.createdBy && user.email.toLowerCase() === r.createdBy.toLowerCase();
             const isSuperAdmin = user && user.role === 'superadmin';
             const isApprover = App.isApprover();
 
