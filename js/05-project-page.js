@@ -3,17 +3,11 @@
 //  ─── All original functionality preserved ───
 //  
 //  FIXES APPLIED:
-//  - Fixed undefined project display in approval dashboard (Issue 3.5)
-//  - Fixed SOW breakdown display
-//  - Fixed estimate group rendering
-//  - Added proper error handling for missing data
-//  - Daily Records approval system (Draft → Pending → Approved/Rejected)
-//  - Photo upload and display fix
-//  - SOW management with Gantt integration
-//  - Add SOW moved to SOW Budget tab (from Timeline)
-//  - Added qty and unit fields to SOW creation
-//  - Added "Adding..." button state during SOW submission
-//  - Defensive checks for p.sowItems to avoid undefined errors
+//  - Daily Record form header with Project Name & Prepared By
+//  - Automatic status: draft only; removed status dropdown
+//  - Duplicate check: cannot add another record for the same date (unless rejected)
+//  - Role‑based approval: creator cannot approve own, Super Admin has Force Approve/Reject
+//  - Daily log is scrollable with formatted date display
 // ================================================================
 
 const ProjectPage = {
@@ -25,7 +19,6 @@ const ProjectPage = {
 
     /**
      * open - Load and display a project
-     * PURPOSE: Fetches project data and renders all tabs
      */
     async open(projectId) {
         this._currentProjectId = projectId;
@@ -39,7 +32,7 @@ const ProjectPage = {
                 UI.setContent(container, `<div class="empty"><p>Project not found.</p></div>`); 
                 return; 
             }
-            // ✅ Defensive: ensure sowItems is always an array
+            // Defensive: ensure sowItems is always an array
             p.sowItems = Array.isArray(p.sowItems) ? p.sowItems : [];
             
             this._data = p;
@@ -346,170 +339,258 @@ const ProjectPage = {
     },
 
     /**
-     * renderDailyRecords - Renders the daily records tab with status and approval actions
+     * ==========================================================
+     *  DAILY RECORDS – UPDATED
+     * ==========================================================
      */
-renderDailyRecords(p) {
-    const container = document.getElementById('proj-tab-daily');
-    let html = `
-        <div class="add-record-toggle">
-            <button class="btn-ghost" onclick="ProjectPage.toggleAddRecord()">+ Add Daily Site Record</button>
-        </div>
-        <div class="add-record-form" id="dailyAddForm">
-            ${this._buildDailyFormHTML()}
-        </div>
-        <div class="panel">
-            <div class="panel-head">
-                <h3>Site Daily Log</h3>
-                <span class="mono" style="font-size:11px;color:var(--ink-soft)">${p.dailyRecords.length} entries</span>
-            </div>
-            <div class="daily-log-scroll" style="max-height:400px;overflow-y:auto;padding:8px 16px;">
-    `;
-    if (p.dailyRecords.length === 0) {
-        html += `<div class="empty"><p>No daily records yet.</p></div>`;
-    } else {
-        // Sort by date descending (latest first)
-        const sorted = [...p.dailyRecords].sort((a,b) => new Date(b.date) - new Date(a.date));
-        sorted.forEach((r, idx) => {
-            const statusCls = r.status === 'On Track' ? 'ontrack' : r.status === 'Delayed' ? 'delayed' : 'completed';
-            const totalManpower = r.manpower ? r.manpower.reduce((s, m) => s + (parseInt(m.count) || 0), 0) : 0;
-            // Format date nicely
-            const dateObj = new Date(r.date);
-            const formattedDate = dateObj.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
-            const day = dateObj.getDate();
-
-            // Status badge
-            const statusBadge = r.status === 'draft' ? 
-                '<span class="stamp draft" style="transform:none;padding:1px 8px;font-size:9px;">Draft</span>' :
-                r.status === 'pending' ? 
-                '<span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">Pending</span>' :
-                r.status === 'approved' ? 
-                '<span class="stamp approved" style="transform:none;padding:1px 8px;font-size:9px;">Approved</span>' :
-                r.status === 'rejected' ? 
-                '<span class="stamp rejected" style="transform:none;padding:1px 8px;font-size:9px;">Rejected</span>' : '';
-
-            // Determine action buttons based on status and user role
-            let actionsHtml = '';
-            const user = App.getUser();
-            const isCreator = user && r.createdBy && user.email.toLowerCase() === r.createdBy.toLowerCase();
-            const isSuperAdmin = user && user.role === 'superadmin';
-            const isApprover = App.isApprover();
-
-            if (r.status === 'draft') {
-                // Show submit button for creator (or anyone? Usually creator only)
-                if (!isCreator) {
-                    // If not creator, maybe they shouldn't submit? We'll still allow but we can limit.
-                }
-                actionsHtml = `<button class="btn-sm primary" onclick="ProjectPage.submitDailyForApproval('${r.id}')">Submit</button>`;
-            } else if (r.status === 'pending') {
-                if (isCreator) {
-                    // Creator cannot approve own record
-                    actionsHtml = `<span style="font-size:10px;color:var(--ink-soft);">Waiting for approval</span>`;
-                } else if (isSuperAdmin) {
-                    actionsHtml = `
-                        <button class="btn-sm success" onclick="ProjectPage.forceApproveDailyRecord('${r.id}')">Force Approve</button>
-                        <button class="btn-sm danger" onclick="ProjectPage.forceRejectDailyRecord('${r.id}')">Force Reject</button>
-                    `;
-                } else if (isApprover) {
-                    actionsHtml = `
-                        <button class="btn-sm success" onclick="ProjectPage.approveDailyRecord('${r.id}')">Approve</button>
-                        <button class="btn-sm danger" onclick="ProjectPage.rejectDailyRecord('${r.id}')">Reject</button>
-                    `;
-                }
-            }
-
-            html += `
-                <div class="daily-record-item">
-                    <div class="dr-badge">${day}</div>
-                    <div class="dr-body">
-                        <div class="dr-title">${formattedDate} · ${r.weatherAM || '—'} / ${r.weatherPM || '—'}</div>
-                        <div class="dr-meta">
-                            <time>${r.date || '—'}</time>
-                            <span>${Icon.users({size:13})} ${totalManpower} people</span>
-                            ${statusBadge}
-                        </div>
-                    </div>
-                    <div class="dr-actions" style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
-                        ${actionsHtml}
-                        <button class="btn-sm" onclick="ProjectPage.viewRecordById('${r.id}')">${Icon.search({size:13})}</button>
-                    </div>
-                </div>
-            `;
-        });
-    }
-    html += `</div></div>`;
-    container.innerHTML = html;
-    this._dailyRecords = p.dailyRecords;
-},
-    /**
- * forceApproveDailyRecord - Super Admin force approve
- */
-async forceApproveDailyRecord(recordId) {
-    const confirmed = await Confirm.open('Force Approve?', 'As Super Admin, you can force approve this daily record instantly.');
-    if (!confirmed) return;
-    try {
-        // We can reuse the same approveDailyRecord function since it just sets status
-        await DataService.approveDailyRecord(recordId);
-        UI.toast('Daily record force-approved.', 'success');
-        await this.open(this._currentProjectId);
-        if (typeof ApprovalsPage !== 'undefined' && ApprovalsPage.load) ApprovalsPage.load();
-    } catch (err) {
-        UI.toast('' + err.message, 'error');
-    }
-},
-
-/**
- * forceRejectDailyRecord - Super Admin force reject
- */
-async forceRejectDailyRecord(recordId) {
-    const confirmed = await Confirm.open('Force Reject?', 'As Super Admin, you can force reject this daily record instantly.');
-    if (!confirmed) return;
-    try {
-        await DataService.rejectDailyRecord(recordId);
-        UI.toast('Daily record force-rejected.', 'error');
-        await this.open(this._currentProjectId);
-        if (typeof ApprovalsPage !== 'undefined' && ApprovalsPage.load) ApprovalsPage.load();
-    } catch (err) {
-        UI.toast('' + err.message, 'error');
-    }
-},
 
     /**
-     * _buildDailyFormHTML - Builds the daily record form HTML with photo upload support
+     * _buildDailyFormHTML – with header, default date, no status dropdown
      */
     _buildDailyFormHTML() {
-    const projectName = this._data ? this._data.name : 'Project';
-    const user = App.getUser();
-    const preparedBy = user ? user.name : 'Unknown User';
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+        const projectName = this._data ? this._data.name : 'Project';
+        const user = App.getUser();
+        const preparedBy = user ? user.name : 'Unknown User';
+        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
 
-    return `
-        <div class="daily-form-header" style="background:var(--blueprint);color:#fff;padding:12px 16px;border-radius:var(--radius) var(--radius) 0 0;margin:-16px -16px 16px -16px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;">
-                <div>
-                    <div style="font-family:'Oswald',sans-serif;font-size:16px;text-transform:uppercase;letter-spacing:0.05em;">FCTC Site Operations Board</div>
-                    <div style="font-size:11px;opacity:0.8;">Daily Site Record</div>
-                </div>
-                <div style="text-align:right;font-size:12px;">
-                    <div><strong>Project:</strong> ${projectName}</div>
-                    <div><strong>Prepared By:</strong> ${preparedBy}</div>
+        return `
+            <div class="daily-form-header" style="background:var(--blueprint);color:#fff;padding:12px 16px;border-radius:var(--radius) var(--radius) 0 0;margin:-16px -16px 16px -16px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;">
+                    <div>
+                        <div style="font-family:'Oswald',sans-serif;font-size:16px;text-transform:uppercase;letter-spacing:0.05em;">FCTC Site Operations Board</div>
+                        <div style="font-size:11px;opacity:0.8;">Daily Site Record</div>
+                    </div>
+                    <div style="text-align:right;font-size:12px;">
+                        <div><strong>Project:</strong> ${projectName}</div>
+                        <div><strong>Prepared By:</strong> ${preparedBy}</div>
+                    </div>
                 </div>
             </div>
-        </div>
-        <div class="daily-form-section"><div class="section-label">Date & Weather <span class="rule"></span></div>
-            <div class="sub-fields">
-                <div class="field"><label>Date *</label><input type="date" id="dr-date" value="${today}" required /></div>
-                <div class="field"><label>Weather AM</label><input type="text" id="dr-weather-am" placeholder="e.g. Sunny" /></div>
-                <div class="field"><label>Weather PM</label><input type="text" id="dr-weather-pm" placeholder="e.g. Cloudy" /></div>
-                <!-- Status field removed – always draft -->
+            <div class="daily-form-section"><div class="section-label">Date & Weather <span class="rule"></span></div>
+                <div class="sub-fields">
+                    <div class="field"><label>Date *</label><input type="date" id="dr-date" value="${today}" required /></div>
+                    <div class="field"><label>Weather AM</label><input type="text" id="dr-weather-am" placeholder="e.g. Sunny" /></div>
+                    <div class="field"><label>Weather PM</label><input type="text" id="dr-weather-pm" placeholder="e.g. Cloudy" /></div>
+                </div>
             </div>
-        </div>
-        <!-- the rest of the sections (manpower, equipment, etc.) unchanged -->
-        ... 
-        <div class="submit-row">
-            <button class="btn-primary" onclick="ProjectPage.submitDailyRecord('${this._currentProjectId || ''}')">Save Record (Draft)</button>
-            <button class="btn-ghost" onclick="ProjectPage.toggleAddRecord()">Cancel</button>
-        </div>`;
-},
+            <div class="daily-form-section" id="manpowerSection">
+                <div class="section-label">Manpower <span class="rule"></span><span style="font-weight:400;font-size:10px;color:var(--ink-soft);" id="manpowerTotal">Total: 0</span></div>
+                <div id="manpowerEntries"><div class="entry-row"><div class="field"><label>Trade / Role</label><input type="text" class="mp-role" placeholder="e.g. Foreman" /></div><div class="field"><label>Number Present</label><input type="number" class="mp-count" placeholder="0" min="0" /></div><div class="field" style="grid-column:3/-1;display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'manpower')">${Icon.close({size:13})}</button></div></div></div>
+                <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('manpower')">+ Add Role</button></div>
+                <div class="manpower-total" id="manpowerTotalDisplay">Total: 0</div>
+            </div>
+            <div class="daily-form-section" id="equipmentSection">
+                <div class="section-label">Equipment on Site <span class="rule"></span></div>
+                <div id="equipmentEntries"><div class="entry-row"><div class="field"><label>Equipment</label><input type="text" class="eq-name" placeholder="e.g. Excavator" /></div><div class="field"><label>Qty</label><input type="number" class="eq-qty" placeholder="1" min="0" /></div><div class="field"><label>Status</label><input type="text" class="eq-status" placeholder="Operational" /></div><div class="field"><label>Remarks</label><input type="text" class="eq-remarks" placeholder="Optional" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'equipment')">${Icon.close({size:13})}</button></div></div></div>
+                <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('equipment')">+ Add Equipment</button></div>
+            </div>
+            <div class="daily-form-section" id="workSection">
+                <div class="section-label">Work Accomplished <span class="rule"></span></div>
+                <div id="workEntries"><div class="entry-row"><div class="field"><label>Location</label><input type="text" class="wk-location" /></div><div class="field"><label>Scope</label><input type="text" class="wk-scope" /></div><div class="field" style="grid-column:1/-1;"><label>Description</label><textarea class="wk-desc" rows="1"></textarea></div><div class="field"><label>% Complete</label><input type="number" class="wk-pct" min="0" max="100" /></div><div class="field"><label>Photo</label><input type="file" accept="image/*" class="wk-image" data-photo onchange="ProjectPage.previewSmallImage(this,'wk-preview-${Date.now()}')" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'work')">${Icon.close({size:13})}</button></div></div></div>
+                <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('work')">+ Add Work Item</button></div>
+            </div>
+            <div class="daily-form-section" id="materialsSection">
+                <div class="section-label">Materials Delivered <span class="rule"></span></div>
+                <div id="materialsEntries"><div class="entry-row"><div class="field"><label>Material</label><input type="text" class="mat-name" /></div><div class="field"><label>Qty</label><input type="number" class="mat-qty" min="0" /></div><div class="field"><label>Unit</label><input type="text" class="mat-unit" /></div><div class="field"><label>Supplier / DR No.</label><input type="text" class="mat-supplier" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'materials')">${Icon.close({size:13})}</button></div></div></div>
+                <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('materials')">+ Add Material</button></div>
+            </div>
+            <div class="daily-form-section" id="issuesSection">
+                <div class="section-label">Issues / Delays <span class="rule"></span></div>
+                <div id="issuesEntries"><div class="entry-row"><div class="field"><label>Description</label><input type="text" class="iss-desc" /></div><div class="field"><label>Cause</label><input type="text" class="iss-cause" /></div><div class="field"><label>Time Lost (hrs)</label><input type="number" class="iss-time" min="0" step="0.5" /></div><div class="field"><label>Photo</label><input type="file" accept="image/*" class="iss-image" data-photo onchange="ProjectPage.previewSmallImage(this,'iss-preview-${Date.now()}')" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'issues')">${Icon.close({size:13})}</button></div></div></div>
+                <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('issues')">+ Add Issue</button></div>
+            </div>
+            <div class="daily-form-section" id="visitorsSection">
+                <div class="section-label">Visitors <span class="rule"></span></div>
+                <div id="visitorsEntries"><div class="entry-row"><div class="field"><label>Name</label><input type="text" class="vis-name" /></div><div class="field"><label>Company / Role</label><input type="text" class="vis-company" /></div><div class="field"><label>Purpose</label><input type="text" class="vis-purpose" /></div><div class="field"><label>Time In</label><input type="time" class="vis-time-in" /></div><div class="field"><label>Time Out</label><input type="time" class="vis-time-out" /></div><div class="field"><label>Remarks</label><input type="text" class="vis-remarks" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'visitors')">${Icon.close({size:13})}</button></div></div></div>
+                <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('visitors')">+ Add Visitor</button></div>
+            </div>
+            <div class="daily-form-section" id="photosSection">
+                <div class="section-label">Additional Photos <span class="rule"></span></div>
+                <div id="photosEntries"><div class="entry-row"><div class="field"><label>Photo</label><input type="file" accept="image/*" class="photo-input" data-photo onchange="ProjectPage.previewSmallImage(this,'photo-preview-${Date.now()}')" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'photos')">${Icon.close({size:13})}</button></div></div></div>
+                <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('photos')">+ Add Photo</button></div>
+            </div>
+            <div class="submit-row">
+                <button class="btn-primary" onclick="ProjectPage.submitDailyRecord('${this._currentProjectId || ''}')">Save Record (Draft)</button>
+                <button class="btn-ghost" onclick="ProjectPage.toggleAddRecord()">Cancel</button>
+            </div>
+        `;
+    },
+
+    /**
+     * gatherDailyFormData – returns all form data, no status
+     */
+    gatherDailyFormData() {
+        const getRows = (section, clsMap) => {
+            const container = document.getElementById(section + 'Entries');
+            if (!container) return [];
+            const rows = container.querySelectorAll('.entry-row');
+            const result = [];
+            rows.forEach(row => {
+                const obj = {};
+                let has = false;
+                Object.keys(clsMap).forEach(key => {
+                    const el = row.querySelector(clsMap[key]);
+                    if (el) {
+                        const val = el.type === 'file' ? (el.files && el.files[0] ? el.files[0].name : '') : el.value.trim();
+                        obj[key] = val;
+                        if (val) has = true;
+                    }
+                });
+                if (has) result.push(obj);
+            });
+            return result;
+        };
+        return {
+            date: document.getElementById('dr-date').value,
+            weatherAM: document.getElementById('dr-weather-am').value.trim(),
+            weatherPM: document.getElementById('dr-weather-pm').value.trim(),
+            manpower: getRows('manpower', { role: '.mp-role', count: '.mp-count' }),
+            equipment: getRows('equipment', { name: '.eq-name', qty: '.eq-qty', status: '.eq-status', remarks: '.eq-remarks' }),
+            workAccomplished: getRows('work', { location: '.wk-location', scope: '.wk-scope', description: '.wk-desc', percentComplete: '.wk-pct', image: '.wk-image' }),
+            materialsDelivered: getRows('materials', { material: '.mat-name', qty: '.mat-qty', unit: '.mat-unit', supplier: '.mat-supplier' }),
+            issues: getRows('issues', { description: '.iss-desc', cause: '.iss-cause', timeLost: '.iss-time', image: '.iss-image' }),
+            visitors: getRows('visitors', { name: '.vis-name', company: '.vis-company', purpose: '.vis-purpose', timeIn: '.vis-time-in', timeOut: '.vis-time-out', remarks: '.vis-remarks' }),
+            photos: []
+        };
+    },
+
+    /**
+     * submitDailyRecord – with duplicate check and status = 'draft'
+     */
+    async submitDailyRecord(projectId) {
+        const data = this.gatherDailyFormData();
+        if (!data.date) { UI.toast('Please select a date.', 'error'); return; }
+
+        // Check for existing record on the same date (excluding rejected)
+        const existingRecords = this._data ? this._data.dailyRecords : [];
+        const duplicate = existingRecords.some(record => {
+            return record.date === data.date && record.status !== 'rejected';
+        });
+        if (duplicate) {
+            UI.toast(`There is already a record for ${data.date} (draft/pending/approved). You cannot add another.`, 'error');
+            return;
+        }
+
+        // Force status to 'draft'
+        data.status = 'draft';
+
+        // Upload photos from the photos section
+        const photoInputs = document.querySelectorAll('#photosEntries input[type="file"][data-photo]');
+        const photoPromises = [];
+        photoInputs.forEach(input => {
+            if (input.files && input.files.length > 0) {
+                const file = input.files[0];
+                photoPromises.push(fileToBase64_(file).then(base64 => {
+                    return DataService.uploadImage(base64, file.name, file.type);
+                }).catch(err => {
+                    console.error('Photo upload error:', err);
+                    return null;
+                }));
+            }
+        });
+        const photoResults = await Promise.all(photoPromises);
+        data.photos = photoResults.filter(r => r && r.url).map(r => r.url);
+
+        const confirmed = await Confirm.open('Save Daily Record?', `Save record for ${data.date}?`);
+        if (!confirmed) return;
+        try {
+            await DataService.addDailyRecord(projectId, data);
+            UI.toast('Daily record saved as draft!', 'success');
+            await this.open(projectId);
+        } catch (err) { UI.toast('Error: ' + err.message, 'error'); }
+    },
+
+    /**
+     * renderDailyRecords – scrollable, formatted date, role‑based actions
+     */
+    renderDailyRecords(p) {
+        const container = document.getElementById('proj-tab-daily');
+        let html = `
+            <div class="add-record-toggle">
+                <button class="btn-ghost" onclick="ProjectPage.toggleAddRecord()">+ Add Daily Site Record</button>
+            </div>
+            <div class="add-record-form" id="dailyAddForm">
+                ${this._buildDailyFormHTML()}
+            </div>
+            <div class="panel">
+                <div class="panel-head">
+                    <h3>Site Daily Log</h3>
+                    <span class="mono" style="font-size:11px;color:var(--ink-soft)">${p.dailyRecords.length} entries</span>
+                </div>
+                <div class="daily-log-scroll" style="max-height:400px;overflow-y:auto;padding:8px 16px;">
+        `;
+        if (p.dailyRecords.length === 0) {
+            html += `<div class="empty"><p>No daily records yet.</p></div>`;
+        } else {
+            // Sort by date descending (latest first)
+            const sorted = [...p.dailyRecords].sort((a,b) => new Date(b.date) - new Date(a.date));
+            sorted.forEach((r) => {
+                const totalManpower = r.manpower ? r.manpower.reduce((s, m) => s + (parseInt(m.count) || 0), 0) : 0;
+                const dateObj = new Date(r.date);
+                const formattedDate = dateObj.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+                const day = dateObj.getDate();
+
+                const statusBadge = r.status === 'draft' ? 
+                    '<span class="stamp draft" style="transform:none;padding:1px 8px;font-size:9px;">Draft</span>' :
+                    r.status === 'pending' ? 
+                    '<span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">Pending</span>' :
+                    r.status === 'approved' ? 
+                    '<span class="stamp approved" style="transform:none;padding:1px 8px;font-size:9px;">Approved</span>' :
+                    r.status === 'rejected' ? 
+                    '<span class="stamp rejected" style="transform:none;padding:1px 8px;font-size:9px;">Rejected</span>' : '';
+
+                // Determine action buttons based on role
+                let actionsHtml = '';
+                const user = App.getUser();
+                const isCreator = user && r.createdBy && user.email.toLowerCase() === r.createdBy.toLowerCase();
+                const isSuperAdmin = user && user.role === 'superadmin';
+                const isApprover = App.isApprover();
+
+                if (r.status === 'draft') {
+                    if (isCreator) {
+                        actionsHtml = `<button class="btn-sm primary" onclick="ProjectPage.submitDailyForApproval('${r.id}')">Submit</button>`;
+                    } else {
+                        actionsHtml = `<span style="font-size:10px;color:var(--ink-soft);">Can't submit</span>`;
+                    }
+                } else if (r.status === 'pending') {
+                    if (isCreator) {
+                        actionsHtml = `<span style="font-size:10px;color:var(--ink-soft);">Waiting for approval</span>`;
+                    } else if (isSuperAdmin) {
+                        actionsHtml = `
+                            <button class="btn-sm success" onclick="ProjectPage.forceApproveDailyRecord('${r.id}')">Force Approve</button>
+                            <button class="btn-sm danger" onclick="ProjectPage.forceRejectDailyRecord('${r.id}')">Force Reject</button>
+                        `;
+                    } else if (isApprover) {
+                        actionsHtml = `
+                            <button class="btn-sm success" onclick="ProjectPage.approveDailyRecord('${r.id}')">Approve</button>
+                            <button class="btn-sm danger" onclick="ProjectPage.rejectDailyRecord('${r.id}')">Reject</button>
+                        `;
+                    }
+                }
+
+                html += `
+                    <div class="daily-record-item">
+                        <div class="dr-badge">${day}</div>
+                        <div class="dr-body">
+                            <div class="dr-title">${formattedDate} · ${r.weatherAM || '—'} / ${r.weatherPM || '—'}</div>
+                            <div class="dr-meta">
+                                <time>${r.date || '—'}</time>
+                                <span>${Icon.users({size:13})} ${totalManpower} people</span>
+                                ${statusBadge}
+                            </div>
+                        </div>
+                        <div class="dr-actions" style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
+                            ${actionsHtml}
+                            <button class="btn-sm" onclick="ProjectPage.viewRecordById('${r.id}')">${Icon.search({size:13})}</button>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+        html += `</div></div>`;
+        container.innerHTML = html;
+        this._dailyRecords = p.dailyRecords;
+    },
 
     /**
      * addEntry - Adds a new entry row to a section
@@ -586,75 +667,7 @@ async forceRejectDailyRecord(recordId) {
     },
 
     /**
-     * gatherDailyFormData - Collects data from the daily form
-     */
-gatherDailyFormData() {
-    const getRows = (section, clsMap) => { ... } // unchanged
-
-    return {
-        date: document.getElementById('dr-date').value,
-        weatherAM: document.getElementById('dr-weather-am').value.trim(),
-        weatherPM: document.getElementById('dr-weather-pm').value.trim(),
-        // status: removed, we will set to 'draft' in submit
-        manpower: getRows('manpower', { role: '.mp-role', count: '.mp-count' }),
-        equipment: getRows('equipment', { name: '.eq-name', qty: '.eq-qty', status: '.eq-status', remarks: '.eq-remarks' }),
-        workAccomplished: getRows('work', { location: '.wk-location', scope: '.wk-scope', description: '.wk-desc', percentComplete: '.wk-pct', image: '.wk-image' }),
-        materialsDelivered: getRows('materials', { material: '.mat-name', qty: '.mat-qty', unit: '.mat-unit', supplier: '.mat-supplier' }),
-        issues: getRows('issues', { description: '.iss-desc', cause: '.iss-cause', timeLost: '.iss-time', image: '.iss-image' }),
-        visitors: getRows('visitors', { name: '.vis-name', company: '.vis-company', purpose: '.vis-purpose', timeIn: '.vis-time-in', timeOut: '.vis-time-out', remarks: '.vis-remarks' }),
-        photos: []
-    };
-},
-
-    /**
-     * submitDailyRecord - Submits a daily record with photo uploads
-     */
-async submitDailyRecord(projectId) {
-    const data = this.gatherDailyFormData();
-    if (!data.date) { UI.toast('Please select a date.', 'error'); return; }
-
-    // --- Duplicate check ---
-    const existingRecords = this._data ? this._data.dailyRecords : [];
-    const duplicate = existingRecords.some(record => {
-        // Same date and not rejected
-        return record.date === data.date && record.status !== 'rejected';
-    });
-    if (duplicate) {
-        UI.toast(`There is already a record for ${data.date} (draft/pending/approved). You cannot add another.`, 'error');
-        return;
-    }
-
-    // Force status to 'draft'
-    data.status = 'draft';
-
-    // Upload photos (same as before)
-    const photoInputs = document.querySelectorAll('#photosEntries input[type="file"][data-photo]');
-    const photoPromises = [];
-    photoInputs.forEach(input => {
-        if (input.files && input.files.length > 0) {
-            const file = input.files[0];
-            photoPromises.push(fileToBase64_(file).then(base64 => {
-                return DataService.uploadImage(base64, file.name, file.type);
-            }).catch(err => {
-                console.error('Photo upload error:', err);
-                return null;
-            }));
-        }
-    });
-    const photoResults = await Promise.all(photoPromises);
-    data.photos = photoResults.filter(r => r && r.url).map(r => r.url);
-
-    const confirmed = await Confirm.open('Save Daily Record?', `Save record for ${data.date}?`);
-    if (!confirmed) return;
-    try {
-        await DataService.addDailyRecord(projectId, data);
-        UI.toast('Daily record saved as draft!', 'success');
-        await this.open(projectId);
-    } catch (err) { UI.toast('Error: ' + err.message, 'error'); }
-},
-
-    /**
-     * viewRecord - Opens a daily record in print modal
+     * viewRecord - Opens a daily record in print modal (by index, legacy)
      */
     viewRecord(index) {
         const records = this._dailyRecords || [];
@@ -722,8 +735,41 @@ async submitDailyRecord(projectId) {
     },
 
     /**
-     * renderPhotos - Renders the photos tab with images from daily records
+     * forceApproveDailyRecord - Super Admin force approve
      */
+    async forceApproveDailyRecord(recordId) {
+        const confirmed = await Confirm.open('Force Approve?', 'As Super Admin, you can force approve this daily record instantly.');
+        if (!confirmed) return;
+        try {
+            await DataService.approveDailyRecord(recordId);
+            UI.toast('Daily record force-approved.', 'success');
+            await this.open(this._currentProjectId);
+            if (typeof ApprovalsPage !== 'undefined' && ApprovalsPage.load) ApprovalsPage.load();
+        } catch (err) {
+            UI.toast('' + err.message, 'error');
+        }
+    },
+
+    /**
+     * forceRejectDailyRecord - Super Admin force reject
+     */
+    async forceRejectDailyRecord(recordId) {
+        const confirmed = await Confirm.open('Force Reject?', 'As Super Admin, you can force reject this daily record instantly.');
+        if (!confirmed) return;
+        try {
+            await DataService.rejectDailyRecord(recordId);
+            UI.toast('Daily record force-rejected.', 'error');
+            await this.open(this._currentProjectId);
+            if (typeof ApprovalsPage !== 'undefined' && ApprovalsPage.load) ApprovalsPage.load();
+        } catch (err) {
+            UI.toast('' + err.message, 'error');
+        }
+    },
+
+    // ============================================================
+    //  PHOTOS
+    // ============================================================
+
     renderPhotos(p) {
         const container = document.getElementById('proj-tab-photos');
         const images = p.photos || [];
@@ -753,9 +799,10 @@ async submitDailyRecord(projectId) {
         this._photoImages = images;
     },
 
-    /**
-     * renderGantt - Renders the Gantt chart tab (Add SOW button removed)
-     */
+    // ============================================================
+    //  GANTT
+    // ============================================================
+
     renderGantt(p) {
         const container = document.getElementById('proj-tab-gantt');
         container.innerHTML = `
@@ -781,9 +828,6 @@ async submitDailyRecord(projectId) {
         setTimeout(() => this._renderGanttChart(p), 100);
     },
 
-    /**
-     * _renderGanttChart - Renders the actual Gantt chart
-     */
     _renderGanttChart(p) {
         const items = p.sowItems;
         if (!items || items.length === 0) {
@@ -853,9 +897,6 @@ async submitDailyRecord(projectId) {
         this._attachGanttEvents(minDate, totalDays, items);
     },
 
-    /**
-     * _attachGanttEvents - Attaches drag events to Gantt bars
-     */
     _attachGanttEvents(minDate, totalDays, items) {
         const bars = document.querySelectorAll('.gantt-bar');
         let activeBar = null;
@@ -988,9 +1029,10 @@ async submitDailyRecord(projectId) {
         });
     },
 
-    /**
-     * showAddSOWModal - Shows modal for adding a new SOW item (only ID, Description, Qty, Unit)
-     */
+    // ============================================================
+    //  SOW BUDGET
+    // ============================================================
+
     showAddSOWModal() {
         const modal = document.createElement('div');
         modal.className = 'print-modal-overlay open';
@@ -1031,9 +1073,6 @@ async submitDailyRecord(projectId) {
         document.body.appendChild(modal);
     },
 
-    /**
-     * submitAddSOW - Handles SOW addition form submission with "Adding..." state
-     */
     async submitAddSOW(e) {
         e.preventDefault();
         const id = document.getElementById('sow-id').value.trim();
@@ -1058,7 +1097,6 @@ async submitDailyRecord(projectId) {
             await DataService.addSOWItem(this._currentProjectId, { id, description, qty, unit });
             UI.toast('SOW added successfully!', 'success');
             document.getElementById('addSOWModal').remove();
-            // Refresh the entire project page to show the new SOW in all tabs
             await this.open(this._currentProjectId);
         } catch (err) {
             UI.toast('Error: ' + err.message, 'error');
@@ -1069,9 +1107,6 @@ async submitDailyRecord(projectId) {
         return false;
     },
 
-    /**
-     * renderSOWBudget - Renders the SOW budget tab with Add SOW button and qty/unit display
-     */
     renderSOWBudget(p) {
         const container = document.getElementById('proj-tab-sow');
         const estimates = this._estimatesData || { groups: [] };
@@ -1089,7 +1124,6 @@ async submitDailyRecord(projectId) {
             totalActual = 0,
             totalEstimate = 0;
 
-        // ✅ Ensure p.sowItems is an array
         const sowItems = Array.isArray(p.sowItems) ? p.sowItems : [];
 
         sowItems.forEach(item => {
@@ -1146,9 +1180,6 @@ async submitDailyRecord(projectId) {
         container.innerHTML = html;
     },
 
-    /**
-     * openSOWBreakdown - Opens the SOW breakdown modal
-     */
     openSOWBreakdown(sowId) {
         const estimates = this._estimatesData || { groups: [] };
         const group = estimates.groups.find(g => g.sowId === sowId);
@@ -1162,9 +1193,6 @@ async submitDailyRecord(projectId) {
         SOWBreakdownModal.open(sowId, data);
     },
 
-    /**
-     * _buildSOWChart - Builds the SOW budget chart
-     */
     _buildSOWChart(p) {
         if (this._charts.sow) this._charts.sow.destroy();
         try {
@@ -1199,9 +1227,10 @@ async submitDailyRecord(projectId) {
         } catch (err) { console.error('SOW chart error:', err); }
     },
 
-    /**
-     * renderEstimates - Renders the estimates tab
-     */
+    // ============================================================
+    //  ESTIMATES
+    // ============================================================
+
     renderEstimates(p) {
         const container = document.getElementById('proj-tab-estimates');
         const est = this._estimatesData || { groups: [] };
@@ -1288,9 +1317,6 @@ async submitDailyRecord(projectId) {
         container.innerHTML = html;
     },
 
-    /**
-     * _renderEstimateCategory - Renders a category within an estimate group
-     */
     _renderEstimateCategory(label, items, gIdx, cat, isApproved, options = '') {
         if (!items) items = [];
         const catKey = cat;
@@ -1430,9 +1456,6 @@ async submitDailyRecord(projectId) {
         return html;
     },
 
-    /**
-     * addEstimateItem - Adds a new item to an estimate category
-     */
     addEstimateItem(gIdx, cat) {
         const est = this._estimatesData;
         if (!est || !est.groups[gIdx]) { UI.toast('Group not found.', 'error'); return; }
@@ -1462,9 +1485,6 @@ async submitDailyRecord(projectId) {
         this.renderEstimates(this._data);
     },
 
-    /**
-     * removeEstimateItem - Removes an item from an estimate category
-     */
     removeEstimateItem(gIdx, idx, cat) {
         const est = this._estimatesData;
         if (!est || !est.groups[gIdx]) { UI.toast('Group not found.', 'error'); return; }
@@ -1476,9 +1496,6 @@ async submitDailyRecord(projectId) {
         }
     },
 
-    /**
-     * updateEstimateItem - Updates a field in an estimate item
-     */
     updateEstimateItem(gIdx, idx, cat, field, value) {
         const est = this._estimatesData;
         if (!est || !est.groups[gIdx]) return;
@@ -1498,9 +1515,6 @@ async submitDailyRecord(projectId) {
         this.renderEstimates(this._data);
     },
 
-    /**
-     * addSOWGroup - Adds a new SOW group to estimates
-     */
     addSOWGroup() {
         const est = this._estimatesData;
         const p = this._data;
@@ -1525,9 +1539,6 @@ async submitDailyRecord(projectId) {
         UI.toast(`Added estimate group for ${sow.id}`, 'success');
     },
 
-    /**
-     * submitEstimateGroup - Submits an estimate group for approval
-     */
     async submitEstimateGroup(gIdx) {
         const est = this._estimatesData;
         if (!est || !est.groups[gIdx]) { UI.toast('Group not found.', 'error'); return; }
@@ -1551,9 +1562,6 @@ async submitDailyRecord(projectId) {
         } catch (err) { UI.toast('' + err.message, 'error'); }
     },
 
-    /**
-     * approveEstimateGroup - Approves an estimate group
-     */
     async approveEstimateGroup(gIdx) {
         const est = this._estimatesData;
         if (!est || !est.groups[gIdx]) { UI.toast('Group not found.', 'error'); return; }
@@ -1571,9 +1579,6 @@ async submitDailyRecord(projectId) {
         } catch (err) { UI.toast('' + err.message, 'error'); }
     },
 
-    /**
-     * saveAllEstimates - Saves all estimate data
-     */
     async saveAllEstimates() {
         const est = this._estimatesData;
         if (!est) { UI.toast('No data to save.', 'error'); return; }
@@ -1583,9 +1588,6 @@ async submitDailyRecord(projectId) {
         } catch (err) { UI.toast('' + err.message, 'error'); }
     },
 
-    /**
-     * _updateApprovalBadge - Updates the approval badge
-     */
     _updateApprovalBadge() {
         const badge = document.getElementById('approvalBadgeHome');
         if (badge) {
