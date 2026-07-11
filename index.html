@@ -146,7 +146,21 @@
 
             <div class="section-head" id="projectsSectionHead">
                 <h2>Projects</h2>
-                <div class="rule"></div>
+            <div class="rule"></div>
+            </div>
+
+            <!-- NEW: Status Tabs -->
+            <div class="project-status-tabs" id="projectStatusTabs" style="display:flex;gap:8px;margin-bottom:16px;">
+            <button class="btn-sm primary active" data-status="ongoing" onclick="HomePage.filterProjects('ongoing')">Ongoing
+            </button>
+            <button class="btn-sm" data-status="completed" onclick="HomePage.filterProjects('completed')">Completed
+            </button>
+            <button class="btn-sm" data-status="all" onclick="HomePage.filterProjects('all')">All Projects
+            </button>
+            </div>
+
+            <div id="projectsContainer">
+            <div class="loading-overlay"><div class="loader"></div><p>Loading projects...</p></div>
             </div>
             
             <div id="projectsContainer">
