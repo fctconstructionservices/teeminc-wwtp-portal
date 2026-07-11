@@ -1415,9 +1415,6 @@ const ProjectPage = {
         const group = est.groups[gIdx];
         if (group.status === 'approved') { UI.toast('Cannot edit approved estimate.', 'error'); return; }
         
-        // ✅ FIX 6: Check kung may duplicate na entry (para sa materials at equipment)
-        // Walang check dito dahil blank ang bagong item, pero nasa updateEstimateItem ang validation.
-        
         const newItem = { id: 'est-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4) };
         if (cat === 'materials') { 
             newItem.material = '';
