@@ -1231,91 +1231,98 @@ renderDailyRecords(p) {
     //  ESTIMATES
     // ============================================================
 
-    renderEstimates(p) {
-        const container = document.getElementById('proj-tab-estimates');
-        const est = this._estimatesData || { groups: [] };
+renderEstimates(p) {
+    const container = document.getElementById('proj-tab-estimates');
+    const est = this._estimatesData || { groups: [] };
 
-        const allMat = DataService._materials || [];
-        const matOptions = allMat.map(m =>
-            `<option value="${m.id}" data-name="${m.brand || m.name} ${m.specs || ''}" data-rate="${m.rate || 0}">${m.id} - ${m.brand || m.name} ${m.specs || ''}</option>`
-        ).join('');
+    // ✅ FIX 4 & 5: Kunin ang APPROVED materials at equipment (hindi lahat)
+    const allMat = DataService._materials.filter(function(m) { 
+        return m.status === 'approved'; 
+    });
+    const matOptions = allMat.map(function(m) {
+        const displayName = m.brand || m.name || m.id;
+        const specs = m.specs ? ' (' + m.specs + ')' : '';
+        return '<option value="' + m.id + '" data-name="' + displayName + '" data-rate="' + (m.rate || 0) + '">' + displayName + specs + '</option>';
+    }).join('');
 
-        const allEq = DataService._equipment || [];
-        const eqOptions = allEq.map(e =>
-            `<option value="${e.id}" data-name="${e.brand || e.name} ${e.model || ''}" data-rate="${e.rate || 0}">${e.id} - ${e.brand || e.name} ${e.model || ''}</option>`
-        ).join('');
+    const allEq = DataService._equipment.filter(function(e) { 
+        return e.status === 'approved'; 
+    });
+    const eqOptions = allEq.map(function(e) {
+        const displayName = e.brand || e.name || e.id;
+        const model = e.model ? ' — ' + e.model : '';
+        return '<option value="' + e.id + '" data-name="' + displayName + '" data-rate="' + (e.rate || 0) + '">' + displayName + model + '</option>';
+    }).join('');
 
-        let grandTotal = 0;
-        est.groups.forEach(g => {
-            const matSum = (g.materials || []).reduce((s, m) => s + (parseFloat(m.cost) || 0), 0);
-            const eqSum = (g.equipment || []).reduce((s, e) => s + (parseFloat(e.cost) || 0), 0);
-            const labSum = (g.labor || []).reduce((s, l) => s + (parseFloat(l.cost) || 0), 0);
-            const indSum = (g.indirect || []).reduce((s, i) => s + (parseFloat(i.amount) || 0), 0);
-            g._total = matSum + eqSum + labSum + indSum;
-            grandTotal += g._total;
-        });
+    let grandTotal = 0;
+    est.groups.forEach(function(g) {
+        const matSum = (g.materials || []).reduce(function(s, m) { return s + (parseFloat(m.cost) || 0); }, 0);
+        const eqSum = (g.equipment || []).reduce(function(s, e) { return s + (parseFloat(e.cost) || 0); }, 0);
+        const labSum = (g.labor || []).reduce(function(s, l) { return s + (parseFloat(l.cost) || 0); }, 0);
+        const indSum = (g.indirect || []).reduce(function(s, i) { return s + (parseFloat(i.amount) || 0); }, 0);
+        g._total = matSum + eqSum + labSum + indSum;
+        grandTotal += g._total;
+    });
 
-        let html = `
-                <div class="section-head"><h2>Project Estimates</h2><div class="rule"></div>
-                    <span class="badge">Total Estimate: ₱${grandTotal.toFixed(2)}</span>
-                </div>
-                <p style="font-size:11px;color:var(--ink-soft);margin-bottom:12px;">
-                    Each SOW has its own Materials, Labor, Equipment, and Indirect Costs. 
-                    <strong>Draft</strong> → <strong>Submit for Approval</strong> → <strong>Approved</strong> (locked).
-                </p>
+    let html = `
+        <div class="section-head"><h2>Project Estimates</h2><div class="rule"></div>
+            <span class="badge">Total Estimate: ₱${grandTotal.toFixed(2)}</span>
+        </div>
+        <p style="font-size:11px;color:var(--ink-soft);margin-bottom:12px;">
+            Each SOW has its own Materials, Labor, Equipment, and Indirect Costs. 
+            <strong>Draft</strong> → <strong>Submit for Approval</strong> → <strong>Approved</strong> (locked).
+        </p>
 
-                <div id="estGroupsContainer">`;
+        <div id="estGroupsContainer">`;
 
-        if (est.groups.length === 0) {
-            html += `<div class="empty"><p>No SOW groups. Add a new SOW group below.</p></div>`;
-        } else {
-            est.groups.forEach((group, gIdx) => {
-                const isApproved = group.status === 'approved';
-                const isPending = group.status === 'pending';
-                const isDraft = group.status === 'draft' || !group.status;
-                const cardCls = isApproved ? 'approved' : isPending ? 'pending' : 'draft';
-                const readonlyCls = isApproved ? 'readonly' : '';
+    if (est.groups.length === 0) {
+        html += `<div class="empty"><p>No SOW groups. Add a new SOW group below.</p></div>`;
+    } else {
+        est.groups.forEach(function(group, gIdx) {
+            const isApproved = group.status === 'approved';
+            const isPending = group.status === 'pending';
+            const isDraft = group.status === 'draft' || !group.status;
+            const cardCls = isApproved ? 'approved' : isPending ? 'pending' : 'draft';
+            const readonlyCls = isApproved ? 'readonly' : '';
 
-                html += `
-                        <div class="est-group-card ${cardCls} ${readonlyCls}" data-group-idx="${gIdx}">
-                            <div class="eg-header">
-                                <span class="eg-sow">${group.sowId || '—'}</span>
-                                <span class="eg-desc">${group.sowDescription || 'No description'}</span>
-                                <span class="eg-status ${group.status || 'draft'}">${group.status || 'draft'}</span>
-                                <div class="eg-actions">
-                                    ${!isApproved ? `<button class="btn-sm primary" onclick="ProjectPage.addEstimateItem('${gIdx}','materials')">+ Mat</button>` : ''}
-                                    ${!isApproved ? `<button class="btn-sm primary" onclick="ProjectPage.addEstimateItem('${gIdx}','labor')">+ Lab</button>` : ''}
-                                    ${!isApproved ? `<button class="btn-sm primary" onclick="ProjectPage.addEstimateItem('${gIdx}','equipment')">+ Eq</button>` : ''}
-                                    ${!isApproved ? `<button class="btn-sm primary" onclick="ProjectPage.addEstimateItem('${gIdx}','indirect')">+ Ind</button>` : ''}
-                                    ${isDraft ? `<button class="btn-sm amber" onclick="ProjectPage.submitEstimateGroup('${gIdx}')">Submit</button>` : ''}
-                                    ${isPending ? `<button class="btn-sm success" onclick="ProjectPage.approveEstimateGroup('${gIdx}')">Approve</button>` : ''}
-                                    ${isApproved ? `<span style="font-size:11px;color:var(--green);">${Icon.lock({size:12})} Approved</span>` : ''}
-                                </div>
-                            </div>
-                            <div class="eg-body">
-                                ${this._renderEstimateCategory('Materials', group.materials || [], gIdx, 'materials', isApproved, matOptions)}
-                                ${this._renderEstimateCategory('Labor', group.labor || [], gIdx, 'labor', isApproved)}
-                                ${this._renderEstimateCategory('Equipment', group.equipment || [], gIdx, 'equipment', isApproved, eqOptions)}
-                                ${this._renderEstimateCategory('Indirect Costs', group.indirect || [], gIdx, 'indirect', isApproved)}
-                                <div class="eg-subtotal">
-                                    <span class="eg-subtotal-label">Subtotal</span>
-                                    ₱${(group._total || 0).toFixed(2)}
-                                </div>
-                            </div>
-                        </div>`;
-            });
-        }
-
-        html += `
-                </div>
-                <div class="submit-row" style="margin-top:16px;">
-                    <button class="btn-primary" onclick="ProjectPage.addSOWGroup()">+ Add SOW Group</button>
-                    <button class="btn-ghost" onclick="ProjectPage.saveAllEstimates()">${Icon.save({size:14})} Save All Drafts</button>
-                    <span style="font-size:11px;color:var(--ink-soft);align-self:center;">Data is saved locally (simulated).</span>
+            html += `
+                <div class="est-group-card ${cardCls} ${readonlyCls}" data-group-idx="${gIdx}">
+                    <div class="eg-header">
+                        <span class="eg-sow">${group.sowId || '—'}</span>
+                        <span class="eg-desc">${group.sowDescription || 'No description'}</span>
+                        <span class="eg-status ${group.status || 'draft'}">${group.status || 'draft'}</span>
+                        ${isApproved ? `<span style="font-size:11px;color:var(--green);">${Icon.lock({size:12})} Approved</span>` : ''}
+                    </div>
+                    <div class="eg-body">
+                        ${this._renderEstimateCategory('Materials', group.materials || [], gIdx, 'materials', isApproved, matOptions)}
+                        ${this._renderEstimateCategory('Labor', group.labor || [], gIdx, 'labor', isApproved)}
+                        ${this._renderEstimateCategory('Equipment', group.equipment || [], gIdx, 'equipment', isApproved, eqOptions)}
+                        ${this._renderEstimateCategory('Indirect Costs', group.indirect || [], gIdx, 'indirect', isApproved)}
+                        <div class="eg-subtotal">
+                            <span class="eg-subtotal-label">Subtotal</span>
+                            ₱${(group._total || 0).toFixed(2)}
+                        </div>
+                        <!-- ✅ FIX 3: Submit/Approve buttons sa baba -->
+                        <div class="eg-bottom-actions" style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:12px;">
+                            ${isDraft ? `<button class="btn-sm amber" onclick="ProjectPage.submitEstimateGroup('${gIdx}')">Submit for Approval</button>` : ''}
+                            ${isPending ? `<button class="btn-sm success" onclick="ProjectPage.approveEstimateGroup('${gIdx}')">Approve Estimate</button>` : ''}
+                            ${isApproved ? `<span style="font-size:11px;color:var(--green);">${Icon.checkCircle({size:14})} Approved and Locked</span>` : ''}
+                        </div>
+                    </div>
                 </div>`;
+        });
+    }
 
-        container.innerHTML = html;
-    },
+    html += `
+        </div>
+        <div class="submit-row" style="margin-top:16px;">
+            <button class="btn-primary" onclick="ProjectPage.addSOWGroup()">+ Add SOW Group</button>
+            <button class="btn-ghost" onclick="ProjectPage.saveAllEstimates()">${Icon.save({size:14})} Save All Drafts</button>
+            <span style="font-size:11px;color:var(--ink-soft);align-self:center;">Data is saved locally (simulated).</span>
+        </div>`;
+
+    container.innerHTML = html;
+},
 
     _renderEstimateCategory(label, items, gIdx, cat, isApproved, options = '') {
         if (!items) items = [];
@@ -1457,33 +1464,50 @@ renderDailyRecords(p) {
     },
 
     addEstimateItem(gIdx, cat) {
-        const est = this._estimatesData;
-        if (!est || !est.groups[gIdx]) { UI.toast('Group not found.', 'error'); return; }
-        const group = est.groups[gIdx];
-        if (group.status === 'approved') { UI.toast('Cannot edit approved estimate.', 'error'); return; }
-        const newItem = { id: 'est-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4) };
-        if (cat === 'materials') { newItem.material = '';
-            newItem.materialName = '';
-            newItem.desc = '';
-            newItem.qty = 0;
-            newItem.rate = 0;
-            newItem.cost = 0; } else if (cat === 'labor') { newItem.role = '';
-            newItem.desc = '';
-            newItem.qty = 0;
-            newItem.duration = 0;
-            newItem.rate = 0;
-            newItem.cost = 0; } else if (cat === 'equipment') { newItem.equipment = '';
-            newItem.equipName = '';
-            newItem.desc = '';
-            newItem.qty = 0;
-            newItem.duration = 0;
-            newItem.rate = 0;
-            newItem.cost = 0; } else if (cat === 'indirect') { newItem.desc = '';
-            newItem.type = 'Contingency';
-            newItem.amount = 0; }
-        group[cat].push(newItem);
-        this.renderEstimates(this._data);
-    },
+    const est = this._estimatesData;
+    if (!est || !est.groups[gIdx]) { UI.toast('Group not found.', 'error'); return; }
+    const group = est.groups[gIdx];
+    if (group.status === 'approved') { UI.toast('Cannot edit approved estimate.', 'error'); return; }
+    
+    // ✅ FIX 6: Check kung may duplicate na entry (para sa materials at equipment)
+    if (cat === 'materials' || cat === 'equipment') {
+        const existingItems = group[cat] || [];
+        // Hanapin ang huling id na ginamit para malaman kung duplicate
+        // Sa case na ito, kapag nag‑add ng blank, hindi pa duplicate.
+        // Pero sa selection pa lang magkakaroon ng duplicate check.
+    }
+    
+    const newItem = { id: 'est-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4) };
+    if (cat === 'materials') { 
+        newItem.material = '';
+        newItem.materialName = '';
+        newItem.desc = '';
+        newItem.qty = 0;
+        newItem.rate = 0;
+        newItem.cost = 0; 
+    } else if (cat === 'labor') { 
+        newItem.role = '';
+        newItem.desc = '';
+        newItem.qty = 0;
+        newItem.duration = 0;
+        newItem.rate = 0;
+        newItem.cost = 0; 
+    } else if (cat === 'equipment') { 
+        newItem.equipment = '';
+        newItem.equipName = '';
+        newItem.desc = '';
+        newItem.qty = 0;
+        newItem.duration = 0;
+        newItem.rate = 0;
+        newItem.cost = 0; 
+    } else if (cat === 'indirect') { 
+        newItem.desc = '';
+        newItem.type = 'Contingency';
+        newItem.amount = 0; 
+    }
+    group[cat].push(newItem);
+    this.renderEstimates(this._data);
+},
 
     removeEstimateItem(gIdx, idx, cat) {
         const est = this._estimatesData;
@@ -1496,24 +1520,68 @@ renderDailyRecords(p) {
         }
     },
 
-    updateEstimateItem(gIdx, idx, cat, field, value) {
-        const est = this._estimatesData;
-        if (!est || !est.groups[gIdx]) return;
-        const group = est.groups[gIdx];
-        if (group.status === 'approved') return;
-        const item = group[cat] && group[cat][idx];
-        if (!item) return;
-        item[field] = value;
-        if (cat === 'materials') {
-            item.cost = (parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0);
-        } else if (cat === 'labor' || cat === 'equipment') {
-            item.cost = (parseFloat(item.qty) || 0) * (parseFloat(item.duration) || 0) * (parseFloat(item.rate) || 0);
-        } else if (cat === 'indirect') {
-            item.amount = parseFloat(value) || 0;
-            item.cost = item.amount;
+updateEstimateItem(gIdx, idx, cat, field, value) {
+    const est = this._estimatesData;
+    if (!est || !est.groups[gIdx]) return;
+    const group = est.groups[gIdx];
+    if (group.status === 'approved') return;
+    const item = group[cat] && group[cat][idx];
+    if (!item) return;
+    
+    // ✅ FIX 6: Duplicate check para sa materials at equipment
+    if ((cat === 'materials' || cat === 'equipment') && field === 'material' || field === 'equipment') {
+        const items = group[cat] || [];
+        // Hanapin kung may existing na may parehong value (maliban sa kasalukuyang item)
+        const duplicate = items.some(function(existing, i) {
+            if (i === idx) return false; // huwag i‑check ang sarili
+            if (cat === 'materials') {
+                return existing.material === value && value !== '';
+            } else {
+                return existing.equipment === value && value !== '';
+            }
+        });
+        if (duplicate) {
+            UI.toast('This ' + (cat === 'materials' ? 'material' : 'equipment') + ' is already added to this SOW.', 'error');
+            return;
         }
-        this.renderEstimates(this._data);
-    },
+    }
+    
+    item[field] = value;
+    
+    // Auto‑populate name/rate kung material o equipment
+    if (cat === 'materials' && field === 'material') {
+        const allMat = DataService._materials.filter(function(m) { return m.status === 'approved'; });
+        const found = allMat.find(function(m) { return m.id === value; });
+        if (found) {
+            item.materialName = found.brand || found.name || found.id;
+            // Auto‑populate rate kung wala pang value
+            if (!item.rate || item.rate === 0) {
+                item.rate = parseFloat(found.rate || 0);
+            }
+        }
+        item.cost = (parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0);
+    } else if (cat === 'equipment' && field === 'equipment') {
+        const allEq = DataService._equipment.filter(function(e) { return e.status === 'approved'; });
+        const found = allEq.find(function(e) { return e.id === value; });
+        if (found) {
+            item.equipName = found.brand || found.name || found.id;
+            if (!item.rate || item.rate === 0) {
+                item.rate = parseFloat(found.rate || 0);
+            }
+        }
+        item.cost = (parseFloat(item.qty) || 0) * (parseFloat(item.duration) || 0) * (parseFloat(item.rate) || 0);
+    } else if (cat === 'materials') {
+        item.cost = (parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0);
+    } else if (cat === 'labor') {
+        item.cost = (parseFloat(item.qty) || 0) * (parseFloat(item.duration) || 0) * (parseFloat(item.rate) || 0);
+    } else if (cat === 'equipment') {
+        item.cost = (parseFloat(item.qty) || 0) * (parseFloat(item.duration) || 0) * (parseFloat(item.rate) || 0);
+    } else if (cat === 'indirect') {
+        item.amount = parseFloat(value) || 0;
+        item.cost = item.amount;
+    }
+    this.renderEstimates(this._data);
+},
 
     addSOWGroup() {
         const est = this._estimatesData;
