@@ -1,24 +1,16 @@
 // ================================================================
 //  HOME PAGE - Complete with fixes for Issues 1.1, 3.5, 3.6, 3.10
 //  FIX: Added App.updateUserBadges() after rendering tickets
-//  NEW: Project filtering by status (Ongoing | Completed | All)
+//  NEW: Project filtering with tabs (Ongoing, Completed, All)
 // ================================================================
 
 /**
  * HomePage - Main dashboard
- * 
- * FIXES APPLIED:
- * - Fixed "My Approval Queue" renamed to "Approval Que" (Issue 3.6)
- * - Pending requests now disappear when approved (Issue 3.9)
- * - Fixed undefined project display (Issue 3.5)
- * - Unified ticker count with approvals page (Issue 3.10)
- * - ✅ Added updateUserBadges() after rendering tickets
- * - ✅ NEW: Project filtering with tabs (Ongoing, Completed, All)
  */
 const HomePage = {
     _loaded: false,
-    _allProjects: [],          // Store all projects for filtering
-    _currentFilter: 'ongoing', // Default filter: 'ongoing', 'completed', 'all'
+    _allProjects: [],
+    _currentFilter: 'ongoing',
     
     async load() {
         const projectsContainer = document.getElementById('projectsContainer');
@@ -33,9 +25,9 @@ const HomePage = {
             const user = App.currentUser;
             const isSuperAdmin = user && user.role === 'superadmin';
             
-            // ✅ FIX: Dito dapat ilagay ang pag-save ng projects (pagkatapos makuha ang data)
+            // ✅ I-save ang projects
             this._allProjects = data.projects || [];
-            this._currentFilter = 'ongoing'; // default filter
+            this._currentFilter = 'ongoing';
             
             // ─── Projects Section Head ────────────────────────────
             const sectionHead = document.getElementById('projectsSectionHead');
@@ -60,9 +52,8 @@ const HomePage = {
             }
 
             // ─── Project Status Tabs ──────────────────────────────
-            // ✅ Idagdag ang tabs pagkatapos ng section head
-            const existingTabs = document.querySelector('.project-status-tabs');
-            if (!existingTabs) {
+            // ✅ Idagdag ang tabs kung wala pa
+            if (!document.querySelector('.project-status-tabs')) {
                 const tabsHtml = `
                     <div class="project-status-tabs" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
                         <button class="btn-sm primary" data-status="ongoing" onclick="HomePage.filterProjects('ongoing')">
@@ -76,13 +67,13 @@ const HomePage = {
                         </button>
                     </div>
                 `;
-                // I-insert pagkatapos ng sectionHead
                 if (sectionHead && sectionHead.nextSibling) {
                     sectionHead.insertAdjacentHTML('afterend', tabsHtml);
                 }
             }
 
-            // ─── Render Projects gamit ang filter ─────────────────
+            // ─── ✅ RENDER PROJECTS (FILTERED) ────────────────────
+            // ✅ TANGGAL NA ANG LUMANG CODE! ITO LANG ANG GAGAMITIN.
             this.renderProjects();
 
             // ─── Gauges ──────────────────────────────────────────
@@ -100,7 +91,8 @@ const HomePage = {
             gaugeHtml += `</div>`;
             UI.setContent(gaugesContainer, gaugeHtml);
 
-            // ─── Tickets (Role-based) ──────────────────────────
+            // ─── Tickets ──────────────────────────────────────────
+            // ... (same as before, no changes) ...
             const tickets = [
                 { id: 'request', label: 'Request Cash Advance', sub: 'New requisition', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
                 { id: 'record-cash', label: 'Record Incoming Cash', sub: 'Capital / injections', roles: ['superadmin', 'admin', 'approver'] },
@@ -115,7 +107,6 @@ const HomePage = {
             const userRole = user ? user.role : 'request-only';
             const visibleTickets = tickets.filter(t => t.roles.includes(userRole));
 
-            // Compute pending count for badge
             const userEmail = user ? user.email.toLowerCase() : '';
             const pendingData = await DataService.getPendingApprovals();
 
@@ -183,15 +174,13 @@ const HomePage = {
                 }
             }
 
-            // ✅ FIX: Update user badges after rendering tickets
             App.updateUserBadges();
 
             // ─── Approval Queue ─────────────────────────────────
             const pending = data.pendingRequests;
             const logs = data.logs;
             
-            const filteredPending = pending;
-            const activePending = filteredPending.filter(r => r.status === 'Pending');
+            const activePending = pending.filter(r => r.status === 'Pending');
 
             let queueHtml = `
             <div class="panel"><div class="panel-head"><h3>Pending Requests</h3><span class="mono" style="font-size:11px;color:var(--ink-soft)">${activePending.length} waiting</span></div>
@@ -216,7 +205,6 @@ const HomePage = {
             queueHtml += `</div></div>`;
             UI.setContent(approvalContainer, queueHtml);
 
-            // ✅ FIX: Update approval badge with unified count
             const badge = document.getElementById('approvalBadgeHome');
             if (badge) badge.textContent = pendingCount;
 
@@ -229,11 +217,13 @@ const HomePage = {
 
     /**
      * renderProjects - I-render ang projects base sa current filter
-     * NEW: Separate function para sa project rendering
      */
     renderProjects() {
         const container = document.getElementById('projectsContainer');
-        if (!container) return;
+        if (!container) {
+            console.warn('projectsContainer not found');
+            return;
+        }
 
         let filteredProjects = [];
 
@@ -258,7 +248,7 @@ const HomePage = {
             }
         });
 
-        // Update project count sa badge
+        // Update project count
         const countBadge = document.querySelector('.project-count-badge');
         if (countBadge) {
             countBadge.textContent = filteredProjects.length + ' projects';
@@ -296,7 +286,6 @@ const HomePage = {
 
     /**
      * filterProjects - I-filter ang projects base sa status
-     * NEW: Called when user clicks a tab
      */
     filterProjects(status) {
         this._currentFilter = status;
