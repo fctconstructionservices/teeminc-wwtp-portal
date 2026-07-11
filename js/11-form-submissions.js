@@ -414,51 +414,57 @@ async function submitReleaseForm(e) {
     
     return false;
 }
-    /**
-    * loadReleaseDropdown - I-load ang approved cash advances sa dropdown
-     * 
-     * PURPOSE: Populate ang #rel-req-id dropdown na may available na cash advances
-     */
-    async function loadReleaseDropdown() {
-      try {
-        const select = document.getElementById('rel-req-id');
+/**
+ * loadProjectsDropdown - Punoan ang project dropdown ng ongoing projects lang
+ */
+async function loadProjectsDropdown() {
+    try {
+        // Kunin ang lahat ng projects
+        const data = await DataService.getHomeData();
+        const select = document.getElementById('req-project');
         if (!select) return;
-    
-    //  Kunin ang data mula sa backend
-    const advances = await DataService.getApprovedCashAdvancesForRelease();
-    
-    //  I-clear ang options (except ang default placeholder)
-    select.innerHTML = '<option value="">— Select approved request —</option>';
-    
-    //  Kung walang available, magpakita ng message
-    if (!advances || advances.length === 0) {
-      const option = document.createElement('option');
-      option.value = '';
-      option.textContent = '— No approved cash advances available —';
-      option.disabled = true;
-      select.appendChild(option);
-      return;
+        
+        // ✅ I-filter: Ongoing projects lang
+        const ongoingProjects = data.projects.filter(function(p) {
+            return p.status && p.status.toLowerCase() === 'ongoing';
+        });
+        
+        // I-clear ang existing options
+        select.innerHTML = '';
+        
+        // Magdagdag ng default/placeholder option
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = '— Select Ongoing Project —';
+        defaultOption.disabled = true;
+        defaultOption.selected = true;
+        select.appendChild(defaultOption);
+        
+        // Magdagdag ng ongoing projects
+        if (ongoingProjects.length === 0) {
+            const noOption = document.createElement('option');
+            noOption.value = '';
+            noOption.textContent = '— No ongoing projects available —';
+            noOption.disabled = true;
+            select.appendChild(noOption);
+        } else {
+            ongoingProjects.forEach(function(proj) {
+                const option = document.createElement('option');
+                option.value = proj.id;
+                option.textContent = proj.name + ' (' + proj.status + ')';
+                select.appendChild(option);
+            });
+        }
+        
+    } catch (err) {
+        console.error('Error loading ongoing projects:', err);
+        const select = document.getElementById('req-project');
+        if (select) {
+            select.innerHTML = '<option value="">Error loading projects</option>';
+        }
     }
-    
-    //  Idagdag ang mga options
-    advances.forEach(function(ca) {
-      const option = document.createElement('option');
-      option.value = ca.id;
-      const dateStr = ca.date ? new Date(ca.date).toLocaleDateString() : 'N/A';
-      option.textContent = `${ca.id} · ${ca.requestor} · ₱${ca.amount.toFixed(2)} · ${dateStr}`;
-      select.appendChild(option);
-    });
-    
-  } catch (err) {
-    console.error('Error loading release dropdown:', err);
-    // Magpakita ng error message sa dropdown
-    const select = document.getElementById('rel-req-id');
-    if (select) {
-      select.innerHTML = '<option value="">— Error loading requests —</option>';
-    }
-  }
 }
-    // updated project project list at Cash advance request form
+// updated project project list at Cash advance request form
     async function loadProjectsDropdown() {
     try {
         const data = await DataService.getHomeData(); // or create a dedicated getAllProjects action
