@@ -1,6 +1,7 @@
 // ================================================================
 //  HOME PAGE - Complete with fixes for Issues 1.1, 3.5, 3.6, 3.10
 //  FIX: Added App.updateUserBadges() after rendering tickets
+//  NEW: Project filtering by status (Ongoing | Completed | All)
 // ================================================================
 
 /**
@@ -12,9 +13,12 @@
  * - Fixed undefined project display (Issue 3.5)
  * - Unified ticker count with approvals page (Issue 3.10)
  * - ✅ Added updateUserBadges() after rendering tickets
+ * - ✅ NEW: Project filtering with tabs (Ongoing, Completed, All)
  */
 const HomePage = {
     _loaded: false,
+    _allProjects: [],          // Store all projects for filtering
+    _currentFilter: 'ongoing', // Default filter: 'ongoing', 'completed', 'all'
     
     async load() {
         const projectsContainer = document.getElementById('projectsContainer');
@@ -29,46 +33,57 @@ const HomePage = {
             const user = App.currentUser;
             const isSuperAdmin = user && user.role === 'superadmin';
             
-            // ─── Projects ────────────────────────────────────────
-            // ✅ I-update ang section head
+            // ✅ FIX: Dito dapat ilagay ang pag-save ng projects (pagkatapos makuha ang data)
+            this._allProjects = data.projects || [];
+            this._currentFilter = 'ongoing'; // default filter
+            
+            // ─── Projects Section Head ────────────────────────────
             const sectionHead = document.getElementById('projectsSectionHead');
-                if (sectionHead) {
-                    let rightContent = '';
-    
+            if (sectionHead) {
+                let rightContent = '';
                 if (isSuperAdmin) {
-            // ✅ Super Admin: May "+ Add Project" button
                     rightContent = `
                         <button class="btn-primary" onclick="ProjectPage.showAddProjectModal()" 
                             style="padding:4px 14px;font-size:11px;margin-left:auto;">
                             + Add Project
                         </button>
+                    `;
+                } else {
+                    const projectCount = data.projects ? data.projects.length : 0;
+                    rightContent = `<span class="badge project-count-badge">${projectCount} projects</span>`;
+                }
+                sectionHead.innerHTML = `
+                    <h2>Projects</h2>
+                    <div class="rule"></div>
+                    ${rightContent}
                 `;
-            } else {
-            // ✅ Hindi Super Admin: Ipakita ang bilang ng projects
-            const projectCount = data.projects ? data.projects.length : 0;
-            rightContent = `<span class="badge">${projectCount} projects</span>`;
             }
 
-            sectionHead.innerHTML = `
-                <h2>Projects</h2>
-                <div class="rule"></div>
-                ${rightContent}
-                `;
-            }
-            let projHtml = `<div class="projects-grid">`;
-            data.projects.forEach(p => {
-                projHtml += `
-                <button class="project-card" onclick="ProjectPage.open('${p.id}')">
-                    <div class="pc-head"><div class="pc-name">${p.name}</div><span class="stamp approved">${p.status}</span></div>
-                    <div class="pc-stats">
-                        <div class="pc-stat"><div class="k">Revenue</div><div class="v">₱${(p.revenue || 0).toFixed(2)}</div></div>
-                        <div class="pc-stat"><div class="k">Expenses</div><div class="v">₱${(p.expenses || 0).toFixed(2)}</div></div>
-                        <div class="pc-stat"><div class="k">Cash Position</div><div class="v">₱${(p.cashPosition || 0).toFixed(2)}</div></div>
+            // ─── Project Status Tabs ──────────────────────────────
+            // ✅ Idagdag ang tabs pagkatapos ng section head
+            const existingTabs = document.querySelector('.project-status-tabs');
+            if (!existingTabs) {
+                const tabsHtml = `
+                    <div class="project-status-tabs" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+                        <button class="btn-sm primary" data-status="ongoing" onclick="HomePage.filterProjects('ongoing')">
+                            🔵 Ongoing
+                        </button>
+                        <button class="btn-sm" data-status="completed" onclick="HomePage.filterProjects('completed')">
+                            ✅ Completed
+                        </button>
+                        <button class="btn-sm" data-status="all" onclick="HomePage.filterProjects('all')">
+                            📋 All Projects
+                        </button>
                     </div>
-                </button>`;
-            });
-            projHtml += `</div>`;
-            UI.setContent(projectsContainer, projHtml);
+                `;
+                // I-insert pagkatapos ng sectionHead
+                if (sectionHead && sectionHead.nextSibling) {
+                    sectionHead.insertAdjacentHTML('afterend', tabsHtml);
+                }
+            }
+
+            // ─── Render Projects gamit ang filter ─────────────────
+            this.renderProjects();
 
             // ─── Gauges ──────────────────────────────────────────
             let gaugeHtml = `<div class="gauges">`;
@@ -100,13 +115,13 @@ const HomePage = {
             const userRole = user ? user.role : 'request-only';
             const visibleTickets = tickets.filter(t => t.roles.includes(userRole));
 
-            // eto yung red circle Compute pending count for badge
+            // Compute pending count for badge
             const userEmail = user ? user.email.toLowerCase() : '';
             const pendingData = await DataService.getPendingApprovals();
 
             const filteredRequests = pendingData.requests.filter(function(r) {
-            const notSelf = r.requestorEmail && r.requestorEmail.toLowerCase() !== userEmail;
-            const notActed = !r.userActed;
+                const notSelf = r.requestorEmail && r.requestorEmail.toLowerCase() !== userEmail;
+                const notActed = !r.userActed;
                 return notSelf && notActed;
             });
 
@@ -115,7 +130,7 @@ const HomePage = {
             });
 
             const filteredEquipment = pendingData.equipment.filter(function(e) {
-            return e.requestedBy && e.requestedBy.toLowerCase() !== userEmail;
+                return e.requestedBy && e.requestedBy.toLowerCase() !== userEmail;
             });
 
             const filteredDailyRecords = pendingData.dailyRecords ? pendingData.dailyRecords.filter(function(d) {
@@ -162,9 +177,9 @@ const HomePage = {
             if (ticketsContainer) {
                 ticketsContainer.outerHTML = ticketHtml;
             } else {
-                const sectionHead = document.querySelector('.section-head');
-                if (sectionHead && sectionHead.nextElementSibling && sectionHead.nextElementSibling.classList.contains('tickets')) {
-                    sectionHead.nextElementSibling.outerHTML = ticketHtml;
+                const sectionHeadEl = document.querySelector('.section-head');
+                if (sectionHeadEl && sectionHeadEl.nextElementSibling && sectionHeadEl.nextElementSibling.classList.contains('tickets')) {
+                    sectionHeadEl.nextElementSibling.outerHTML = ticketHtml;
                 }
             }
 
@@ -172,11 +187,9 @@ const HomePage = {
             App.updateUserBadges();
 
             // ─── Approval Queue ─────────────────────────────────
-            // Changed from "My Approval Queue" to "Approval Que" (Issue 3.6)
             const pending = data.pendingRequests;
             const logs = data.logs;
             
-            // Homepage Pending Reequest - makikita na lahat ng request na pending (overview)
             const filteredPending = pending;
             const activePending = filteredPending.filter(r => r.status === 'Pending');
 
@@ -203,7 +216,7 @@ const HomePage = {
             queueHtml += `</div></div>`;
             UI.setContent(approvalContainer, queueHtml);
 
-            // ✅ FIX: Update approval badge with unified count (Issue 3.10)
+            // ✅ FIX: Update approval badge with unified count
             const badge = document.getElementById('approvalBadgeHome');
             if (badge) badge.textContent = pendingCount;
 
@@ -212,5 +225,81 @@ const HomePage = {
             console.error('Home load error:', err);
             UI.toast('Error loading home data.', 'error');
         }
+    },
+
+    /**
+     * renderProjects - I-render ang projects base sa current filter
+     * NEW: Separate function para sa project rendering
+     */
+    renderProjects() {
+        const container = document.getElementById('projectsContainer');
+        if (!container) return;
+
+        let filteredProjects = [];
+
+        if (this._currentFilter === 'all') {
+            filteredProjects = this._allProjects;
+        } else if (this._currentFilter === 'completed') {
+            filteredProjects = this._allProjects.filter(function(p) {
+                return p.status && p.status.toLowerCase() === 'completed';
+            });
+        } else {
+            // 'ongoing' - lahat ng hindi completed
+            filteredProjects = this._allProjects.filter(function(p) {
+                return p.status && p.status.toLowerCase() !== 'completed';
+            });
+        }
+
+        // Update tab buttons
+        document.querySelectorAll('.project-status-tabs .btn-sm').forEach(function(btn) {
+            btn.classList.remove('primary');
+            if (btn.dataset.status === HomePage._currentFilter) {
+                btn.classList.add('primary');
+            }
+        });
+
+        // Update project count sa badge
+        const countBadge = document.querySelector('.project-count-badge');
+        if (countBadge) {
+            countBadge.textContent = filteredProjects.length + ' projects';
+        }
+
+        // Render projects
+        if (filteredProjects.length === 0) {
+            UI.setContent(container, `
+                <div class="empty" style="padding:40px 20px;">
+                    <p>No ${this._currentFilter === 'all' ? '' : this._currentFilter} projects found.</p>
+                </div>
+            `);
+            return;
+        }
+
+        let projHtml = `<div class="projects-grid">`;
+        filteredProjects.forEach(function(p) {
+            const statusClass = p.status && p.status.toLowerCase() === 'completed' ? 'approved' : 'ontrack';
+            projHtml += `
+                <button class="project-card" onclick="ProjectPage.open('${p.id}')">
+                    <div class="pc-head">
+                        <div class="pc-name">${p.name}</div>
+                        <span class="stamp ${statusClass}">${p.status || 'Ongoing'}</span>
+                    </div>
+                    <div class="pc-stats">
+                        <div class="pc-stat"><div class="k">Revenue</div><div class="v">₱${(p.revenue || 0).toFixed(2)}</div></div>
+                        <div class="pc-stat"><div class="k">Expenses</div><div class="v">₱${(p.expenses || 0).toFixed(2)}</div></div>
+                        <div class="pc-stat"><div class="k">Cash Position</div><div class="v">₱${(p.cashPosition || 0).toFixed(2)}</div></div>
+                    </div>
+                </button>`;
+        });
+        projHtml += `</div>`;
+        UI.setContent(container, projHtml);
+    },
+
+    /**
+     * filterProjects - I-filter ang projects base sa status
+     * NEW: Called when user clicks a tab
+     */
+    filterProjects(status) {
+        this._currentFilter = status;
+        this.renderProjects();
     }
 };
