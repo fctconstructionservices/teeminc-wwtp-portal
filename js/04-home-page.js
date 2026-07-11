@@ -52,7 +52,6 @@ const HomePage = {
             }
 
             // ─── Project Status Tabs ──────────────────────────────
-            // ✅ Idagdag ang tabs kung wala pa
             if (!document.querySelector('.project-status-tabs')) {
                 const tabsHtml = `
                     <div class="project-status-tabs" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
@@ -73,7 +72,7 @@ const HomePage = {
             }
 
             // ─── ✅ RENDER PROJECTS (FILTERED) ────────────────────
-            // ✅ TANGGAL NA ANG LUMANG CODE! ITO LANG ANG GAGAMITIN.
+            // ✅ ITO LANG ANG GAGAMITIN PARA SA PROJECTS
             this.renderProjects();
 
             // ─── Gauges ──────────────────────────────────────────
@@ -92,7 +91,6 @@ const HomePage = {
             UI.setContent(gaugesContainer, gaugeHtml);
 
             // ─── Tickets ──────────────────────────────────────────
-            // ... (same as before, no changes) ...
             const tickets = [
                 { id: 'request', label: 'Request Cash Advance', sub: 'New requisition', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
                 { id: 'record-cash', label: 'Record Incoming Cash', sub: 'Capital / injections', roles: ['superadmin', 'admin', 'approver'] },
@@ -218,58 +216,52 @@ const HomePage = {
     /**
      * renderProjects - I-render ang projects base sa current filter
      */
-        renderProjects() {
-            console.log('🔍 renderProjects() called. Filter:', this._currentFilter);
-    
-            const container = document.getElementById('projectsContainer');
-            console.log('📦 Container element:', container);
-    
-            if (!container) {
-                console.error('❌ projectsContainer NOT FOUND!');
-                return;
-            }
+    renderProjects() {
+        const container = document.getElementById('projectsContainer');
+        if (!container) {
+            console.error('projectsContainer not found');
+            return;
+        }
 
-            // I-log ang laman ng container bago palitan
-        console.log('📄 Container innerHTML before:', container.innerHTML.substring(0, 100) + '...');
+        let filteredProjects = [];
 
-           let filteredProjects = [];
-
-           if (this._currentFilter === 'all') {
-                filteredProjects = this._allProjects;
-                } else if (this._currentFilter === 'completed') {
-                filteredProjects = this._allProjects.filter(function(p) {
+        if (this._currentFilter === 'all') {
+            filteredProjects = this._allProjects;
+        } else if (this._currentFilter === 'completed') {
+            filteredProjects = this._allProjects.filter(function(p) {
                 return p.status && p.status.toLowerCase() === 'completed';
             });
-           } else {
-                filteredProjects = this._allProjects.filter(function(p) {
+        } else {
+            // 'ongoing' - lahat ng hindi completed
+            filteredProjects = this._allProjects.filter(function(p) {
                 return p.status && p.status.toLowerCase() !== 'completed';
             });
-            }
-
-        console.log('📊 Filtered projects count:', filteredProjects.length);
-
-            // Update tabs
-        document.querySelectorAll('.project-status-tabs .btn-sm').forEach(function(btn) {
-        btn.classList.remove('primary');
-        if (btn.dataset.status === HomePage._currentFilter) {
-            btn.classList.add('primary');
         }
+
+        // Update tab buttons
+        document.querySelectorAll('.project-status-tabs .btn-sm').forEach(function(btn) {
+            btn.classList.remove('primary');
+            if (btn.dataset.status === HomePage._currentFilter) {
+                btn.classList.add('primary');
+            }
         });
 
-    // Update count badge
-    const countBadge = document.querySelector('.project-count-badge');
-    if (countBadge) {
-        countBadge.textContent = filteredProjects.length + ' projects';
-    }
+        // Update project count badge
+        const countBadge = document.querySelector('.project-count-badge');
+        if (countBadge) {
+            countBadge.textContent = filteredProjects.length + ' projects';
+        }
 
-    // Render
-    if (filteredProjects.length === 0) {
-        const emptyHtml = `<div class="empty" style="padding:40px 20px;">
-            <p>No ${this._currentFilter === 'all' ? '' : this._currentFilter} projects found.</p>
-        </div>`;
-        console.log('📭 Empty state HTML:', emptyHtml);
-        UI.setContent(container, emptyHtml);
-    } else {
+        // Render projects
+        if (filteredProjects.length === 0) {
+            container.innerHTML = `
+                <div class="empty" style="padding:40px 20px;">
+                    <p>No ${this._currentFilter === 'all' ? '' : this._currentFilter} projects found.</p>
+                </div>
+            `;
+            return;
+        }
+
         let projHtml = `<div class="projects-grid">`;
         filteredProjects.forEach(function(p) {
             const statusClass = p.status && p.status.toLowerCase() === 'completed' ? 'approved' : 'ontrack';
@@ -287,12 +279,11 @@ const HomePage = {
                 </button>`;
         });
         projHtml += `</div>`;
-        console.log('✅ Projects HTML length:', projHtml.length);
-        UI.setContent(container, projHtml);
-    }
+        
+        // ✅ Direct assignment para siguradong walang loading na matira
+        container.innerHTML = projHtml;
+    },
 
-    console.log('✅ renderProjects() finished. Container innerHTML now:', container.innerHTML.substring(0, 100) + '...');
-},
     /**
      * filterProjects - I-filter ang projects base sa status
      */
