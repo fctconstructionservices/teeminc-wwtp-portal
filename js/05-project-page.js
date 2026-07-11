@@ -503,94 +503,98 @@ const ProjectPage = {
     /**
      * renderDailyRecords – scrollable, formatted date, role‑based actions
      */
-    renderDailyRecords(p) {
-        const container = document.getElementById('proj-tab-daily');
-        let html = `
-            <div class="add-record-toggle">
-                <button class="btn-ghost" onclick="ProjectPage.toggleAddRecord()">+ Add Daily Site Record</button>
+renderDailyRecords(p) {
+    const container = document.getElementById('proj-tab-daily');
+    let html = `
+        <div class="add-record-toggle">
+            <button class="btn-ghost" onclick="ProjectPage.toggleAddRecord()">+ Add Daily Site Record</button>
+        </div>
+        <div class="add-record-form" id="dailyAddForm">
+            ${this._buildDailyFormHTML()}
+        </div>
+        <div class="panel">
+            <div class="panel-head">
+                <h3>Site Daily Log</h3>
+                <span class="mono" style="font-size:11px;color:var(--ink-soft)">${p.dailyRecords.length} entries</span>
             </div>
-            <div class="add-record-form" id="dailyAddForm">
-                ${this._buildDailyFormHTML()}
-            </div>
-            <div class="panel">
-                <div class="panel-head">
-                    <h3>Site Daily Log</h3>
-                    <span class="mono" style="font-size:11px;color:var(--ink-soft)">${p.dailyRecords.length} entries</span>
-                </div>
-                <div class="daily-log-scroll" style="max-height:400px;overflow-y:auto;padding:8px 16px;">
-        `;
-        if (p.dailyRecords.length === 0) {
-            html += `<div class="empty"><p>No daily records yet.</p></div>`;
-        } else {
-            // Sort by date descending (latest first)
-            const sorted = [...p.dailyRecords].sort((a,b) => new Date(b.date) - new Date(a.date));
-            sorted.forEach((r) => {
-                const totalManpower = r.manpower ? r.manpower.reduce((s, m) => s + (parseInt(m.count) || 0), 0) : 0;
-                const dateObj = new Date(r.date);
-                const formattedDate = dateObj.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
-                const day = dateObj.getDate();
+            <div class="daily-log-scroll" style="max-height:400px;overflow-y:auto;padding:8px 16px;">
+    `;
+    if (p.dailyRecords.length === 0) {
+        html += `<div class="empty"><p>No daily records yet.</p></div>`;
+    } else {
+        // Sort by date descending (latest first)
+        const sorted = [...p.dailyRecords].sort((a,b) => new Date(b.date) - new Date(a.date));
+        sorted.forEach((r) => {
+            const totalManpower = r.manpower ? r.manpower.reduce((s, m) => s + (parseInt(m.count) || 0), 0) : 0;
+            const dateObj = new Date(r.date);
+            const formattedDate = dateObj.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+            const day = dateObj.getDate();
 
-                const statusBadge = r.status === 'draft' ? 
-                    '<span class="stamp draft" style="transform:none;padding:1px 8px;font-size:9px;">Draft</span>' :
-                    r.status === 'pending' ? 
-                    '<span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">Pending</span>' :
-                    r.status === 'approved' ? 
-                    '<span class="stamp approved" style="transform:none;padding:1px 8px;font-size:9px;">Approved</span>' :
-                    r.status === 'rejected' ? 
-                    '<span class="stamp rejected" style="transform:none;padding:1px 8px;font-size:9px;">Rejected</span>' : '';
+            const statusBadge = r.status === 'draft' ? 
+                '<span class="stamp draft" style="transform:none;padding:1px 8px;font-size:9px;">Draft</span>' :
+                r.status === 'pending' ? 
+                '<span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">Pending</span>' :
+                r.status === 'approved' ? 
+                '<span class="stamp approved" style="transform:none;padding:1px 8px;font-size:9px;">Approved</span>' :
+                r.status === 'rejected' ? 
+                '<span class="stamp rejected" style="transform:none;padding:1px 8px;font-size:9px;">Rejected</span>' : '';
 
-                // Determine action buttons based on role
-                let actionsHtml = '';
-                const user = App.getUser();
-                const isCreator = user && r.createdBy && user.email.toLowerCase() === r.createdBy.toLowerCase();
-                const isSuperAdmin = user && user.role === 'superadmin';
-                const isApprover = App.isApprover();
+            // Determine action buttons based on role
+            let actionsHtml = '';
+            const user = App.getUser();
+            // FALLBACK: kung walang createdBy, i-assume na ang current user ang creator
+            const isCreator = user && (
+                !r.createdBy || 
+                user.email.toLowerCase() === r.createdBy.toLowerCase()
+            );
+            const isSuperAdmin = user && user.role === 'superadmin';
+            const isApprover = App.isApprover();
 
-                if (r.status === 'draft') {
-                    if (isCreator) {
-                        actionsHtml = `<button class="btn-sm primary" onclick="ProjectPage.submitDailyForApproval('${r.id}')">Submit</button>`;
-                    } else {
-                        actionsHtml = `<span style="font-size:10px;color:var(--ink-soft);">Can't submit</span>`;
-                    }
-                } else if (r.status === 'pending') {
-                    if (isCreator) {
-                        actionsHtml = `<span style="font-size:10px;color:var(--ink-soft);">Waiting for approval</span>`;
-                    } else if (isSuperAdmin) {
-                        actionsHtml = `
-                            <button class="btn-sm success" onclick="ProjectPage.forceApproveDailyRecord('${r.id}')">Force Approve</button>
-                            <button class="btn-sm danger" onclick="ProjectPage.forceRejectDailyRecord('${r.id}')">Force Reject</button>
-                        `;
-                    } else if (isApprover) {
-                        actionsHtml = `
-                            <button class="btn-sm success" onclick="ProjectPage.approveDailyRecord('${r.id}')">Approve</button>
-                            <button class="btn-sm danger" onclick="ProjectPage.rejectDailyRecord('${r.id}')">Reject</button>
-                        `;
-                    }
+            if (r.status === 'draft') {
+                if (isCreator) {
+                    actionsHtml = `<button class="btn-sm primary" onclick="ProjectPage.submitDailyForApproval('${r.id}')">Submit</button>`;
+                } else {
+                    actionsHtml = `<span style="font-size:10px;color:var(--ink-soft);">Can't submit</span>`;
                 }
+            } else if (r.status === 'pending') {
+                if (isCreator) {
+                    actionsHtml = `<span style="font-size:10px;color:var(--ink-soft);">Waiting for approval</span>`;
+                } else if (isSuperAdmin) {
+                    actionsHtml = `
+                        <button class="btn-sm success" onclick="ProjectPage.forceApproveDailyRecord('${r.id}')">Force Approve</button>
+                        <button class="btn-sm danger" onclick="ProjectPage.forceRejectDailyRecord('${r.id}')">Force Reject</button>
+                    `;
+                } else if (isApprover) {
+                    actionsHtml = `
+                        <button class="btn-sm success" onclick="ProjectPage.approveDailyRecord('${r.id}')">Approve</button>
+                        <button class="btn-sm danger" onclick="ProjectPage.rejectDailyRecord('${r.id}')">Reject</button>
+                    `;
+                }
+            }
 
-                html += `
-                    <div class="daily-record-item">
-                        <div class="dr-badge">${day}</div>
-                        <div class="dr-body">
-                            <div class="dr-title">${formattedDate} · ${r.weatherAM || '—'} / ${r.weatherPM || '—'}</div>
-                            <div class="dr-meta">
-                                <time>${r.date || '—'}</time>
-                                <span>${Icon.users({size:13})} ${totalManpower} people</span>
-                                ${statusBadge}
-                            </div>
-                        </div>
-                        <div class="dr-actions" style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
-                            ${actionsHtml}
-                            <button class="btn-sm" onclick="ProjectPage.viewRecordById('${r.id}')">${Icon.search({size:13})}</button>
+            html += `
+                <div class="daily-record-item">
+                    <div class="dr-badge">${day}</div>
+                    <div class="dr-body">
+                        <div class="dr-title">${formattedDate} · ${r.weatherAM || '—'} / ${r.weatherPM || '—'}</div>
+                        <div class="dr-meta">
+                            <time>${r.date || '—'}</time>
+                            <span>${Icon.users({size:13})} ${totalManpower} people</span>
+                            ${statusBadge}
                         </div>
                     </div>
-                `;
-            });
-        }
-        html += `</div></div>`;
-        container.innerHTML = html;
-        this._dailyRecords = p.dailyRecords;
-    },
+                    <div class="dr-actions" style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
+                        ${actionsHtml}
+                        <button class="btn-sm" onclick="ProjectPage.viewRecordById('${r.id}')">${Icon.search({size:13})}</button>
+                    </div>
+                </div>
+            `;
+        });
+    }
+    html += `</div></div>`;
+    container.innerHTML = html;
+    this._dailyRecords = p.dailyRecords;
+},
 
     /**
      * addEntry - Adds a new entry row to a section
