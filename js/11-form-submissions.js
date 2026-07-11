@@ -51,6 +51,16 @@ async function submitRequestForm(e) {
     } else {
         document.getElementById('req-desc-field').classList.remove('error');
     }
+
+    // Scope of Work validation (dropdown)
+    const scopeOfWork = document.getElementById('req-scope').value.trim();
+    if (!scopeOfWork) {
+        document.getElementById('req-scope-field').classList.add('error');
+        valid = false;
+        missingFields.push('SOW Item');
+    } else {
+    document.getElementById('req-scope-field').classList.remove('error');
+    }
     
     // Validate Amount field
     if (!amount || amount <= 0) {
