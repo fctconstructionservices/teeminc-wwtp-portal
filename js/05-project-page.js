@@ -230,6 +230,9 @@ const ProjectPage = {
         UI.toast(`Project "${name}" added successfully!`, 'success');
         document.getElementById('addProjectModal').remove();
         await HomePage.load();
+        HomePage._currentFilter = 'ongoing'; // Reset to ongoing tab
+        HomePage.renderProjects();           // Re-render projects
+        
         App.updateApprovalBadge();
     } catch (err) {
         UI.toast('' + err.message, 'error');
