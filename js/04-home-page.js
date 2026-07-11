@@ -218,52 +218,58 @@ const HomePage = {
     /**
      * renderProjects - I-render ang projects base sa current filter
      */
-    renderProjects() {
-        const container = document.getElementById('projectsContainer');
-        if (!container) {
-            console.warn('projectsContainer not found');
-            return;
-        }
+        renderProjects() {
+            console.log('🔍 renderProjects() called. Filter:', this._currentFilter);
+    
+            const container = document.getElementById('projectsContainer');
+            console.log('📦 Container element:', container);
+    
+            if (!container) {
+                console.error('❌ projectsContainer NOT FOUND!');
+                return;
+            }
 
-        let filteredProjects = [];
+            // I-log ang laman ng container bago palitan
+        console.log('📄 Container innerHTML before:', container.innerHTML.substring(0, 100) + '...');
 
-        if (this._currentFilter === 'all') {
-            filteredProjects = this._allProjects;
-        } else if (this._currentFilter === 'completed') {
-            filteredProjects = this._allProjects.filter(function(p) {
+           let filteredProjects = [];
+
+           if (this._currentFilter === 'all') {
+                filteredProjects = this._allProjects;
+                } else if (this._currentFilter === 'completed') {
+                filteredProjects = this._allProjects.filter(function(p) {
                 return p.status && p.status.toLowerCase() === 'completed';
             });
-        } else {
-            // 'ongoing' - lahat ng hindi completed
-            filteredProjects = this._allProjects.filter(function(p) {
+           } else {
+                filteredProjects = this._allProjects.filter(function(p) {
                 return p.status && p.status.toLowerCase() !== 'completed';
             });
-        }
-
-        // Update tab buttons
-        document.querySelectorAll('.project-status-tabs .btn-sm').forEach(function(btn) {
-            btn.classList.remove('primary');
-            if (btn.dataset.status === HomePage._currentFilter) {
-                btn.classList.add('primary');
             }
+
+        console.log('📊 Filtered projects count:', filteredProjects.length);
+
+            // Update tabs
+        document.querySelectorAll('.project-status-tabs .btn-sm').forEach(function(btn) {
+        btn.classList.remove('primary');
+        if (btn.dataset.status === HomePage._currentFilter) {
+            btn.classList.add('primary');
+        }
         });
 
-        // Update project count
-        const countBadge = document.querySelector('.project-count-badge');
-        if (countBadge) {
-            countBadge.textContent = filteredProjects.length + ' projects';
-        }
+    // Update count badge
+    const countBadge = document.querySelector('.project-count-badge');
+    if (countBadge) {
+        countBadge.textContent = filteredProjects.length + ' projects';
+    }
 
-        // Render projects
-        if (filteredProjects.length === 0) {
-            UI.setContent(container, `
-                <div class="empty" style="padding:40px 20px;">
-                    <p>No ${this._currentFilter === 'all' ? '' : this._currentFilter} projects found.</p>
-                </div>
-            `);
-            return;
-        }
-
+    // Render
+    if (filteredProjects.length === 0) {
+        const emptyHtml = `<div class="empty" style="padding:40px 20px;">
+            <p>No ${this._currentFilter === 'all' ? '' : this._currentFilter} projects found.</p>
+        </div>`;
+        console.log('📭 Empty state HTML:', emptyHtml);
+        UI.setContent(container, emptyHtml);
+    } else {
         let projHtml = `<div class="projects-grid">`;
         filteredProjects.forEach(function(p) {
             const statusClass = p.status && p.status.toLowerCase() === 'completed' ? 'approved' : 'ontrack';
@@ -281,9 +287,12 @@ const HomePage = {
                 </button>`;
         });
         projHtml += `</div>`;
+        console.log('✅ Projects HTML length:', projHtml.length);
         UI.setContent(container, projHtml);
-    },
+    }
 
+    console.log('✅ renderProjects() finished. Container innerHTML now:', container.innerHTML.substring(0, 100) + '...');
+},
     /**
      * filterProjects - I-filter ang projects base sa status
      */
