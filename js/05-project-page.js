@@ -10,6 +10,10 @@
 //  - Daily Records approval system (Draft → Pending → Approved/Rejected)
 //  - Photo upload and display fix
 //  - SOW management with Gantt integration
+//  - Add SOW moved to SOW Budget tab (from Timeline)
+//  - Added qty and unit fields to SOW creation
+//  - Added "Adding..." button state during SOW submission
+//  - Defensive checks for p.sowItems to avoid undefined errors
 // ================================================================
 
 const ProjectPage = {
@@ -35,6 +39,9 @@ const ProjectPage = {
                 UI.setContent(container, `<div class="empty"><p>Project not found.</p></div>`); 
                 return; 
             }
+            // ✅ Defensive: ensure sowItems is always an array
+            p.sowItems = Array.isArray(p.sowItems) ? p.sowItems : [];
+            
             this._data = p;
             this._estimatesData = p.estimates || { groups: [] };
             
@@ -98,7 +105,7 @@ const ProjectPage = {
 
         } catch (err) {
             console.error('Project load error:', err);
-            UI.toast('Error loading project.', 'error');
+            UI.toast('Error loading project: ' + err.message, 'error');
         }
     },
 
@@ -119,129 +126,131 @@ const ProjectPage = {
             this.renderEstimates(this._data);
         }
     },
-     showAddProjectModal() {
-    const user = App.currentUser;
-    if (!user || user.role !== 'superadmin') {
-        UI.toast('Only Super Admin can add new projects.', 'error');
-        return;
-    }
 
-    const existing = document.getElementById('addProjectModal');
-    if (existing) existing.remove();
+    showAddProjectModal() {
+        const user = App.currentUser;
+        if (!user || user.role !== 'superadmin') {
+            UI.toast('Only Super Admin can add new projects.', 'error');
+            return;
+        }
 
-    const modal = document.createElement('div');
-    modal.className = 'print-modal-overlay open';
-    modal.id = 'addProjectModal';
-    modal.innerHTML = `
-        <div class="print-modal-content" style="max-width:500px;">
-            <button class="close-modal" onclick="document.getElementById('addProjectModal').remove()">
-                ${Icon.close({size:18})}
-            </button>
-            <div class="print-header">
-                <h2>Add New Project</h2>
-                <div class="print-meta" style="font-size:11px;color:var(--ink-soft);">
-                    ⚠️ Super Admin only
+        const existing = document.getElementById('addProjectModal');
+        if (existing) existing.remove();
+
+        const modal = document.createElement('div');
+        modal.className = 'print-modal-overlay open';
+        modal.id = 'addProjectModal';
+        modal.innerHTML = `
+            <div class="print-modal-content" style="max-width:500px;">
+                <button class="close-modal" onclick="document.getElementById('addProjectModal').remove()">
+                    ${Icon.close({size:18})}
+                </button>
+                <div class="print-header">
+                    <h2>Add New Project</h2>
+                    <div class="print-meta" style="font-size:11px;color:var(--ink-soft);">
+                        ⚠️ Super Admin only
+                    </div>
                 </div>
+                <form id="addProjectForm" onsubmit="return ProjectPage.submitAddProject(event)">
+                    <div class="field">
+                        <label>Project ID *</label>
+                        <input type="text" id="add-proj-id" placeholder="e.g. new-construction" required />
+                        <span style="font-size:10px;color:var(--ink-soft);">No spaces. Use dash (-) or underscore (_).</span>
+                        <div class="error-msg">Project ID is required.</div>
+                    </div>
+                    <div class="field">
+                        <label>Project Name *</label>
+                        <input type="text" id="add-proj-name" placeholder="e.g. New Construction Project" required />
+                        <div class="error-msg">Project Name is required.</div>
+                    </div>
+                    <div class="field">
+                        <label>Status</label>
+                        <select id="add-proj-status">
+                            <option value="Ongoing">Ongoing</option>
+                            <option value="On Hold">On Hold</option>
+                            <option value="Completed">Completed</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>Initial Revenue (₱)</label>
+                        <input type="number" id="add-proj-revenue" value="0" step="0.01" min="0" />
+                    </div>
+                    <div class="system-check-note" style="margin-top:12px;font-size:11px;">
+                        <strong>Note:</strong> New project will appear in the Projects list immediately after creation.
+                    </div>
+                    <div class="submit-row">
+                        <button type="submit" class="btn-primary">Add Project</button>
+                        <button type="button" class="btn-ghost" onclick="document.getElementById('addProjectModal').remove()">Cancel</button>
+                    </div>
+                </form>
             </div>
-            <form id="addProjectForm" onsubmit="return ProjectPage.submitAddProject(event)">
-                <div class="field">
-                    <label>Project ID *</label>
-                    <input type="text" id="add-proj-id" placeholder="e.g. new-construction" required />
-                    <span style="font-size:10px;color:var(--ink-soft);">No spaces. Use dash (-) or underscore (_).</span>
-                    <div class="error-msg">Project ID is required.</div>
-                </div>
-                <div class="field">
-                    <label>Project Name *</label>
-                    <input type="text" id="add-proj-name" placeholder="e.g. New Construction Project" required />
-                    <div class="error-msg">Project Name is required.</div>
-                </div>
-                <div class="field">
-                    <label>Status</label>
-                    <select id="add-proj-status">
-                        <option value="Ongoing">Ongoing</option>
-                        <option value="On Hold">On Hold</option>
-                        <option value="Completed">Completed</option>
-                    </select>
-                </div>
-                <div class="field">
-                    <label>Initial Revenue (₱)</label>
-                    <input type="number" id="add-proj-revenue" value="0" step="0.01" min="0" />
-                </div>
-                <div class="system-check-note" style="margin-top:12px;font-size:11px;">
-                    <strong>Note:</strong> New project will appear in the Projects list immediately after creation.
-                </div>
-                <div class="submit-row">
-                    <button type="submit" class="btn-primary">Add Project</button>
-                    <button type="button" class="btn-ghost" onclick="document.getElementById('addProjectModal').remove()">Cancel</button>
-                </div>
-            </form>
-        </div>
-    `;
-    document.body.appendChild(modal);
+        `;
+        document.body.appendChild(modal);
 
-    setTimeout(() => {
-        const input = document.getElementById('add-proj-id');
-        if (input) input.focus();
-    }, 100);
-},
-   async submitAddProject(e) {
-    e.preventDefault();
+        setTimeout(() => {
+            const input = document.getElementById('add-proj-id');
+            if (input) input.focus();
+        }, 100);
+    },
 
-    let id = document.getElementById('add-proj-id').value.trim();
-    const name = document.getElementById('add-proj-name').value.trim();
-    const status = document.getElementById('add-proj-status').value;
-    const revenue = parseFloat(document.getElementById('add-proj-revenue').value) || 0;
+    async submitAddProject(e) {
+        e.preventDefault();
 
-    if (!id) {
-        document.getElementById('add-proj-id').closest('.field').classList.add('error');
-        UI.toast('Project ID is required.', 'error');
+        let id = document.getElementById('add-proj-id').value.trim();
+        const name = document.getElementById('add-proj-name').value.trim();
+        const status = document.getElementById('add-proj-status').value;
+        const revenue = parseFloat(document.getElementById('add-proj-revenue').value) || 0;
+
+        if (!id) {
+            document.getElementById('add-proj-id').closest('.field').classList.add('error');
+            UI.toast('Project ID is required.', 'error');
+            return false;
+        } else {
+            document.getElementById('add-proj-id').closest('.field').classList.remove('error');
+        }
+
+        id = id.toLowerCase().replace(/\s+/g, '-');
+
+        if (!/^[a-z0-9_-]+$/.test(id)) {
+            UI.toast('Project ID can only contain letters, numbers, dash (-), and underscore (_).', 'error');
+            return false;
+        }
+
+        if (!name) {
+            document.getElementById('add-proj-name').closest('.field').classList.add('error');
+            UI.toast('Project Name is required.', 'error');
+            return false;
+        } else {
+            document.getElementById('add-proj-name').closest('.field').classList.remove('error');
+        }
+
+        const confirmed = await Confirm.open('Add Project?', 
+            `Add "${name}" (${id}) with initial revenue of ₱${revenue.toFixed(2)}?`
+        );
+        if (!confirmed) return false;
+
+        const submitBtn = document.querySelector('#addProjectForm .btn-primary');
+        const originalText = submitBtn.textContent;
+        submitBtn.textContent = 'Adding...';
+        submitBtn.disabled = true;
+
+        try {
+            await DataService.addProject(id, name, status, revenue, 0, revenue);
+            UI.toast(`Project "${name}" added successfully!`, 'success');
+            document.getElementById('addProjectModal').remove();
+            await HomePage.load();
+            HomePage._currentFilter = 'ongoing';
+            HomePage.renderProjects();
+            App.updateApprovalBadge();
+        } catch (err) {
+            UI.toast('' + err.message, 'error');
+            submitBtn.textContent = originalText;
+            submitBtn.disabled = false;
+        }
+
         return false;
-    } else {
-        document.getElementById('add-proj-id').closest('.field').classList.remove('error');
-    }
+    },
 
-    id = id.toLowerCase().replace(/\s+/g, '-');
-
-    if (!/^[a-z0-9_-]+$/.test(id)) {
-        UI.toast('Project ID can only contain letters, numbers, dash (-), and underscore (_).', 'error');
-        return false;
-    }
-
-    if (!name) {
-        document.getElementById('add-proj-name').closest('.field').classList.add('error');
-        UI.toast('Project Name is required.', 'error');
-        return false;
-    } else {
-        document.getElementById('add-proj-name').closest('.field').classList.remove('error');
-    }
-
-    const confirmed = await Confirm.open('Add Project?', 
-        `Add "${name}" (${id}) with initial revenue of ₱${revenue.toFixed(2)}?`
-    );
-    if (!confirmed) return false;
-
-    const submitBtn = document.querySelector('#addProjectForm .btn-primary');
-    const originalText = submitBtn.textContent;
-    submitBtn.textContent = 'Adding...';
-    submitBtn.disabled = true;
-
-    try {
-        await DataService.addProject(id, name, status, revenue, 0, revenue);
-        UI.toast(`Project "${name}" added successfully!`, 'success');
-        document.getElementById('addProjectModal').remove();
-        await HomePage.load();
-        HomePage._currentFilter = 'ongoing'; // Reset to ongoing tab
-        HomePage.renderProjects();           // Re-render projects
-        
-        App.updateApprovalBadge();
-    } catch (err) {
-        UI.toast('' + err.message, 'error');
-        submitBtn.textContent = originalText;
-        submitBtn.disabled = false;
-    }
-
-    return false;
-},
     /**
      * renderOverview - Renders the overview tab
      */
@@ -338,7 +347,6 @@ const ProjectPage = {
 
     /**
      * renderDailyRecords - Renders the daily records tab with status and approval actions
-     * FIX: Added status badges and approval buttons
      */
     renderDailyRecords(p) {
         const container = document.getElementById('proj-tab-daily');
@@ -584,7 +592,6 @@ const ProjectPage = {
 
     /**
      * submitDailyRecord - Submits a daily record with photo uploads
-     * FIX: Uploads photos to Drive before saving
      */
     async submitDailyRecord(projectId) {
         const data = this.gatherDailyFormData();
@@ -686,7 +693,6 @@ const ProjectPage = {
 
     /**
      * renderPhotos - Renders the photos tab with images from daily records
-     * FIX: Uses photos from daily records and workAccomplished/issues
      */
     renderPhotos(p) {
         const container = document.getElementById('proj-tab-photos');
@@ -718,33 +724,32 @@ const ProjectPage = {
     },
 
     /**
-     * renderGantt - Renders the Gantt chart tab with Add SOW button
-     * FIX: Added Add SOW button
+     * renderGantt - Renders the Gantt chart tab (Add SOW button removed)
      */
     renderGantt(p) {
-  const container = document.getElementById('proj-tab-gantt');
-  container.innerHTML = `
-    <div class="section-head">
-      <h2>Project Timeline (Gantt Chart)</h2>
-      <div class="rule"></div>
-      <span class="badge">Drag bars to move · Drag edges to resize</span>
-    </div>
-    <div class="gantt-wrapper" id="ganttWrapper">
-      <div class="gantt-container" id="ganttContainer">
-        <div class="gantt-timeline" id="ganttTimeline"></div>
-        <div class="gantt-body" id="ganttBody"></div>
-      </div>
-    </div>
-    <div class="gantt-legend">
-      <span><span class="dot" style="background:var(--green);"></span> On Track</span>
-      <span><span class="dot" style="background:var(--amber);"></span> At Risk</span>
-      <span><span class="dot" style="background:var(--red);"></span> Overdue / Delayed</span>
-      <span style="color:var(--ink-soft);font-size:11px;">Click a bar to edit dates manually</span>
-    </div>
-    <div class="gantt-tooltip" id="ganttTooltip"></div>`;
-  this._ganttData = p.sowItems;
-  setTimeout(() => this._renderGanttChart(p), 100);
-},
+        const container = document.getElementById('proj-tab-gantt');
+        container.innerHTML = `
+            <div class="section-head">
+                <h2>Project Timeline (Gantt Chart)</h2>
+                <div class="rule"></div>
+                <span class="badge">Drag bars to move · Drag edges to resize</span>
+            </div>
+            <div class="gantt-wrapper" id="ganttWrapper">
+                <div class="gantt-container" id="ganttContainer">
+                    <div class="gantt-timeline" id="ganttTimeline"></div>
+                    <div class="gantt-body" id="ganttBody"></div>
+                </div>
+            </div>
+            <div class="gantt-legend">
+                <span><span class="dot" style="background:var(--green);"></span> On Track</span>
+                <span><span class="dot" style="background:var(--amber);"></span> At Risk</span>
+                <span><span class="dot" style="background:var(--red);"></span> Overdue / Delayed</span>
+                <span style="color:var(--ink-soft);font-size:11px;">Click a bar to edit dates manually</span>
+            </div>
+            <div class="gantt-tooltip" id="ganttTooltip"></div>`;
+        this._ganttData = p.sowItems;
+        setTimeout(() => this._renderGanttChart(p), 100);
+    },
 
     /**
      * _renderGanttChart - Renders the actual Gantt chart
@@ -954,106 +959,110 @@ const ProjectPage = {
     },
 
     /**
-     * showAddSOWModal - Shows modal for adding a new SOW item
+     * showAddSOWModal - Shows modal for adding a new SOW item (only ID, Description, Qty, Unit)
      */
-showAddSOWModal() {
-  const modal = document.createElement('div');
-  modal.className = 'print-modal-overlay open';
-  modal.id = 'addSOWModal';
-  modal.innerHTML = `
-    <div class="print-modal-content" style="max-width:500px;">
-      <button class="close-modal" onclick="document.getElementById('addSOWModal').remove()">${Icon.close({size:18})}</button>
-      <div class="print-header"><h2>Add SOW Item</h2></div>
-      <form id="addSOWForm" onsubmit="return ProjectPage.submitAddSOW(event)">
-        <div class="field"><label>SOW ID *</label><input type="text" id="sow-id" placeholder="e.g. A.1, B.2" required /></div>
-        <div class="field"><label>Description *</label><input type="text" id="sow-desc" placeholder="Description of work" required /></div>
-        <div class="field"><label>Quantity *</label><input type="number" id="sow-qty" step="0.01" min="0" required /></div>
-        <div class="field"><label>Unit *</label>
-          <select id="sow-unit" required>
-            <option value="">Select unit...</option>
-            <option value="pcs">pcs</option>
-            <option value="kg">kg</option>
-            <option value="tons">tons</option>
-            <option value="m">m</option>
-            <option value="sq.m">sq.m</option>
-            <option value="cu.m">cu.m</option>
-            <option value="liters">liters</option>
-            <option value="bags">bags</option>
-            <option value="rolls">rolls</option>
-            <option value="ea.">ea.</option>
-            <option value="sets">sets</option>
-            <option value="lot">lot</option>
-            <option value="unit">unit</option>
-          </select>
-        </div>
-        <div class="submit-row">
-          <button type="submit" class="btn-primary" id="addSOWSubmitBtn">Add SOW</button>
-          <button type="button" class="btn-ghost" onclick="document.getElementById('addSOWModal').remove()">Cancel</button>
-        </div>
-      </form>
-    </div>
-  `;
-  document.body.appendChild(modal);
-},
+    showAddSOWModal() {
+        const modal = document.createElement('div');
+        modal.className = 'print-modal-overlay open';
+        modal.id = 'addSOWModal';
+        modal.innerHTML = `
+            <div class="print-modal-content" style="max-width:500px;">
+                <button class="close-modal" onclick="document.getElementById('addSOWModal').remove()">${Icon.close({size:18})}</button>
+                <div class="print-header"><h2>Add SOW Item</h2></div>
+                <form id="addSOWForm" onsubmit="return ProjectPage.submitAddSOW(event)">
+                    <div class="field"><label>SOW ID *</label><input type="text" id="sow-id" placeholder="e.g. A.1, B.2" required /></div>
+                    <div class="field"><label>Description *</label><input type="text" id="sow-desc" placeholder="Description of work" required /></div>
+                    <div class="field"><label>Quantity *</label><input type="number" id="sow-qty" step="0.01" min="0" required /></div>
+                    <div class="field"><label>Unit *</label>
+                        <select id="sow-unit" required>
+                            <option value="">Select unit...</option>
+                            <option value="pcs">pcs</option>
+                            <option value="kg">kg</option>
+                            <option value="tons">tons</option>
+                            <option value="m">m</option>
+                            <option value="sq.m">sq.m</option>
+                            <option value="cu.m">cu.m</option>
+                            <option value="liters">liters</option>
+                            <option value="bags">bags</option>
+                            <option value="rolls">rolls</option>
+                            <option value="ea.">ea.</option>
+                            <option value="sets">sets</option>
+                            <option value="lot">lot</option>
+                            <option value="unit">unit</option>
+                        </select>
+                    </div>
+                    <div class="submit-row">
+                        <button type="submit" class="btn-primary" id="addSOWSubmitBtn">Add SOW</button>
+                        <button type="button" class="btn-ghost" onclick="document.getElementById('addSOWModal').remove()">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    },
 
     /**
-     * submitAddSOW - Handles SOW addition form submission
+     * submitAddSOW - Handles SOW addition form submission with "Adding..." state
      */
-async submitAddSOW(e) {
-  e.preventDefault();
-  const id = document.getElementById('sow-id').value.trim();
-  const description = document.getElementById('sow-desc').value.trim();
-  const qty = parseFloat(document.getElementById('sow-qty').value) || 0;
-  const unit = document.getElementById('sow-unit').value;
+    async submitAddSOW(e) {
+        e.preventDefault();
+        const id = document.getElementById('sow-id').value.trim();
+        const description = document.getElementById('sow-desc').value.trim();
+        const qty = parseFloat(document.getElementById('sow-qty').value) || 0;
+        const unit = document.getElementById('sow-unit').value;
 
-  if (!id || !description || !qty || !unit) {
-    UI.toast('Please fill in all required fields.', 'error');
-    return false;
-  }
+        if (!id || !description || !qty || !unit) {
+            UI.toast('Please fill in all required fields.', 'error');
+            return false;
+        }
 
-  const confirmed = await Confirm.open('Add SOW?', `Add SOW ${id} - ${description} (${qty} ${unit})?`);
-  if (!confirmed) return false;
+        const confirmed = await Confirm.open('Add SOW?', `Add SOW ${id} - ${description} (${qty} ${unit})?`);
+        if (!confirmed) return false;
 
-  const submitBtn = document.getElementById('addSOWSubmitBtn');
-  const originalText = submitBtn.textContent;
-  submitBtn.textContent = 'Adding...';
-  submitBtn.disabled = true;
+        const submitBtn = document.getElementById('addSOWSubmitBtn');
+        const originalText = submitBtn.textContent;
+        submitBtn.textContent = 'Adding...';
+        submitBtn.disabled = true;
 
-  try {
-    await DataService.addSOWItem(this._currentProjectId, { id, description, qty, unit });
-    UI.toast('SOW added successfully!', 'success');
-    document.getElementById('addSOWModal').remove();
-    // Refresh the entire project page to show the new SOW in all tabs
-    await this.open(this._currentProjectId);
-  } catch (err) {
-    UI.toast('Error: ' + err.message, 'error');
-  } finally {
-    submitBtn.textContent = originalText;
-    submitBtn.disabled = false;
-  }
-  return false;
-},
+        try {
+            await DataService.addSOWItem(this._currentProjectId, { id, description, qty, unit });
+            UI.toast('SOW added successfully!', 'success');
+            document.getElementById('addSOWModal').remove();
+            // Refresh the entire project page to show the new SOW in all tabs
+            await this.open(this._currentProjectId);
+        } catch (err) {
+            UI.toast('Error: ' + err.message, 'error');
+        } finally {
+            submitBtn.textContent = originalText;
+            submitBtn.disabled = false;
+        }
+        return false;
+    },
 
     /**
-     * renderSOWBudget - Renders the SOW budget tab
+     * renderSOWBudget - Renders the SOW budget tab with Add SOW button and qty/unit display
      */
     renderSOWBudget(p) {
         const container = document.getElementById('proj-tab-sow');
         const estimates = this._estimatesData || { groups: [] };
 
-      let html = `
-        <div class="section-head">
-          <h2>Scope of Work Budget Control</h2>
-          <div class="rule"></div>
-          <button class="btn-primary" onclick="ProjectPage.showAddSOWModal()" style="padding:4px 14px;font-size:11px;margin-left:auto;">+ Add SOW</button>
-          <span class="badge">Click any SOW to see detailed breakdown</span>
-        </div>
-        <div class="panel"><div style="padding:6px 16px;">`;
+        let html = `
+            <div class="section-head">
+                <h2>Scope of Work Budget Control</h2>
+                <div class="rule"></div>
+                <button class="btn-primary" onclick="ProjectPage.showAddSOWModal()" style="padding:4px 14px;font-size:11px;margin-left:auto;">+ Add SOW</button>
+                <span class="badge">Click any SOW to see detailed breakdown</span>
+            </div>
+            <div class="panel"><div style="padding:6px 16px;">`;
+
         let totalBudget = 0,
             totalActual = 0,
             totalEstimate = 0;
 
-        p.sowItems.forEach(item => {
+        // ✅ Ensure p.sowItems is an array
+        const sowItems = Array.isArray(p.sowItems) ? p.sowItems : [];
+
+        sowItems.forEach(item => {
             totalBudget += item.budget || 0;
             totalActual += item.actual || 0;
 
@@ -1075,34 +1084,35 @@ async submitAddSOW(e) {
                 'pending' ? `${Icon.clock({size:12,color:'var(--amber)'})} Pending` : `${Icon.fileText({size:12})} Draft`) : `${Icon.fileText({size:12})} Draft`;
             const statusCls = group ? group.status : 'draft';
 
-               html += `
-                  <div class="sow-item" onclick="ProjectPage.openSOWBreakdown('${item.id}')">
-                  <div class="sow-desc">${item.id} — ${item.description || '—'} (${item.qty || 0} ${item.unit || 'unit'})</div>
-                  <div class="sow-numbers">
-                  <span class="sn" style="color:var(--blueprint);font-weight:600;">Est: ₱${itemEstimate.toFixed(2)}</span>
-                  <span class="sn">Budget: ₱${(item.budget || 0).toFixed(2)}</span>
-                  <span class="sn">Actual: ₱${(item.actual || 0).toFixed(2)}</span>
-                  <span class="sn">Remaining: ₱${((item.budget || 0) - (item.actual || 0)).toFixed(2)}</span>
-                  <span class="stamp ${statusCls}" style="transform:none;font-size:8px;padding:1px 8px;">${statusLabel}</span>
-                  </div>
-                  <div class="sow-bar"><div class="fill ${barClass}" style="width:${pct}%;"></div></div>
-                  <span style="font-size:11px;font-weight:600;min-width:44px;">${pct.toFixed(0)}%</span>
-                  <span style="color:var(--ink-soft);">${Icon.search({size:13})}</span>
-                  </div>`;
-        });
-        html += `
-                    <div class="sow-total-row">
-                        <span>Total Estimate: ₱${totalEstimate.toFixed(2)}</span>
-                        <span>Total Budget: ₱${totalBudget.toFixed(2)}</span>
-                        <span>Total Actual: ₱${totalActual.toFixed(2)}</span>
-                        <span>Variance: ₱${(totalEstimate - totalBudget).toFixed(2)}</span>
-                        <span>Utilization: ${totalBudget > 0 ? ((totalActual/totalBudget)*100).toFixed(1) : 0}%</span>
+            html += `
+                <div class="sow-item" onclick="ProjectPage.openSOWBreakdown('${item.id}')">
+                    <div class="sow-desc">${item.id} — ${item.description || '—'} (${item.qty || 0} ${item.unit || 'unit'})</div>
+                    <div class="sow-numbers">
+                        <span class="sn" style="color:var(--blueprint);font-weight:600;">Est: ₱${itemEstimate.toFixed(2)}</span>
+                        <span class="sn">Budget: ₱${(item.budget || 0).toFixed(2)}</span>
+                        <span class="sn">Actual: ₱${(item.actual || 0).toFixed(2)}</span>
+                        <span class="sn">Remaining: ₱${((item.budget || 0) - (item.actual || 0)).toFixed(2)}</span>
+                        <span class="stamp ${statusCls}" style="transform:none;font-size:8px;padding:1px 8px;">${statusLabel}</span>
                     </div>
-                </div></div>
-                <div class="section-head"><h2>Budget vs Actual per SOW</h2><div class="rule"></div></div>
-                <div class="chart-grid full">
-                    <div class="chart-card"><div class="cc-head"><h3>SOW Cashflow</h3><span class="cc-note">budget vs actual</span></div><div class="canvas-wrap"><canvas id="sowChart"></canvas></div></div>
+                    <div class="sow-bar"><div class="fill ${barClass}" style="width:${pct}%;"></div></div>
+                    <span style="font-size:11px;font-weight:600;min-width:44px;">${pct.toFixed(0)}%</span>
+                    <span style="color:var(--ink-soft);">${Icon.search({size:13})}</span>
                 </div>`;
+        });
+
+        html += `
+                <div class="sow-total-row">
+                    <span>Total Estimate: ₱${totalEstimate.toFixed(2)}</span>
+                    <span>Total Budget: ₱${totalBudget.toFixed(2)}</span>
+                    <span>Total Actual: ₱${totalActual.toFixed(2)}</span>
+                    <span>Variance: ₱${(totalEstimate - totalBudget).toFixed(2)}</span>
+                    <span>Utilization: ${totalBudget > 0 ? ((totalActual/totalBudget)*100).toFixed(1) : 0}%</span>
+                </div>
+            </div></div>
+            <div class="section-head"><h2>Budget vs Actual per SOW</h2><div class="rule"></div></div>
+            <div class="chart-grid full">
+                <div class="chart-card"><div class="cc-head"><h3>SOW Cashflow</h3><span class="cc-note">budget vs actual</span></div><div class="canvas-wrap"><canvas id="sowChart"></canvas></div></div>
+            </div>`;
         container.innerHTML = html;
     },
 
