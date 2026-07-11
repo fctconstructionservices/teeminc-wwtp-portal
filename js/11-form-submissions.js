@@ -53,7 +53,6 @@ async function submitRequestForm(e) {
     }
 
     // Scope of Work validation (dropdown)
-    const scopeOfWork = document.getElementById('req-scope').value.trim();
     if (!scopeOfWork) {
         document.getElementById('req-scope-field').classList.add('error');
         valid = false;
