@@ -8,6 +8,10 @@
 //  - Duplicate check: cannot add another record for the same date (unless rejected)
 //  - Role‑based approval: creator cannot approve own, Super Admin has Force Approve/Reject
 //  - Daily log is scrollable with formatted date display
+//  - SOW Budget ↔ Estimates fully connected
+//  - SOW Budget shows estimate status (Draft/Pending/Approved)
+//  - Auto-refresh SOW Budget after any estimate change
+//  - Enhanced SOW Budget UI with status badges, variance, and quick actions
 // ================================================================
 
 const ProjectPage = {
@@ -38,9 +42,7 @@ const ProjectPage = {
             this._data = p;
             this._estimatesData = p.estimates || { groups: [] };
 
-            // FIX (#4/#5): Estimate dropdowns must be built from APPROVED Materials/Equipment
-            // only (by name), not the full/raw list keyed by ID. Fetch fresh so this works
-            // regardless of whether the Materials/Equipment pages have been visited yet.
+            // Fetch approved materials and equipment for dropdowns
             try {
                 this._approvedMaterials = await DataService.getMaterials('approved');
             } catch (e) {
@@ -61,6 +63,7 @@ const ProjectPage = {
                         sowId: sow.id,
                         sowDescription: sow.description,
                         status: 'draft',
+                        createdBy: '',
                         materials: [],
                         labor: [],
                         equipment: [],
@@ -133,6 +136,8 @@ const ProjectPage = {
         if (tab === 'gantt' && this._data) setTimeout(() => this._renderGanttChart(this._data), 100);
         if (tab === 'estimates' && this._data) {
             this.renderEstimates(this._data);
+            // ✅ Also refresh SOW Budget when switching to Estimates tab
+            setTimeout(() => this.renderSOWBudget(this._data), 100);
         }
     },
 
@@ -360,14 +365,11 @@ const ProjectPage = {
      * ==========================================================
      */
 
-    /**
-     * _buildDailyFormHTML – with header, default date, no status dropdown
-     */
     _buildDailyFormHTML() {
         const projectName = this._data ? this._data.name : 'Project';
         const user = App.getUser();
         const preparedBy = user ? user.name : 'Unknown User';
-        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+        const today = new Date().toISOString().split('T')[0];
 
         return `
             <div class="daily-form-header" style="background:var(--blueprint);color:#fff;padding:12px 16px;border-radius:var(--radius) var(--radius) 0 0;margin:-16px -16px 16px -16px;">
@@ -432,9 +434,6 @@ const ProjectPage = {
         `;
     },
 
-    /**
-     * gatherDailyFormData – returns all form data, no status
-     */
     gatherDailyFormData() {
         const getRows = (section, clsMap) => {
             const container = document.getElementById(section + 'Entries');
@@ -470,14 +469,10 @@ const ProjectPage = {
         };
     },
 
-    /**
-     * submitDailyRecord – with duplicate check and status = 'draft'
-     */
     async submitDailyRecord(projectId) {
         const data = this.gatherDailyFormData();
         if (!data.date) { UI.toast('Please select a date.', 'error'); return; }
 
-        // Check for existing record on the same date (excluding rejected)
         const existingRecords = this._data ? this._data.dailyRecords : [];
         const duplicate = existingRecords.some(record => {
             return record.date === data.date && record.status !== 'rejected';
@@ -487,10 +482,8 @@ const ProjectPage = {
             return;
         }
 
-        // Force status to 'draft'
         data.status = 'draft';
 
-        // Upload photos from the photos section
         const photoInputs = document.querySelectorAll('#photosEntries input[type="file"][data-photo]');
         const photoPromises = [];
         photoInputs.forEach(input => {
@@ -516,101 +509,93 @@ const ProjectPage = {
         } catch (err) { UI.toast('Error: ' + err.message, 'error'); }
     },
 
-    /**
-     * renderDailyRecords – scrollable, formatted date, role‑based actions
-     */
-renderDailyRecords(p) {
-    const container = document.getElementById('proj-tab-daily');
-    let html = `
-        <div class="add-record-toggle">
-            <button class="btn-ghost" onclick="ProjectPage.toggleAddRecord()">+ Add Daily Site Record</button>
-        </div>
-        <div class="add-record-form" id="dailyAddForm">
-            ${this._buildDailyFormHTML()}
-        </div>
-        <div class="panel">
-            <div class="panel-head">
-                <h3>Site Daily Log</h3>
-                <span class="mono" style="font-size:11px;color:var(--ink-soft)">${p.dailyRecords.length} entries</span>
+    renderDailyRecords(p) {
+        const container = document.getElementById('proj-tab-daily');
+        let html = `
+            <div class="add-record-toggle">
+                <button class="btn-ghost" onclick="ProjectPage.toggleAddRecord()">+ Add Daily Site Record</button>
             </div>
-            <div class="daily-log-scroll" style="max-height:400px;overflow-y:auto;padding:8px 16px;">
-    `;
-    if (p.dailyRecords.length === 0) {
-        html += `<div class="empty"><p>No daily records yet.</p></div>`;
-    } else {
-        // Sort by date descending (latest first)
-        const sorted = [...p.dailyRecords].sort((a,b) => new Date(b.date) - new Date(a.date));
-        sorted.forEach((r) => {
-            const totalManpower = r.manpower ? r.manpower.reduce((s, m) => s + (parseInt(m.count) || 0), 0) : 0;
-            const dateObj = new Date(r.date);
-            const formattedDate = dateObj.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
-            const day = dateObj.getDate();
+            <div class="add-record-form" id="dailyAddForm">
+                ${this._buildDailyFormHTML()}
+            </div>
+            <div class="panel">
+                <div class="panel-head">
+                    <h3>Site Daily Log</h3>
+                    <span class="mono" style="font-size:11px;color:var(--ink-soft)">${p.dailyRecords.length} entries</span>
+                </div>
+                <div class="daily-log-scroll" style="max-height:400px;overflow-y:auto;padding:8px 16px;">
+        `;
+        if (p.dailyRecords.length === 0) {
+            html += `<div class="empty"><p>No daily records yet.</p></div>`;
+        } else {
+            const sorted = [...p.dailyRecords].sort((a,b) => new Date(b.date) - new Date(a.date));
+            sorted.forEach((r) => {
+                const totalManpower = r.manpower ? r.manpower.reduce((s, m) => s + (parseInt(m.count) || 0), 0) : 0;
+                const dateObj = new Date(r.date);
+                const formattedDate = dateObj.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+                const day = dateObj.getDate();
 
-            const statusBadge = r.status === 'draft' ? 
-                '<span class="stamp draft" style="transform:none;padding:1px 8px;font-size:9px;">Draft</span>' :
-                r.status === 'pending' ? 
-                '<span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">Pending</span>' :
-                r.status === 'approved' ? 
-                '<span class="stamp approved" style="transform:none;padding:1px 8px;font-size:9px;">Approved</span>' :
-                r.status === 'rejected' ? 
-                '<span class="stamp rejected" style="transform:none;padding:1px 8px;font-size:9px;">Rejected</span>' : '';
+                const statusBadge = r.status === 'draft' ? 
+                    '<span class="stamp draft" style="transform:none;padding:1px 8px;font-size:9px;">Draft</span>' :
+                    r.status === 'pending' ? 
+                    '<span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">Pending</span>' :
+                    r.status === 'approved' ? 
+                    '<span class="stamp approved" style="transform:none;padding:1px 8px;font-size:9px;">Approved</span>' :
+                    r.status === 'rejected' ? 
+                    '<span class="stamp rejected" style="transform:none;padding:1px 8px;font-size:9px;">Rejected</span>' : '';
 
-            let actionsHtml = '';
-            const user = App.getUser();
-            // ✅ Tama: walang fallback – kailangan may createdBy at match
-            const isCreator = user && r.createdBy && user.email.toLowerCase() === r.createdBy.toLowerCase();
-            const isSuperAdmin = user && user.role === 'superadmin';
-            const isApprover = App.isApprover();
+                let actionsHtml = '';
+                const user = App.getUser();
+                const isCreator = user && r.createdBy && user.email.toLowerCase() === r.createdBy.toLowerCase();
+                const isSuperAdmin = user && user.role === 'superadmin';
+                const isApprover = App.isApprover();
 
-            if (r.status === 'draft') {
-                if (isCreator) {
-                    actionsHtml = `<button class="btn-sm primary" onclick="ProjectPage.submitDailyForApproval('${r.id}')">Submit</button>`;
-                } else {
-                    actionsHtml = `<span style="font-size:10px;color:var(--ink-soft);">Can't submit</span>`;
+                if (r.status === 'draft') {
+                    if (isCreator) {
+                        actionsHtml = `<button class="btn-sm primary" onclick="ProjectPage.submitDailyForApproval('${r.id}')">Submit</button>`;
+                    } else {
+                        actionsHtml = `<span style="font-size:10px;color:var(--ink-soft);">Can't submit</span>`;
+                    }
+                } else if (r.status === 'pending') {
+                    if (isCreator) {
+                        actionsHtml = `<span style="font-size:10px;color:var(--ink-soft);">Waiting for approval</span>`;
+                    } else if (isSuperAdmin) {
+                        actionsHtml = `
+                            <button class="btn-sm success" onclick="ProjectPage.forceApproveDailyRecord('${r.id}')">Force Approve</button>
+                            <button class="btn-sm danger" onclick="ProjectPage.forceRejectDailyRecord('${r.id}')">Force Reject</button>
+                        `;
+                    } else if (isApprover) {
+                        actionsHtml = `
+                            <button class="btn-sm success" onclick="ProjectPage.approveDailyRecord('${r.id}')">Approve</button>
+                            <button class="btn-sm danger" onclick="ProjectPage.rejectDailyRecord('${r.id}')">Reject</button>
+                        `;
+                    }
                 }
-            } else if (r.status === 'pending') {
-                if (isCreator) {
-                    actionsHtml = `<span style="font-size:10px;color:var(--ink-soft);">Waiting for approval</span>`;
-                } else if (isSuperAdmin) {
-                    actionsHtml = `
-                        <button class="btn-sm success" onclick="ProjectPage.forceApproveDailyRecord('${r.id}')">Force Approve</button>
-                        <button class="btn-sm danger" onclick="ProjectPage.forceRejectDailyRecord('${r.id}')">Force Reject</button>
-                    `;
-                } else if (isApprover) {
-                    actionsHtml = `
-                        <button class="btn-sm success" onclick="ProjectPage.approveDailyRecord('${r.id}')">Approve</button>
-                        <button class="btn-sm danger" onclick="ProjectPage.rejectDailyRecord('${r.id}')">Reject</button>
-                    `;
-                }
-            }
 
-            html += `
-                <div class="daily-record-item">
-                    <div class="dr-badge">${day}</div>
-                    <div class="dr-body">
-                        <div class="dr-title">${formattedDate} · ${r.weatherAM || '—'} / ${r.weatherPM || '—'}</div>
-                        <div class="dr-meta">
-                            <time>${r.date || '—'}</time>
-                            <span>${Icon.users({size:13})} ${totalManpower} people</span>
-                            ${statusBadge}
+                html += `
+                    <div class="daily-record-item">
+                        <div class="dr-badge">${day}</div>
+                        <div class="dr-body">
+                            <div class="dr-title">${formattedDate} · ${r.weatherAM || '—'} / ${r.weatherPM || '—'}</div>
+                            <div class="dr-meta">
+                                <time>${r.date || '—'}</time>
+                                <span>${Icon.users({size:13})} ${totalManpower} people</span>
+                                ${statusBadge}
+                            </div>
+                        </div>
+                        <div class="dr-actions" style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
+                            ${actionsHtml}
+                            <button class="btn-sm" onclick="ProjectPage.viewRecordById('${r.id}')">${Icon.search({size:13})}</button>
                         </div>
                     </div>
-                    <div class="dr-actions" style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
-                        ${actionsHtml}
-                        <button class="btn-sm" onclick="ProjectPage.viewRecordById('${r.id}')">${Icon.search({size:13})}</button>
-                    </div>
-                </div>
-            `;
-        });
-    }
-    html += `</div></div>`;
-    container.innerHTML = html;
-    this._dailyRecords = p.dailyRecords;
-},
+                `;
+            });
+        }
+        html += `</div></div>`;
+        container.innerHTML = html;
+        this._dailyRecords = p.dailyRecords;
+    },
 
-    /**
-     * addEntry - Adds a new entry row to a section
-     */
     addEntry(section) {
         const container = document.getElementById(section + 'Entries');
         if (!container) return;
@@ -631,9 +616,6 @@ renderDailyRecords(p) {
         if (section === 'manpower') this.updateManpowerTotal();
     },
 
-    /**
-     * removeEntry - Removes an entry row
-     */
     removeEntry(btn, section) {
         const row = btn.closest('.entry-row');
         const container = row?.parentElement;
@@ -641,9 +623,6 @@ renderDailyRecords(p) {
                 .updateManpowerTotal(); } else UI.toast('Must have at least one entry.', 'error');
     },
 
-    /**
-     * previewSmallImage - Shows image preview for file inputs
-     */
     previewSmallImage(input, previewId) {
         const file = input.files[0];
         if (!file) return;
@@ -662,9 +641,6 @@ renderDailyRecords(p) {
         reader.readAsDataURL(file);
     },
 
-    /**
-     * updateManpowerTotal - Updates the manpower total display
-     */
     updateManpowerTotal() {
         const entries = document.querySelectorAll('#manpowerEntries .entry-row');
         let total = 0;
@@ -674,17 +650,11 @@ renderDailyRecords(p) {
         document.getElementById('manpowerTotalDisplay').textContent = 'Total: ' + total;
     },
 
-    /**
-     * toggleAddRecord - Toggles the add record form
-     */
     toggleAddRecord() {
         const form = document.getElementById('dailyAddForm');
         if (form) form.classList.toggle('open');
     },
 
-    /**
-     * viewRecord - Opens a daily record in print modal (by index, legacy)
-     */
     viewRecord(index) {
         const records = this._dailyRecords || [];
         const record = records[index];
@@ -692,9 +662,6 @@ renderDailyRecords(p) {
         PrintModal.open(record);
     },
 
-    /**
-     * viewRecordById - Opens a daily record by ID
-     */
     async viewRecordById(id) {
         const p = this._data;
         if (!p) { UI.toast('Project data not loaded.', 'error'); return; }
@@ -703,9 +670,6 @@ renderDailyRecords(p) {
         PrintModal.open(record);
     },
 
-    /**
-     * submitDailyForApproval - Submit a daily record for approval
-     */
     async submitDailyForApproval(recordId) {
         const confirmed = await Confirm.open('Submit for Approval?', 'Submit this daily record for approval?');
         if (!confirmed) return;
@@ -718,9 +682,6 @@ renderDailyRecords(p) {
         }
     },
 
-    /**
-     * approveDailyRecord - Approve a daily record
-     */
     async approveDailyRecord(recordId) {
         const confirmed = await Confirm.open('Approve Daily Record?', 'Approve this daily record?');
         if (!confirmed) return;
@@ -734,9 +695,6 @@ renderDailyRecords(p) {
         }
     },
 
-    /**
-     * rejectDailyRecord - Reject a daily record
-     */
     async rejectDailyRecord(recordId) {
         const confirmed = await Confirm.open('Reject Daily Record?', 'Reject this daily record?');
         if (!confirmed) return;
@@ -750,9 +708,6 @@ renderDailyRecords(p) {
         }
     },
 
-    /**
-     * forceApproveDailyRecord - Super Admin force approve
-     */
     async forceApproveDailyRecord(recordId) {
         const confirmed = await Confirm.open('Force Approve?', 'As Super Admin, you can force approve this daily record instantly.');
         if (!confirmed) return;
@@ -766,9 +721,6 @@ renderDailyRecords(p) {
         }
     },
 
-    /**
-     * forceRejectDailyRecord - Super Admin force reject
-     */
     async forceRejectDailyRecord(recordId) {
         const confirmed = await Confirm.open('Force Reject?', 'As Super Admin, you can force reject this daily record instantly.');
         if (!confirmed) return;
@@ -789,7 +741,6 @@ renderDailyRecords(p) {
     renderPhotos(p) {
         const container = document.getElementById('proj-tab-photos');
         const images = p.photos || [];
-        // Also collect from workAccomplished and issues
         p.dailyRecords.forEach(record => {
             if (record.workAccomplished) {
                 record.workAccomplished.forEach(w => { if (w.image) images.push(w.image); });
@@ -1046,7 +997,7 @@ renderDailyRecords(p) {
     },
 
     // ============================================================
-    //  SOW BUDGET
+    //  SOW BUDGET — ENHANCED WITH ESTIMATES CONNECTION
     // ============================================================
 
     showAddSOWModal() {
@@ -1123,6 +1074,14 @@ renderDailyRecords(p) {
         return false;
     },
 
+    /**
+     * renderSOWBudget - Enhanced with full Estimates integration
+     * ✅ Shows estimate status (Draft/Pending/Approved)
+     * ✅ Shows budget source (from approved estimate or manual)
+     * ✅ Shows variance (Budget - Actual)
+     * ✅ Auto-refresh after any estimate change
+     * ✅ Quick actions to edit estimates or view breakdown
+     */
     renderSOWBudget(p) {
         const container = document.getElementById('proj-tab-sow');
         const estimates = this._estimatesData || { groups: [] };
@@ -1134,66 +1093,220 @@ renderDailyRecords(p) {
                 <button class="btn-primary" onclick="ProjectPage.showAddSOWModal()" style="padding:4px 14px;font-size:11px;margin-left:auto;">+ Add SOW</button>
                 <span class="badge">Click any SOW to see detailed breakdown</span>
             </div>
+            
+            <!-- Status Legend -->
+            <div class="sow-status-legend">
+                <span class="legend-label">Estimate Status:</span>
+                <span class="legend-item">
+                    <span class="badge-sample draft">Draft</span>
+                    = Not yet submitted
+                </span>
+                <span class="legend-item">
+                    <span class="badge-sample pending">Pending</span>
+                    = Awaiting approval
+                </span>
+                <span class="legend-item">
+                    <span class="badge-sample approved">Approved</span>
+                    = Official budget set
+                </span>
+            </div>
+            
             <div class="panel"><div style="padding:6px 16px;">`;
 
         let totalBudget = 0,
             totalActual = 0,
             totalEstimate = 0;
+        let pendingCount = 0,
+            draftCount = 0,
+            approvedCount = 0;
 
         const sowItems = Array.isArray(p.sowItems) ? p.sowItems : [];
 
+        if (sowItems.length === 0) {
+            html += `<div class="empty"><p>No SOW items yet. Click "+ Add SOW" to create one.</p></div>`;
+        }
+
         sowItems.forEach(item => {
-            totalBudget += item.budget || 0;
-            totalActual += item.actual || 0;
+            totalBudget += parseFloat(item.budget || 0);
+            totalActual += parseFloat(item.actual || 0);
 
             const group = estimates.groups.find(g => g.sowId === item.id);
             let itemEstimate = 0;
+            let estimateStatus = 'draft';
+            let estimateCreatedBy = '';
+            let estimateApprovedAt = '';
+            
             if (group) {
                 const matSum = (group.materials || []).reduce((s, m) => s + (parseFloat(m.cost) || 0), 0);
                 const eqSum = (group.equipment || []).reduce((s, e) => s + (parseFloat(e.cost) || 0), 0);
                 const labSum = (group.labor || []).reduce((s, l) => s + (parseFloat(l.cost) || 0), 0);
                 const indSum = (group.indirect || []).reduce((s, i) => s + (parseFloat(i.amount) || 0), 0);
                 itemEstimate = matSum + eqSum + labSum + indSum;
+                estimateStatus = group.status || 'draft';
+                estimateCreatedBy = group.createdBy || '';
             }
             totalEstimate += itemEstimate;
 
-            const pct = (item.budget || 0) > 0 ? Math.min(((item.actual || 0) / (item.budget || 0)) * 100, 100) : 0;
-            const barClass = pct > 90 ? 'danger' : pct > 70 ? 'warn' : '';
+            // Count statuses
+            if (estimateStatus === 'pending') pendingCount++;
+            else if (estimateStatus === 'approved') approvedCount++;
+            else draftCount++;
 
-            const statusLabel = group ? (group.status === 'approved' ? `${Icon.checkCircle({size:12,color:'var(--green)'})} Approved` : group.status ===
-                'pending' ? `${Icon.clock({size:12,color:'var(--amber)'})} Pending` : `${Icon.fileText({size:12})} Draft`) : `${Icon.fileText({size:12})} Draft`;
-            const statusCls = group ? group.status : 'draft';
+            const budget = parseFloat(item.budget || 0);
+            const actual = parseFloat(item.actual || 0);
+            const pct = budget > 0 ? Math.min((actual / budget) * 100, 100) : 0;
+            const barClass = pct > 90 ? 'danger' : pct > 70 ? 'warn' : '';
+            const barColor = pct > 90 ? 'var(--red)' : pct > 70 ? 'var(--amber)' : 'var(--green)';
+
+            // ✅ Status Badge
+            let statusIcon = '';
+            let statusClass = estimateStatus;
+            let statusLabel = estimateStatus.charAt(0).toUpperCase() + estimateStatus.slice(1);
+            
+            if (estimateStatus === 'approved') {
+                statusIcon = '✅';
+                statusClass = 'approved';
+            } else if (estimateStatus === 'pending') {
+                statusIcon = '⏳';
+                statusClass = 'pending';
+            } else {
+                statusIcon = '📄';
+                statusClass = 'draft';
+            }
+
+            // ✅ Check if budget matches estimate (only when approved)
+            const isBudgetFromEstimate = estimateStatus === 'approved' && Math.abs(budget - itemEstimate) < 0.01;
+            const budgetSourceLabel = isBudgetFromEstimate ? 
+                '<span class="budget-source">✅ from approved estimate</span>' : 
+                (estimateStatus === 'approved' ? 
+                    '<span class="budget-source">⚠️ manually adjusted</span>' : 
+                    '<span class="budget-source">📄 pending approval</span>');
+
+            // ✅ Variance
+            const variance = budget - actual;
+            const varianceClass = variance >= 0 ? 'positive' : 'negative';
+            const varianceLabel = variance >= 0 ? `+₱${variance.toFixed(2)}` : `-₱${Math.abs(variance).toFixed(2)}`;
+
+            // ✅ Estimate status note
+            let estimateNote = '';
+            if (estimateStatus === 'pending') {
+                estimateNote = '⏳ awaiting approval';
+            } else if (estimateStatus === 'draft') {
+                estimateNote = '📄 draft — not yet approved';
+            } else if (estimateStatus === 'approved') {
+                estimateNote = '✅ approved estimate';
+            }
 
             html += `
-                <div class="sow-item" onclick="ProjectPage.openSOWBreakdown('${item.id}')">
-                    <div class="sow-desc">${item.id} — ${item.description || '—'} (${item.qty || 0} ${item.unit || 'unit'})</div>
-                    <div class="sow-numbers">
-                        <span class="sn" style="color:var(--blueprint);font-weight:600;">Est: ₱${itemEstimate.toFixed(2)}</span>
-                        <span class="sn">Budget: ₱${(item.budget || 0).toFixed(2)}</span>
-                        <span class="sn">Actual: ₱${(item.actual || 0).toFixed(2)}</span>
-                        <span class="sn">Remaining: ₱${((item.budget || 0) - (item.actual || 0)).toFixed(2)}</span>
-                        <span class="stamp ${statusCls}" style="transform:none;font-size:8px;padding:1px 8px;">${statusLabel}</span>
+                <div class="sow-item" data-estimate-status="${estimateStatus}" onclick="ProjectPage.openSOWBreakdown('${item.id}')">
+                    <!-- Header -->
+                    <div class="sow-header">
+                        <div class="sow-desc">
+                            <strong>${item.id}</strong> — ${item.description || '—'}
+                            <span class="sow-qty">(${item.qty || 0} ${item.unit || 'unit'})</span>
+                        </div>
+                        <div class="sow-status-badge ${statusClass}">
+                            ${statusIcon} ${statusLabel}
+                            ${estimateStatus === 'approved' ? `<span class="sow-status-date">• approved</span>` : ''}
+                        </div>
                     </div>
-                    <div class="sow-bar"><div class="fill ${barClass}" style="width:${pct}%;"></div></div>
-                    <span style="font-size:11px;font-weight:600;min-width:44px;">${pct.toFixed(0)}%</span>
-                    <span style="color:var(--ink-soft);">${Icon.search({size:13})}</span>
+                    
+                    <!-- Financial Numbers -->
+                    <div class="sow-numbers">
+                        <!-- Estimate -->
+                        <div class="sow-number-group estimate">
+                            <span class="sn-label">Estimate</span>
+                            <span class="sn-value">₱${itemEstimate.toFixed(2)}</span>
+                            <span class="budget-source" style="font-size:8px;color:${estimateStatus === 'approved' ? 'var(--green)' : 'var(--ink-soft)'};">${estimateNote}</span>
+                        </div>
+                        
+                        <!-- Budget -->
+                        <div class="sow-number-group budget">
+                            <span class="sn-label">Budget</span>
+                            <span class="sn-value">₱${budget.toFixed(2)}</span>
+                            ${budgetSourceLabel}
+                        </div>
+                        
+                        <!-- Actual -->
+                        <div class="sow-number-group actual">
+                            <span class="sn-label">Actual</span>
+                            <span class="sn-value">₱${actual.toFixed(2)}</span>
+                            <span class="actual-status">${pct.toFixed(1)}% used</span>
+                        </div>
+                        
+                        <!-- Variance -->
+                        <div class="sow-number-group variance ${varianceClass}">
+                            <span class="sn-label">Variance</span>
+                            <span class="sn-value">${varianceLabel}</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Progress Bar -->
+                    <div class="sow-progress">
+                        <div class="sow-bar">
+                            <div class="fill" style="width:${Math.min(pct, 100)}%;background:${barColor};"></div>
+                        </div>
+                        <span style="font-size:10px;color:var(--ink-soft);min-width:60px;text-align:right;font-family:'IBM Plex Mono',monospace;">${pct.toFixed(0)}%</span>
+                    </div>
+                    
+                    <!-- Quick Actions -->
+                    <div class="sow-actions">
+                        <button class="btn-sm" onclick="event.stopPropagation();ProjectPage.switchTab('estimates')">
+                            ${Icon.ruler({size:12})} Edit Estimate
+                        </button>
+                        <button class="btn-sm" onclick="event.stopPropagation();ProjectPage.openSOWBreakdown('${item.id}')">
+                            ${Icon.search({size:12})} Breakdown
+                        </button>
+                        ${estimateStatus === 'pending' && App.isApprover() ? 
+                            `<button class="btn-sm success" onclick="event.stopPropagation();ProjectPage.switchTab('estimates')">
+                                ⏳ Review
+                            </button>` : ''
+                        }
+                        ${estimateStatus === 'draft' ? 
+                            `<button class="btn-sm amber" onclick="event.stopPropagation();ProjectPage.switchTab('estimates')">
+                                📝 Complete
+                            </button>` : ''
+                        }
+                    </div>
                 </div>`;
         });
 
+        // ✅ Status Summary
+        const allApproved = approvedCount === sowItems.length && sowItems.length > 0;
+        const hasPending = pendingCount > 0;
+
         html += `
-                <div class="sow-total-row">
-                    <span>Total Estimate: ₱${totalEstimate.toFixed(2)}</span>
-                    <span>Total Budget: ₱${totalBudget.toFixed(2)}</span>
-                    <span>Total Actual: ₱${totalActual.toFixed(2)}</span>
-                    <span>Variance: ₱${(totalEstimate - totalBudget).toFixed(2)}</span>
-                    <span>Utilization: ${totalBudget > 0 ? ((totalActual/totalBudget)*100).toFixed(1) : 0}%</span>
+                <div class="sow-status-summary">
+                    <span class="summary-label">Estimate Status:</span>
+                    <span class="summary-item">
+                        <span class="count approved">${approvedCount}</span> Approved
+                    </span>
+                    <span class="summary-item">
+                        <span class="count pending">${pendingCount}</span> Pending
+                    </span>
+                    <span class="summary-item">
+                        <span class="count draft">${draftCount}</span> Draft
+                    </span>
+                    ${hasPending ? 
+                        `<span class="summary-alert pending">⏳ ${pendingCount} SOW(s) have pending estimates — review them!</span>` : 
+                        allApproved ?
+                        `<span class="summary-alert success">✅ All ${sowItems.length} SOW(s) have approved estimates!</span>` :
+                        sowItems.length > 0 ?
+                        `<span class="summary-alert info">${sowItems.length - approvedCount} SOW(s) need estimate approval</span>` :
+                        `<span class="summary-alert info">No SOW items created yet</span>`
+                    }
                 </div>
             </div></div>
+            
             <div class="section-head"><h2>Budget vs Actual per SOW</h2><div class="rule"></div></div>
             <div class="chart-grid full">
                 <div class="chart-card"><div class="cc-head"><h3>SOW Cashflow</h3><span class="cc-note">budget vs actual</span></div><div class="canvas-wrap"><canvas id="sowChart"></canvas></div></div>
             </div>`;
+
         container.innerHTML = html;
+        
+        // ✅ Build chart after rendering
+        setTimeout(() => this._buildSOWChart(p), 100);
     },
 
     openSOWBreakdown(sowId) {
@@ -1216,8 +1329,8 @@ renderDailyRecords(p) {
             const ctx = document.getElementById('sowChart');
             if (!ctx) return;
             const labels = p.sowItems.map(i => i.id);
-            const budget = p.sowItems.map(i => i.budget || 0);
-            const actual = p.sowItems.map(i => i.actual || 0);
+            const budget = p.sowItems.map(i => parseFloat(i.budget || 0));
+            const actual = p.sowItems.map(i => parseFloat(i.actual || 0));
             this._charts.sow = new Chart(ctx, {
                 type: 'bar',
                 data: {
@@ -1244,17 +1357,13 @@ renderDailyRecords(p) {
     },
 
     // ============================================================
-    //  ESTIMATES
+    //  ESTIMATES — WITH AUTO-REFRESH TO SOW BUDGET
     // ============================================================
 
     renderEstimates(p) {
         const container = document.getElementById('proj-tab-estimates');
         const est = this._estimatesData || { groups: [] };
 
-        // FIX (#4/#5): Dropdowns are built from APPROVED materials/equipment only, and
-        // each row's <select> renders its own options so the correct one can be marked
-        // `selected` (see _renderEstimateCategory) — both the label shown and the name
-        // stored on the item are the material/equipment's NAME, not its ID.
         const approvedMats = this._approvedMaterials || [];
         const approvedEquip = this._approvedEquipment || [];
 
@@ -1286,16 +1395,10 @@ renderDailyRecords(p) {
                 const isApproved = group.status === 'approved';
                 const isPending = group.status === 'pending';
                 const isDraft = group.status === 'draft' || !group.status;
-                // FIX (#1): Once submitted (pending) OR approved, nothing in the card is
-                // editable — dropdowns, qty/rate/desc inputs, add/remove buttons all lock.
                 const isLocked = isApproved || isPending;
                 const cardCls = isApproved ? 'approved' : isPending ? 'pending' : 'draft';
                 const readonlyCls = isLocked ? 'readonly' : '';
 
-                // FIX (#2): Figure out whether the CURRENT user is the one who submitted
-                // this estimate (via the linked Requests row), so the Approve button and
-                // the "pending" badge only ever show to an approver reviewing someone
-                // else's submission — never to the submitter looking at their own.
                 const currentEmail = ((App.getUser() && App.getUser().email) || '').toLowerCase();
                 const relatedEstimateReq = isPending
                     ? (p.requests || []).find(r => r.type === 'Estimate' && r.scope === group.sowId && r.status === 'Pending')
@@ -1344,6 +1447,13 @@ renderDailyRecords(p) {
                 </div>`;
 
         container.innerHTML = html;
+
+        // ✅ Refresh SOW Budget when Estimates tab renders
+        setTimeout(() => {
+            if (this._data) {
+                this.renderSOWBudget(this._data);
+            }
+        }, 100);
     },
 
     _renderEstimateCategory(label, items, gIdx, cat, isLocked, options = []) {
@@ -1522,6 +1632,8 @@ renderDailyRecords(p) {
             newItem.amount = 0; }
         group[cat].push(newItem);
         this.renderEstimates(this._data);
+        // ✅ Refresh SOW Budget after adding item
+        this.renderSOWBudget(this._data);
     },
 
     removeEstimateItem(gIdx, idx, cat) {
@@ -1532,6 +1644,8 @@ renderDailyRecords(p) {
         if (group[cat] && group[cat].length > idx) {
             group[cat].splice(idx, 1);
             this.renderEstimates(this._data);
+            // ✅ Refresh SOW Budget after removing item
+            this.renderSOWBudget(this._data);
         }
     },
 
@@ -1552,33 +1666,20 @@ renderDailyRecords(p) {
             item.cost = item.amount;
         }
         this.renderEstimates(this._data);
+        // ✅ Refresh SOW Budget after updating item
+        this.renderSOWBudget(this._data);
     },
 
-    /**
-     * _materialLabel - Human-readable name for a Material record.
-     * PURPOSE (#4): Estimate dropdowns must show/store the material's NAME, not its ID.
-     */
     _materialLabel(m) {
         if (!m) return '';
         return m.name || [m.brand, m.specs].filter(Boolean).join(' ') || m.id;
     },
 
-    /**
-     * _equipmentLabel - Human-readable name for an Equipment record.
-     * PURPOSE (#5): Estimate dropdowns must show/store the equipment's NAME, not its ID.
-     */
     _equipmentLabel(e) {
         if (!e) return '';
         return e.name || [e.brand, e.model].filter(Boolean).join(' ') || e.id;
     },
 
-    /**
-     * selectMaterialForItem - Handles picking a material in an estimate row.
-     * FIX (#4): Stores the material's NAME (materialName) alongside its ID, and
-     * auto-fills the rate from the Materials master list.
-     * FIX (#6): Blocks picking a material that's already used elsewhere in this
-     * same SOW estimate (no duplicate material lines per SOW).
-     */
     selectMaterialForItem(gIdx, idx, selectEl) {
         const est = this._estimatesData;
         if (!est || !est.groups[gIdx]) return;
@@ -1608,15 +1709,10 @@ renderDailyRecords(p) {
         item.rate = opt ? (parseFloat(opt.dataset.rate) || 0) : (item.rate || 0);
         item.cost = (parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0);
         this.renderEstimates(this._data);
+        // ✅ Refresh SOW Budget after selecting material
+        this.renderSOWBudget(this._data);
     },
 
-    /**
-     * selectEquipmentForItem - Handles picking equipment in an estimate row.
-     * FIX (#5): Stores the equipment's NAME (equipName) alongside its ID, and
-     * auto-fills the rate from the Equipment master list.
-     * FIX (#6): Blocks picking equipment that's already used elsewhere in this
-     * same SOW estimate (no duplicate equipment lines per SOW).
-     */
     selectEquipmentForItem(gIdx, idx, selectEl) {
         const est = this._estimatesData;
         if (!est || !est.groups[gIdx]) return;
@@ -1646,6 +1742,8 @@ renderDailyRecords(p) {
         item.rate = opt ? (parseFloat(opt.dataset.rate) || 0) : (item.rate || 0);
         item.cost = (parseFloat(item.qty) || 0) * (parseFloat(item.duration) || 0) * (parseFloat(item.rate) || 0);
         this.renderEstimates(this._data);
+        // ✅ Refresh SOW Budget after selecting equipment
+        this.renderSOWBudget(this._data);
     },
 
     addSOWGroup() {
@@ -1659,16 +1757,20 @@ renderDailyRecords(p) {
             return;
         }
         const sow = available[0];
+        const currentUser = App.getUser();
         est.groups.push({
             sowId: sow.id,
             sowDescription: sow.description || '—',
             status: 'draft',
+            createdBy: currentUser ? currentUser.email : '',
             materials: [],
             labor: [],
             equipment: [],
             indirect: []
         });
         this.renderEstimates(this._data);
+        // ✅ Refresh SOW Budget after adding group
+        this.renderSOWBudget(this._data);
         UI.toast(`Added estimate group for ${sow.id}`, 'success');
     },
 
@@ -1687,20 +1789,17 @@ renderDailyRecords(p) {
             `Submit ${group.sowId} — ${group.sowDescription} for approval?`);
         if (!confirmed) return;
 
-        // FIX (#3): Give the user visible feedback that submission is in progress.
         const submitBtn = document.querySelector(`.est-group-card[data-group-idx="${gIdx}"] .eg-footer-actions button`);
         const originalLabel = submitBtn ? submitBtn.textContent : '';
         if (submitBtn) { submitBtn.textContent = 'Submitting...'; submitBtn.disabled = true; }
 
         try {
-            // FIX (#1): Persist the current line items first. Submitting for approval
-            // previously only flipped the status flag — the materials/labor/equipment/
-            // indirect rows the user just edited were never saved to the sheets, so the
-            // eventual approved total (and the SOW Budget it feeds) could be wrong or zero.
             await DataService.saveEstimates(this._currentProjectId, est.groups);
             await DataService.submitEstimatesForApproval(this._currentProjectId, group.sowId);
             group.status = 'pending';
             this.renderEstimates(this._data);
+            // ✅ Refresh SOW Budget after submit
+            this.renderSOWBudget(this._data);
             UI.toast(`${group.sowId} submitted for approval.`, 'success');
             this._updateApprovalBadge();
         } catch (err) {
@@ -1714,17 +1813,27 @@ renderDailyRecords(p) {
         if (!est || !est.groups[gIdx]) { UI.toast('Group not found.', 'error'); return; }
         const group = est.groups[gIdx];
         if (group.status !== 'pending') { UI.toast('Only pending estimates can be approved.', 'error'); return; }
+        
+        // ✅ Check if current user is the creator
+        const currentUser = App.getUser();
+        const currentUserEmail = currentUser ? currentUser.email.toLowerCase() : '';
+        if (group.createdBy && group.createdBy.toLowerCase() === currentUserEmail) {
+            UI.toast('You cannot approve your own estimate submission.', 'error');
+            return;
+        }
+        
         const confirmed = await Confirm.open('Approve Estimate?',
             `Approve ${group.sowId} — ${group.sowDescription}? This will lock it from further edits and set it as this SOW's official Budget.`);
         if (!confirmed) return;
+        
         try {
-            await DataService.approveEstimates(this._currentProjectId, group.sowId);
+            const result = await DataService.approveEstimates(this._currentProjectId, group.sowId);
+            group.status = 'approved';
+            this.renderEstimates(this._data);
+            // ✅ Refresh SOW Budget after approve (backend already updated budget)
+            this.renderSOWBudget(this._data);
             UI.toast(`${group.sowId} approved and locked. SOW Budget updated.`, 'success');
             this._updateApprovalBadge();
-            // FIX (#1): Reload the full project so the SOW Budget tab picks up the new
-            // Budget figure that the backend just synced from this approved estimate.
-            await this.open(this._currentProjectId);
-            this.switchTab('estimates');
         } catch (err) { UI.toast('' + err.message, 'error'); }
     },
 
@@ -1734,6 +1843,8 @@ renderDailyRecords(p) {
         try {
             await DataService.saveEstimates(this._currentProjectId, est.groups);
             UI.toast('All estimates saved!', 'success');
+            // ✅ Refresh SOW Budget after save
+            this.renderSOWBudget(this._data);
         } catch (err) { UI.toast('' + err.message, 'error'); }
     },
 
