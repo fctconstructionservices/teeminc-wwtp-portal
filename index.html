@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>FCTC Operations Board — v8 (Login System)</title>
+    <title>FCTC ERP System v3</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js">
@@ -128,8 +128,8 @@
             <div class="topbar">
                 <div class="mark">F</div>
                 <div class="brand">
-                    <div class="name">FCTC Site Operations Board</div>
-                    <div class="sub" id="home-user-label">Managing Partner — J. Fabon</div>
+                    <div class="name">FCTC ERP System</div>
+                    <div class="sub" id="home-user-label">Managing Partner — D. Fabon</div>
                 </div>
                 <div class="spacer"></div>
                 <button class="hamburger" onclick="toggleMenu()" aria-label="Toggle menu"></button>
@@ -568,7 +568,7 @@
     </section>
 
     <!-- ════════════════════════════════════════════ -->
-    <!--  RELEASE CASH                              -->
+    <!--  RELEASE CASH — WITH SOW DROPDOWN           -->
     <!-- ════════════════════════════════════════════ -->
     <section id="page-release-cash" class="page" aria-label="Release Cash">
         <div class="wrap">
@@ -598,6 +598,15 @@
                         <input type="number" id="rel-amount" placeholder="0.00" step="0.01" />
                         <div class="error-msg">Please enter a valid amount.</div>
                     </div>
+                    <!-- ─── NEW SOW DROPDOWN ─────────────────────── -->
+                    <div class="field" id="rel-sow-field">
+                        <label>Scope of Work (SOW) Item</label>
+                        <select id="rel-sow">
+                            <option value="">— Select SOW Item —</option>
+                        </select>
+                        <div class="error-msg">Please select a SOW item.</div>
+                    </div>
+                    <!-- ────────────────────────────────────────────── -->
                     <div class="field">
                         <label>Proof of Cash Release</label>
                         <div class="file-drop">
