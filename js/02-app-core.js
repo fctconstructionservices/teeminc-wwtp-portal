@@ -2,6 +2,7 @@
 //  APP CORE - Complete with dynamic user badge updates
 //  FIX: Dynamic requesting badge based on logged-in user
 //  FIX: Page reload badge fix - await page loads before updating badges
+//  FIX: Added loadIncomingProjectsDropdown for record-cash page
 // ================================================================
 
 const App = {
@@ -14,7 +15,6 @@ const App = {
             try {
                 this.currentUser = JSON.parse(saved);
                 if (this.currentUser && this.currentUser.loggedIn) {
-                    // ✅ FIX: Update badges immediately after restoring session
                     this.updateUserBadges();
                     this.navigate('home');
                     return;
@@ -26,14 +26,13 @@ const App = {
         if (theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
     },
 
-    /**
-     * ✅ FIX: Made async to await page loads before updating badges
-     * This ensures that all dynamic content is rendered before badges are updated
-     */
     async navigate(page) {
         const restrictedPages = ['release-cash', 'record-cash'];
         if (page === 'request') {
-            loadProjectsDropdown(); // tawagin mo rito
+            loadProjectsDropdown();
+        }
+        if (page === 'record-cash') {
+            setTimeout(loadIncomingProjectsDropdown, 100);
         }
         if (restrictedPages.includes(page) && !this.isApprover()) {
             UI.toast('Access denied. Approvers only.', 'error');
@@ -52,18 +51,15 @@ const App = {
             window.scrollTo({ top: 0, behavior: 'instant' });
         }
         
-        // ✅ FIX: Await each page load to ensure rendering completes
         if (page === 'home') await HomePage.load();
         if (page === 'finance') await FinancePage.load();
         if (page === 'materials') await MaterialsPage.load();
         if (page === 'equipment') await EquipmentPage.load();
         if (page === 'approvals') await ApprovalsPage.load();
-       if (page === 'release-cash') {
-        // Mag-load ng dropdown pagkatapos mag-render ang page
-        setTimeout(loadReleaseDropdown, 100);
+        if (page === 'release-cash') {
+            setTimeout(loadReleaseDropdown, 100);
         }
 
-        // ✅ FIX: Update user badges AFTER all page content is rendered
         this.updateUserBadges();
         await this.updateApprovalBadge();
 
@@ -115,11 +111,6 @@ const App = {
         return true;
     },
 
-    /**
-     * ✅ FIX: Update all requester badges with the logged-in user's name
-     * This makes the "Requesting as: J. Fabon" badge dynamic
-     * Now also updates the home user label
-     */
     updateUserBadges() {
         const user = this.getUser();
         if (!user) return;
@@ -127,13 +118,11 @@ const App = {
         const name = user.name || 'User';
         const email = user.email || '';
         
-        // Update all requester badges in the DOM
         document.querySelectorAll('.requester-badge').forEach(el => {
             const strong = el.querySelector('strong');
             if (strong) {
                 strong.textContent = name;
             } else {
-                // Try to preserve prefix
                 const text = el.textContent;
                 const colonIndex = text.indexOf(':');
                 if (colonIndex > -1) {
@@ -145,7 +134,6 @@ const App = {
             }
         });
         
-        // Update the home user label
         const homeLabel = document.getElementById('home-user-label');
         if (homeLabel) {
             const roleLabel = user.roleLabel || user.role || 'User';
@@ -153,10 +141,6 @@ const App = {
         }
     },
 
-    /**
-     * updateApprovalBadge - Updates the approval badge count
-     * FIX: Unified badge count to show current user's pending requests (Issue 3.10)
-     */
     async updateApprovalBadge() {
         try {
             const user = this.getUser();
@@ -165,14 +149,12 @@ const App = {
             const pendingData = await DataService.getPendingApprovals();
             const userEmail = this.getUser().email.toLowerCase();
 
-            // filtering request that are not from the requestor
             const pendingForApproval = pendingData.requests.filter(function(r) {
                 return r.requestorEmail && r.requestorEmail.toLowerCase() !== userEmail;
             });
             
             this._pendingCount = pendingForApproval.length;
             
-            // Update all approval badges with the same count
             document.querySelectorAll('.t-badge, #approvalBadgeHome').forEach(el => {
                 el.textContent = this._pendingCount;
             });
@@ -575,11 +557,9 @@ async function handleLogin(e) {
         return false;
     }
 
-    // Save session
     localStorage.setItem('fctc_user', JSON.stringify(user));
     App.currentUser = user;
 
-    // ✅ FIX: Update user badges immediately after login
     App.updateUserBadges();
 
     const label = document.getElementById('home-user-label');
