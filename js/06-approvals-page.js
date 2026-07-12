@@ -1,6 +1,7 @@
 // ================================================================
 //  APPROVALS PAGE - Complete with fixes for Issues 3.1-3.10
 //  FIX: Added daily records to pending approvals
+//  FIX: Super Admin shows Force Approve/Reject instead of normal buttons
 // ================================================================
 
 // ─── REQUEST DETAIL MODAL ──────────────────────────────────────
@@ -57,7 +58,8 @@ const RequestDetailModal = {
     
     _renderDetails(data) {
         const user = App.currentUser;
-        const isApprover = App.isApprover();
+        const isSuperAdmin = user && user.role === 'superadmin';
+        const isApprover = App.isApprover() && !isSuperAdmin;
         const isRequestor = user && data.requestorEmail && 
             user.email.toLowerCase() === data.requestorEmail.toLowerCase();
         const statusCls = data.status === 'Approved' ? 'approved' : data.status === 'Pending' ? 'pending' : 'rejected';
@@ -77,6 +79,21 @@ const RequestDetailModal = {
             `;
         }
         
+        let actionButtons = '';
+        if (data.status === 'Pending') {
+            if (isSuperAdmin) {
+                actionButtons = `
+                    <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${data.id}','request', true)">Force Approve</button>
+                    <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${data.id}','request', true)">Force Reject</button>
+                `;
+            } else if (isApprover && !isRequestor) {
+                actionButtons = `
+                    <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${data.id}','request', true)">Approve</button>
+                    <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${data.id}','request', true)">Reject</button>
+                `;
+            }
+        }
+        
         let html = `
         <div class="print-header">
             <h2>${data.id} — ${data.type}</h2>
@@ -94,10 +111,7 @@ const RequestDetailModal = {
         </div>
         <div class="print-actions">
             <button class="btn-primary" onclick="window.print()">${Icon.printer({size:14})} Print</button>
-            ${!isRequestor && isApprover && data.status === 'Pending' ? `
-                <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${data.id}','request', true)">Approve</button>
-                <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${data.id}','request', true)">Reject</button>
-            ` : ''}
+            ${actionButtons}
             <button class="btn-ghost" onclick="RequestDetailModal.close()">Close</button>
         </div>`;
         return html;
@@ -117,7 +131,8 @@ const ApprovalsPage = {
         UI.showLoading(container);
         try {
             const user = App.currentUser;
-            const isApprover = App.isApprover();
+            const isSuperAdmin = user && user.role === 'superadmin';
+            const isApprover = App.isApprover() && !isSuperAdmin;
 
             const pendingData = await DataService.getPendingApprovals();
             const myRequests = await DataService.getMyPendingRequests();
@@ -136,7 +151,6 @@ const ApprovalsPage = {
             const filteredEquipment = pendingData.equipment.filter(function(e) {
                 return e.requestedBy && e.requestedBy.toLowerCase() !== userEmail;
             });
-            // Daily records: filter out self-submitted
             const filteredDailyRecords = pendingData.dailyRecords ? pendingData.dailyRecords.filter(function(d) {
                 return d.createdBy && d.createdBy.toLowerCase() !== userEmail;
             }) : [];
@@ -147,18 +161,18 @@ const ApprovalsPage = {
 
             let html = `
             <div class="section-head"><h2>Approval Dashboard</h2><div class="rule"></div>
-                <span class="badge">${isApprover ? totalPending + ' pending' : myRequests.length + ' my requests'}</span>
+                <span class="badge">${isApprover || isSuperAdmin ? totalPending + ' pending' : myRequests.length + ' my requests'}</span>
             </div>
 
             <div class="approval-tab-bar">
-                ${isApprover ? `<button class="active" data-tab="pending" onclick="ApprovalsPage.switchTab('pending')">${Icon.clipboardList({size:14})} My Pending Approvals (${totalPending})</button>` : ''}
-                <button ${!isApprover ? 'class="active"' : ''} data-tab="myrequests" onclick="ApprovalsPage.switchTab('myrequests')">${Icon.user({size:14})} My Pending Requests (${myRequests.length})</button>
+                ${(isApprover || isSuperAdmin) ? `<button class="active" data-tab="pending" onclick="ApprovalsPage.switchTab('pending')">${Icon.clipboardList({size:14})} ${isSuperAdmin ? 'Force Approval' : 'My Pending Approvals'} (${totalPending})</button>` : ''}
+                <button ${!(isApprover || isSuperAdmin) ? 'class="active"' : ''} data-tab="myrequests" onclick="ApprovalsPage.switchTab('myrequests')">${Icon.user({size:14})} My Pending Requests (${myRequests.length})</button>
                 <button data-tab="approved" onclick="ApprovalsPage.switchTab('approved')">${Icon.checkCircle({size:14})} My Approved Requests (${myApproved.length})</button>
                 <button data-tab="rejected" onclick="ApprovalsPage.switchTab('rejected')">${Icon.xCircle({size:14})} My Rejected Requests (${myRejected.length})</button>
             </div>
 
-            ${isApprover ? `<div id="approval-tab-pending" class="approval-tab-content active">${this._renderPendingTab({requests: filteredRequests, materials: filteredMaterials, equipment: filteredEquipment, estimates: pendingData.estimates || [], dailyRecords: filteredDailyRecords})}</div>` : ''}
-            <div id="approval-tab-myrequests" class="approval-tab-content ${!isApprover ? 'active' : ''}">${this._renderMyRequestsTab(myRequests, 'pending')}</div>
+            ${(isApprover || isSuperAdmin) ? `<div id="approval-tab-pending" class="approval-tab-content active">${this._renderPendingTab({requests: filteredRequests, materials: filteredMaterials, equipment: filteredEquipment, estimates: pendingData.estimates || [], dailyRecords: filteredDailyRecords})}</div>` : ''}
+            <div id="approval-tab-myrequests" class="approval-tab-content ${!(isApprover || isSuperAdmin) ? 'active' : ''}">${this._renderMyRequestsTab(myRequests, 'pending')}</div>
             <div id="approval-tab-approved" class="approval-tab-content">${this._renderMyRequestsTab(myApproved, 'approved')}</div>
             <div id="approval-tab-rejected" class="approval-tab-content">${this._renderMyRequestsTab(myRejected, 'rejected')}</div>`;
 
@@ -181,15 +195,34 @@ const ApprovalsPage = {
 
     /**
      * _renderPendingTab - Renders the pending approvals tab
-     * FIX: Added daily records section
+     * FIX: Super Admin shows Force Approve/Reject, normal approvers show Approve/Reject
      */
     _renderPendingTab(data) {
-        let html = `<div class="section-head"><h3>Cash Advance Requests</h3><div class="rule"></div></div>`;
+        const user = App.currentUser;
+        const isSuperAdmin = user && user.role === 'superadmin';
+        const isApprover = App.isApprover() && !isSuperAdmin;
+
+        let html = '';
+
+        // ─── Cash Advance Requests ──────────────────────────────
+        html += `<div class="section-head"><h3>Cash Advance Requests</h3><div class="rule"></div></div>`;
         if (data.requests.length === 0) {
             html += `<div class="empty"><p>No pending cash advance requests.</p></div>`;
         } else {
             html += `<div class="panel"><div style="padding:4px 0;">`;
             data.requests.forEach(r => {
+                let actionsHtml = '';
+                if (isSuperAdmin) {
+                    actionsHtml = `
+                        <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${r.id}','request')">Force Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${r.id}','request')">Force Reject</button>
+                    `;
+                } else if (isApprover) {
+                    actionsHtml = `
+                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${r.id}','request')">Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${r.id}','request')">Reject</button>
+                    `;
+                }
                 html += `
                 <div class="approval-request-item" style="cursor:pointer;">
                     <div class="ar-icon">${Icon.wallet({size:16})}</div>
@@ -202,21 +235,31 @@ const ApprovalsPage = {
                             <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${r.status}</span>
                         </div>
                     </div>
-                    <div class="ar-actions">
-                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${r.id}','request')">Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${r.id}','request')">Reject</button>
-                    </div>
+                    <div class="ar-actions">${actionsHtml}</div>
                 </div>`;
             });
             html += `</div></div>`;
         }
 
+        // ─── Materials Pending Approval ──────────────────────────
         html += `<div class="section-head"><h3>Materials Pending Approval</h3><div class="rule"></div></div>`;
         if (data.materials.length === 0) {
             html += `<div class="empty"><p>No pending materials.</p></div>`;
         } else {
             html += `<div class="panel"><div style="padding:4px 0;">`;
             data.materials.forEach(m => {
+                let actionsHtml = '';
+                if (isSuperAdmin) {
+                    actionsHtml = `
+                        <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${m.id}','Material')">Force Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${m.id}','Material')">Force Reject</button>
+                    `;
+                } else if (isApprover) {
+                    actionsHtml = `
+                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${m.id}','material')">Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${m.id}','material')">Reject</button>
+                    `;
+                }
                 html += `
                 <div class="approval-request-item" style="cursor:pointer;">
                     <div class="ar-icon">${Icon.package({size:16})}</div>
@@ -228,21 +271,31 @@ const ApprovalsPage = {
                             <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${m.status}</span>
                         </div>
                     </div>
-                    <div class="ar-actions">
-                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${m.id}','material')">Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${m.id}','material')">Reject</button>
-                    </div>
+                    <div class="ar-actions">${actionsHtml}</div>
                 </div>`;
             });
             html += `</div></div>`;
         }
 
+        // ─── Equipment Pending Approval ──────────────────────────
         html += `<div class="section-head"><h3>Equipment Pending Approval</h3><div class="rule"></div></div>`;
         if (data.equipment.length === 0) {
             html += `<div class="empty"><p>No pending equipment.</p></div>`;
         } else {
             html += `<div class="panel"><div style="padding:4px 0;">`;
             data.equipment.forEach(e => {
+                let actionsHtml = '';
+                if (isSuperAdmin) {
+                    actionsHtml = `
+                        <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${e.id}','Equipment')">Force Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${e.id}','Equipment')">Force Reject</button>
+                    `;
+                } else if (isApprover) {
+                    actionsHtml = `
+                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${e.id}','equipment')">Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${e.id}','equipment')">Reject</button>
+                    `;
+                }
                 html += `
                 <div class="approval-request-item" style="cursor:pointer;">
                     <div class="ar-icon">${Icon.wrench({size:16})}</div>
@@ -254,22 +307,31 @@ const ApprovalsPage = {
                             <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${e.status}</span>
                         </div>
                     </div>
-                    <div class="ar-actions">
-                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${e.id}','equipment')">Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${e.id}','equipment')">Reject</button>
-                    </div>
+                    <div class="ar-actions">${actionsHtml}</div>
                 </div>`;
             });
             html += `</div></div>`;
         }
 
-        // Estimates
+        // ─── Estimates Pending Approval ──────────────────────────
         html += `<div class="section-head"><h3>Estimates Pending Approval</h3><div class="rule"></div></div>`;
         if (data.estimates.length === 0) {
             html += `<div class="empty"><p>No pending estimates.</p></div>`;
         } else {
             html += `<div class="panel"><div style="padding:4px 0;">`;
             data.estimates.forEach(e => {
+                let actionsHtml = '';
+                if (isSuperAdmin) {
+                    actionsHtml = `
+                        <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${e.id}','Estimate')">Force Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${e.id}','Estimate')">Force Reject</button>
+                    `;
+                } else if (isApprover) {
+                    actionsHtml = `
+                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${e.sowId || e.id}','estimate')">Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${e.sowId || e.id}','estimate')">Reject</button>
+                    `;
+                }
                 html += `
                 <div class="approval-request-item" style="cursor:pointer;">
                     <div class="ar-icon">${Icon.ruler({size:16})}</div>
@@ -281,22 +343,31 @@ const ApprovalsPage = {
                             <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${e.status}</span>
                         </div>
                     </div>
-                    <div class="ar-actions">
-                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${e.sowId || e.id}','estimate')">Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${e.sowId || e.id}','estimate')">Reject</button>
-                    </div>
+                    <div class="ar-actions">${actionsHtml}</div>
                 </div>`;
             });
             html += `</div></div>`;
         }
 
-        // DAILY RECORDS - NEW SECTION
+        // ─── Daily Records Pending Approval ──────────────────────
         html += `<div class="section-head"><h3>Daily Records Pending Approval</h3><div class="rule"></div></div>`;
         if (!data.dailyRecords || data.dailyRecords.length === 0) {
             html += `<div class="empty"><p>No pending daily records.</p></div>`;
         } else {
             html += `<div class="panel"><div style="padding:4px 0;">`;
             data.dailyRecords.forEach(d => {
+                let actionsHtml = '';
+                if (isSuperAdmin) {
+                    actionsHtml = `
+                        <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${d.id}','DailyRecord')">Force Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${d.id}','DailyRecord')">Force Reject</button>
+                    `;
+                } else if (isApprover) {
+                    actionsHtml = `
+                        <button class="btn-sm success" onclick="ApprovalsPage.approveDailyRecord('${d.id}')">Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectDailyRecord('${d.id}')">Reject</button>
+                    `;
+                }
                 html += `
                 <div class="approval-request-item" style="cursor:pointer;">
                     <div class="ar-icon">${Icon.clipboardList({size:16})}</div>
@@ -308,10 +379,7 @@ const ApprovalsPage = {
                             <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">Pending</span>
                         </div>
                     </div>
-                    <div class="ar-actions">
-                        <button class="btn-sm success" onclick="ApprovalsPage.approveDailyRecord('${d.id}')">Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectDailyRecord('${d.id}')">Reject</button>
-                    </div>
+                    <div class="ar-actions">${actionsHtml}</div>
                 </div>`;
             });
             html += `</div></div>`;
@@ -322,9 +390,6 @@ const ApprovalsPage = {
 
     /**
      * _renderMyRequestsTab - Renders the user's own requests
-     * FIX (#4): Each request is cached by id so clicking it can route to the CORRECT
-     * detail view based on its actual type (Material/Equipment/Estimate/DailyRecord),
-     * instead of always opening the generic cash-advance-style RequestDetailModal.
      */
     _renderMyRequestsTab(requests, statusType) {
         const statusLabel = statusType === 'pending' ? 'Pending' : statusType === 'approved' ? 'Approved' : 'Rejected';
@@ -370,11 +435,6 @@ const ApprovalsPage = {
 
     /**
      * openMyRequestDetail - Routes a "My Requests" click to the correct detail view.
-     * FIX (#4): Cash Advance / Liquidation / Release Cash still use the generic
-     * RequestDetailModal (that's what it's for). Material, Equipment, Estimate, and
-     * DailyRecord requests instead open the SAME dedicated views used everywhere else
-     * in the app (MatPrintModal, EquipPrintModal, SOWBreakdownModal, PrintModal) so the
-     * user actually sees the item's real content instead of a near-empty REQ card.
      */
     async openMyRequestDetail(id) {
         const r = this._myRequestsById && this._myRequestsById[id];
@@ -417,7 +477,6 @@ const ApprovalsPage = {
                 }
 
                 default:
-                    // Cash Advance, Liquidation, Release Cash, etc.
                     RequestDetailModal.open(r.id, 'request');
             }
         } catch (err) {
@@ -427,7 +486,7 @@ const ApprovalsPage = {
     },
 
     /**
-     * approveItem - Handle approval action
+     * approveItem - Handle normal approval action (for Approvers/Admins)
      */
     async approveItem(id, type, closeModal = false) {
         const confirmed = await Confirm.open('Approve Item?', `Approve ${id}?`);
@@ -470,7 +529,7 @@ const ApprovalsPage = {
     },
 
     /**
-     * rejectItem - Handle rejection action
+     * rejectItem - Handle normal rejection action (for Approvers/Admins)
      */
     async rejectItem(id, type, closeModal = false) {
         const confirmed = await Confirm.open('Reject Item?', `Reject ${id}?`);
@@ -495,7 +554,43 @@ const ApprovalsPage = {
     },
 
     /**
-     * approveDailyRecord - Approve a daily record
+     * forceApproveItem - Super Admin force approve any item
+     */
+    async forceApproveItem(id, type, closeModal = false) {
+        const confirmed = await Confirm.open('Force Approve?', 
+            `As Super Admin, you are about to FORCE APPROVE ${id}. This will bypass all other approvers. Continue?`);
+        if (!confirmed) return;
+        try {
+            await DataService.forceApprove(id, type);
+            UI.toast(`${id} force-approved!`, 'success');
+            if (closeModal) RequestDetailModal.close();
+            this.load();
+            HomePage.load();
+        } catch (err) {
+            UI.toast('' + err.message, 'error');
+        }
+    },
+
+    /**
+     * forceRejectItem - Super Admin force reject any item
+     */
+    async forceRejectItem(id, type, closeModal = false) {
+        const confirmed = await Confirm.open('Force Reject?', 
+            `As Super Admin, you are about to FORCE REJECT ${id}. This will bypass all other approvers. Continue?`);
+        if (!confirmed) return;
+        try {
+            await DataService.forceReject(id, type);
+            UI.toast(`${id} force-rejected.`, 'error');
+            if (closeModal) RequestDetailModal.close();
+            this.load();
+            HomePage.load();
+        } catch (err) {
+            UI.toast('' + err.message, 'error');
+        }
+    },
+
+    /**
+     * approveDailyRecord - Approve a daily record (for Approvers/Admins)
      */
     async approveDailyRecord(id) {
         const confirmed = await Confirm.open('Approve Daily Record?', 'Approve this daily record?');
@@ -511,7 +606,7 @@ const ApprovalsPage = {
     },
 
     /**
-     * rejectDailyRecord - Reject a daily record
+     * rejectDailyRecord - Reject a daily record (for Approvers/Admins)
      */
     async rejectDailyRecord(id) {
         const confirmed = await Confirm.open('Reject Daily Record?', 'Reject this daily record?');
