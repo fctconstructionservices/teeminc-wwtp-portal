@@ -2,6 +2,7 @@
 //  APPROVALS PAGE - Complete with fixes for Issues 3.1-3.10
 //  FIX: Added daily records to pending approvals
 //  FIX: Super Admin shows Force Approve/Reject instead of normal buttons
+//  FIX: Added Incoming Cash to pending approvals
 // ================================================================
 
 // ─── REQUEST DETAIL MODAL ──────────────────────────────────────
@@ -195,7 +196,8 @@ const ApprovalsPage = {
 
     /**
      * _renderPendingTab - Renders the pending approvals tab
-     * FIX: Super Admin shows Force Approve/Reject, normal approvers show Approve/Reject
+     * FIX: Added Incoming Cash section
+     * FIX: Super Admin shows Force Approve/Reject
      */
     _renderPendingTab(data) {
         const user = App.currentUser;
@@ -206,11 +208,14 @@ const ApprovalsPage = {
 
         // ─── Cash Advance Requests ──────────────────────────────
         html += `<div class="section-head"><h3>Cash Advance Requests</h3><div class="rule"></div></div>`;
-        if (data.requests.length === 0) {
+        const cashAdvanceRequests = data.requests.filter(function(r) {
+            return r.type === 'Cash Advance';
+        });
+        if (cashAdvanceRequests.length === 0) {
             html += `<div class="empty"><p>No pending cash advance requests.</p></div>`;
         } else {
             html += `<div class="panel"><div style="padding:4px 0;">`;
-            data.requests.forEach(r => {
+            cashAdvanceRequests.forEach(r => {
                 let actionsHtml = '';
                 if (isSuperAdmin) {
                     actionsHtml = `
@@ -232,6 +237,47 @@ const ApprovalsPage = {
                             <span class="ar-id">${r.id}</span>
                             <span>₱${(r.amount || 0).toFixed(2)}</span>
                             <span>${r.date || new Date().toLocaleDateString()}</span>
+                            <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${r.status}</span>
+                        </div>
+                    </div>
+                    <div class="ar-actions">${actionsHtml}</div>
+                </div>`;
+            });
+            html += `</div></div>`;
+        }
+
+        // ─── Incoming Cash Requests ──────────────────────────────
+        html += `<div class="section-head"><h3>Incoming Cash Requests</h3><div class="rule"></div></div>`;
+        const incomingRequests = data.requests.filter(function(r) {
+            return r.type === 'Incoming Cash';
+        });
+        if (incomingRequests.length === 0) {
+            html += `<div class="empty"><p>No pending incoming cash requests.</p></div>`;
+        } else {
+            html += `<div class="panel"><div style="padding:4px 0;">`;
+            incomingRequests.forEach(r => {
+                let actionsHtml = '';
+                if (isSuperAdmin) {
+                    actionsHtml = `
+                        <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${r.id}','Incoming Cash')">Force Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${r.id}','Incoming Cash')">Force Reject</button>
+                    `;
+                } else if (isApprover) {
+                    actionsHtml = `
+                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${r.id}','request')">Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${r.id}','request')">Reject</button>
+                    `;
+                }
+                html += `
+                <div class="approval-request-item" style="cursor:pointer;">
+                    <div class="ar-icon">${Icon.incoming({size:16})}</div>
+                    <div class="ar-body" onclick="RequestDetailModal.open('${r.id}','request')">
+                        <div class="ar-title">${r.requestor} — ${r.projectId || '—'}</div>
+                        <div class="ar-meta">
+                            <span class="ar-id">${r.id}</span>
+                            <span>${r.type}</span>
+                            <span>₱${(r.amount || 0).toFixed(2)}</span>
+                            <span>${r.description || '—'}</span>
                             <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${r.status}</span>
                         </div>
                     </div>
@@ -410,6 +456,7 @@ const ApprovalsPage = {
                              r.type === 'Material' ? Icon.package({size:16}) :
                              r.type === 'Equipment' ? Icon.wrench({size:16}) :
                              r.type === 'DailyRecord' ? Icon.clipboardList({size:16}) :
+                             r.type === 'Incoming Cash' ? Icon.incoming({size:16}) :
                              Icon.fileText({size:16});
                 const clickHandler = `ApprovalsPage.openMyRequestDetail('${r.id}')`;
                 html += `
@@ -473,6 +520,11 @@ const ApprovalsPage = {
                     const record = (projectData.dailyRecords || []).find(d => d.id === (r.refId || r.id));
                     if (!record) { UI.toast('Daily record not found.', 'error'); return; }
                     PrintModal.open(record);
+                    break;
+                }
+
+                case 'Incoming Cash': {
+                    RequestDetailModal.open(r.id, 'request');
                     break;
                 }
 
