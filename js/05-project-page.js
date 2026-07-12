@@ -12,6 +12,7 @@
 //  - SOW Budget shows estimate status (Draft/Pending/Approved)
 //  - Auto-refresh SOW Budget after any estimate change
 //  - Enhanced SOW Budget UI with status badges, variance, and quick actions
+//  - KPI strip now uses computed revenue, expenses, cashPosition, pendingUnliquidated
 // ================================================================
 
 const ProjectPage = {
@@ -76,16 +77,14 @@ const ProjectPage = {
             document.getElementById('proj-status').textContent = p.status || '—';
             document.getElementById('proj-crumb').textContent = p.name || '—';
 
-            const pendingTotal = p.requests.filter(r => r.status === 'Pending' || r.status === 'Pending Approval' || r.status === 'Approved for Release').reduce((s, r) => s + (r.amount || 0), 0);
-
             let html = `
             <div class="section-head"><h2>Project Snapshot</h2><div class="rule"></div></div>
             <div class="kpi-strip kpi-strip-5">
                 <div class="kpi-card good"><div class="k-label">Revenue</div><div class="k-val mono">₱${(p.revenue || 0).toFixed(2)}</div></div>
                 <div class="kpi-card"><div class="k-label">Expenses</div><div class="k-val mono">₱${(p.expenses || 0).toFixed(2)}</div></div>
-                <div class="kpi-card good"><div class="k-label">Cash Position</div><div class="k-val mono">₱${(p.cashPosition || 0).toFixed(2)}</div></div>
+                <div class="kpi-card ${p.cashPosition >= 0 ? 'good' : 'bad'}"><div class="k-label">Cash Position</div><div class="k-val mono">₱${(p.cashPosition || 0).toFixed(2)}</div></div>
                 <div class="kpi-card"><div class="k-label">Requests</div><div class="k-val">${p.requests.length}</div></div>
-                <div class="kpi-card warn"><div class="k-label">Pending / Unliquidated</div><div class="k-val mono">₱${pendingTotal.toFixed(2)}</div></div>
+                <div class="kpi-card warn"><div class="k-label">Pending / Unliquidated</div><div class="k-val mono">₱${(p.pendingUnliquidated || 0).toFixed(2)}</div></div>
             </div>
 
             <div class="project-tabs">
@@ -136,7 +135,6 @@ const ProjectPage = {
         if (tab === 'gantt' && this._data) setTimeout(() => this._renderGanttChart(this._data), 100);
         if (tab === 'estimates' && this._data) {
             this.renderEstimates(this._data);
-            // ✅ Also refresh SOW Budget when switching to Estimates tab
             setTimeout(() => this.renderSOWBudget(this._data), 100);
         }
     },
@@ -1074,14 +1072,6 @@ const ProjectPage = {
         return false;
     },
 
-    /**
-     * renderSOWBudget - Enhanced with full Estimates integration
-     * ✅ Shows estimate status (Draft/Pending/Approved)
-     * ✅ Shows budget source (from approved estimate or manual)
-     * ✅ Shows variance (Budget - Actual)
-     * ✅ Auto-refresh after any estimate change
-     * ✅ Quick actions to edit estimates or view breakdown
-     */
     renderSOWBudget(p) {
         const container = document.getElementById('proj-tab-sow');
         const estimates = this._estimatesData || { groups: [] };
@@ -1147,7 +1137,6 @@ const ProjectPage = {
             }
             totalEstimate += itemEstimate;
 
-            // Count statuses
             if (estimateStatus === 'pending') pendingCount++;
             else if (estimateStatus === 'approved') approvedCount++;
             else draftCount++;
@@ -1158,7 +1147,6 @@ const ProjectPage = {
             const barClass = pct > 90 ? 'danger' : pct > 70 ? 'warn' : '';
             const barColor = pct > 90 ? 'var(--red)' : pct > 70 ? 'var(--amber)' : 'var(--green)';
 
-            // ✅ Status Badge
             let statusIcon = '';
             let statusClass = estimateStatus;
             let statusLabel = estimateStatus.charAt(0).toUpperCase() + estimateStatus.slice(1);
@@ -1174,7 +1162,6 @@ const ProjectPage = {
                 statusClass = 'draft';
             }
 
-            // ✅ Check if budget matches estimate (only when approved)
             const isBudgetFromEstimate = estimateStatus === 'approved' && Math.abs(budget - itemEstimate) < 0.01;
             const budgetSourceLabel = isBudgetFromEstimate ? 
                 '<span class="budget-source">✅ from approved estimate</span>' : 
@@ -1182,12 +1169,10 @@ const ProjectPage = {
                     '<span class="budget-source">⚠️ manually adjusted</span>' : 
                     '<span class="budget-source">📄 pending approval</span>');
 
-            // ✅ Variance
             const variance = budget - actual;
             const varianceClass = variance >= 0 ? 'positive' : 'negative';
             const varianceLabel = variance >= 0 ? `+₱${variance.toFixed(2)}` : `-₱${Math.abs(variance).toFixed(2)}`;
 
-            // ✅ Estimate status note
             let estimateNote = '';
             if (estimateStatus === 'pending') {
                 estimateNote = '⏳ awaiting approval';
@@ -1271,7 +1256,6 @@ const ProjectPage = {
                 </div>`;
         });
 
-        // ✅ Status Summary
         const allApproved = approvedCount === sowItems.length && sowItems.length > 0;
         const hasPending = pendingCount > 0;
 
@@ -1305,7 +1289,6 @@ const ProjectPage = {
 
         container.innerHTML = html;
         
-        // ✅ Build chart after rendering
         setTimeout(() => this._buildSOWChart(p), 100);
     },
 
@@ -1448,7 +1431,6 @@ const ProjectPage = {
 
         container.innerHTML = html;
 
-        // ✅ Refresh SOW Budget when Estimates tab renders
         setTimeout(() => {
             if (this._data) {
                 this.renderSOWBudget(this._data);
@@ -1632,7 +1614,6 @@ const ProjectPage = {
             newItem.amount = 0; }
         group[cat].push(newItem);
         this.renderEstimates(this._data);
-        // ✅ Refresh SOW Budget after adding item
         this.renderSOWBudget(this._data);
     },
 
@@ -1644,7 +1625,6 @@ const ProjectPage = {
         if (group[cat] && group[cat].length > idx) {
             group[cat].splice(idx, 1);
             this.renderEstimates(this._data);
-            // ✅ Refresh SOW Budget after removing item
             this.renderSOWBudget(this._data);
         }
     },
@@ -1666,7 +1646,6 @@ const ProjectPage = {
             item.cost = item.amount;
         }
         this.renderEstimates(this._data);
-        // ✅ Refresh SOW Budget after updating item
         this.renderSOWBudget(this._data);
     },
 
@@ -1709,7 +1688,6 @@ const ProjectPage = {
         item.rate = opt ? (parseFloat(opt.dataset.rate) || 0) : (item.rate || 0);
         item.cost = (parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0);
         this.renderEstimates(this._data);
-        // ✅ Refresh SOW Budget after selecting material
         this.renderSOWBudget(this._data);
     },
 
@@ -1742,7 +1720,6 @@ const ProjectPage = {
         item.rate = opt ? (parseFloat(opt.dataset.rate) || 0) : (item.rate || 0);
         item.cost = (parseFloat(item.qty) || 0) * (parseFloat(item.duration) || 0) * (parseFloat(item.rate) || 0);
         this.renderEstimates(this._data);
-        // ✅ Refresh SOW Budget after selecting equipment
         this.renderSOWBudget(this._data);
     },
 
@@ -1769,7 +1746,6 @@ const ProjectPage = {
             indirect: []
         });
         this.renderEstimates(this._data);
-        // ✅ Refresh SOW Budget after adding group
         this.renderSOWBudget(this._data);
         UI.toast(`Added estimate group for ${sow.id}`, 'success');
     },
@@ -1798,7 +1774,6 @@ const ProjectPage = {
             await DataService.submitEstimatesForApproval(this._currentProjectId, group.sowId);
             group.status = 'pending';
             this.renderEstimates(this._data);
-            // ✅ Refresh SOW Budget after submit
             this.renderSOWBudget(this._data);
             UI.toast(`${group.sowId} submitted for approval.`, 'success');
             this._updateApprovalBadge();
@@ -1814,7 +1789,6 @@ const ProjectPage = {
         const group = est.groups[gIdx];
         if (group.status !== 'pending') { UI.toast('Only pending estimates can be approved.', 'error'); return; }
         
-        // ✅ Check if current user is the creator
         const currentUser = App.getUser();
         const currentUserEmail = currentUser ? currentUser.email.toLowerCase() : '';
         if (group.createdBy && group.createdBy.toLowerCase() === currentUserEmail) {
@@ -1830,7 +1804,6 @@ const ProjectPage = {
             const result = await DataService.approveEstimates(this._currentProjectId, group.sowId);
             group.status = 'approved';
             this.renderEstimates(this._data);
-            // ✅ Refresh SOW Budget after approve (backend already updated budget)
             this.renderSOWBudget(this._data);
             UI.toast(`${group.sowId} approved and locked. SOW Budget updated.`, 'success');
             this._updateApprovalBadge();
@@ -1843,7 +1816,6 @@ const ProjectPage = {
         try {
             await DataService.saveEstimates(this._currentProjectId, est.groups);
             UI.toast('All estimates saved!', 'success');
-            // ✅ Refresh SOW Budget after save
             this.renderSOWBudget(this._data);
         } catch (err) { UI.toast('' + err.message, 'error'); }
     },
