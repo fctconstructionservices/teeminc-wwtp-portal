@@ -23,6 +23,7 @@ function getCurrentUserEmail() {
  * PURPOSE: Sends requests to the backend with proper authentication
  * 
  * FIX: Added support for new API methods (getMyApprovedRequests, getMyRejectedRequests)
+ * FIX: Added forceReject method
  */
 async function gasCall(action) {
     const params = Array.prototype.slice.call(arguments, 1);
@@ -57,6 +58,7 @@ async function gasCall(action) {
  * FIX: Added daily record approval methods
  * FIX: Added SOW management methods
  * FIX: Added photo upload method
+ * FIX: Added forceReject method for Super Admin
  */
 const DataService = {
     _pendingMaterials: [],
@@ -157,7 +159,6 @@ const DataService = {
     async addDailyRecord(projectId, data) {
         return await gasCall('addDailyRecord', projectId, data);
     },
-    // NEW: Daily record approval
     async submitDailyRecordForApproval(recordId) {
         return await gasCall('submitDailyRecordForApproval', recordId);
     },
@@ -212,15 +213,18 @@ const DataService = {
     async forceApprove(id, type) {
         return await gasCall('forceApprove', id, type);
     },
+    // ✅ NEW: Force Reject for Super Admin
+    async forceReject(id, type) {
+        return await gasCall('forceReject', id, type);
+    },
 
     // ─── CASH REQUESTS ────────────────────────────────────────
     async submitCashAdvance(payload) {
         return await gasCall('submitCashAdvance', payload);
     },
 
-    // NEW: Kunin ang SOW items ng isang project (lightweight)
     async getSOWItemsForProject(projectId) {
-    return await gasCall('getSOWItemsForProject', projectId);
+        return await gasCall('getSOWItemsForProject', projectId);
     },
     
     async submitLiquidation(payload) {
