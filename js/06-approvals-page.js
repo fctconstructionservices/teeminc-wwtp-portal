@@ -322,10 +322,16 @@ const ApprovalsPage = {
 
     /**
      * _renderMyRequestsTab - Renders the user's own requests
+     * FIX (#4): Each request is cached by id so clicking it can route to the CORRECT
+     * detail view based on its actual type (Material/Equipment/Estimate/DailyRecord),
+     * instead of always opening the generic cash-advance-style RequestDetailModal.
      */
     _renderMyRequestsTab(requests, statusType) {
         const statusLabel = statusType === 'pending' ? 'Pending' : statusType === 'approved' ? 'Approved' : 'Rejected';
         const statusCls = statusType === 'pending' ? 'pending' : statusType === 'approved' ? 'approved' : 'rejected';
+
+        this._myRequestsById = this._myRequestsById || {};
+        requests.forEach(r => { this._myRequestsById[r.id] = r; });
         
         let html = `<div class="section-head"><h3>My ${statusLabel} Requests</h3><div class="rule"></div></div>`;
         if (requests.length === 0) {
@@ -336,8 +342,11 @@ const ApprovalsPage = {
                 const icon = r.type === 'Cash Advance' ? Icon.wallet({size:16}) : 
                              r.type === 'Liquidation' ? Icon.receipt({size:16}) : 
                              r.type === 'Estimate' ? Icon.ruler({size:16}) : 
+                             r.type === 'Material' ? Icon.package({size:16}) :
+                             r.type === 'Equipment' ? Icon.wrench({size:16}) :
+                             r.type === 'DailyRecord' ? Icon.clipboardList({size:16}) :
                              Icon.fileText({size:16});
-                const clickHandler = `RequestDetailModal.open('${r.id}','request')`;
+                const clickHandler = `ApprovalsPage.openMyRequestDetail('${r.id}')`;
                 html += `
                 <div class="my-request-item" onclick="${clickHandler}" style="cursor:pointer;">
                     <div class="mr-icon">${icon}</div>
@@ -357,6 +366,64 @@ const ApprovalsPage = {
             html += `</div></div>`;
         }
         return html;
+    },
+
+    /**
+     * openMyRequestDetail - Routes a "My Requests" click to the correct detail view.
+     * FIX (#4): Cash Advance / Liquidation / Release Cash still use the generic
+     * RequestDetailModal (that's what it's for). Material, Equipment, Estimate, and
+     * DailyRecord requests instead open the SAME dedicated views used everywhere else
+     * in the app (MatPrintModal, EquipPrintModal, SOWBreakdownModal, PrintModal) so the
+     * user actually sees the item's real content instead of a near-empty REQ card.
+     */
+    async openMyRequestDetail(id) {
+        const r = this._myRequestsById && this._myRequestsById[id];
+        if (!r) { RequestDetailModal.open(id, 'request'); return; }
+
+        try {
+            switch (r.type) {
+                case 'Material':
+                    await MaterialsPage.viewMaterial(r.refId || r.id);
+                    break;
+
+                case 'Equipment':
+                    await EquipmentPage.viewEquipment(r.refId || r.id);
+                    break;
+
+                case 'Estimate': {
+                    if (!r.projectId) { UI.toast('Missing project reference for this estimate.', 'error'); return; }
+                    const projectData = await DataService.getProjectData(r.projectId);
+                    if (!projectData) { UI.toast('Project not found.', 'error'); return; }
+                    const group = (projectData.estimates && projectData.estimates.groups || [])
+                        .find(g => g.sowId === r.scope);
+                    if (!group) { UI.toast('Estimate details not found (it may have changed since this request).', 'error'); return; }
+                    SOWBreakdownModal.open(r.scope, {
+                        materials: group.materials || [],
+                        equipment: group.equipment || [],
+                        labor: group.labor || [],
+                        indirect: group.indirect || []
+                    });
+                    break;
+                }
+
+                case 'DailyRecord': {
+                    if (!r.projectId) { UI.toast('Missing project reference for this daily record.', 'error'); return; }
+                    const projectData = await DataService.getProjectData(r.projectId);
+                    if (!projectData) { UI.toast('Project not found.', 'error'); return; }
+                    const record = (projectData.dailyRecords || []).find(d => d.id === (r.refId || r.id));
+                    if (!record) { UI.toast('Daily record not found.', 'error'); return; }
+                    PrintModal.open(record);
+                    break;
+                }
+
+                default:
+                    // Cash Advance, Liquidation, Release Cash, etc.
+                    RequestDetailModal.open(r.id, 'request');
+            }
+        } catch (err) {
+            console.error('Error opening request detail:', err);
+            UI.toast('Error loading details: ' + err.message, 'error');
+        }
     },
 
     /**
