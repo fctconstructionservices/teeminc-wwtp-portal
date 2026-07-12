@@ -94,8 +94,8 @@ const HomePage = {
             const tickets = [
                 { id: 'request', label: 'Request Cash Advance', sub: 'New requisition', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
                 { id: 'record-cash', label: 'Record Incoming Cash', sub: 'Capital / injections', roles: ['superadmin', 'admin', 'approver'] },
-                { id: 'release-cash', label: 'Release Cash', sub: 'Approved advance', roles: ['superadmin', 'admin', 'approver'] },
-                { id: 'liquidate', label: 'Liquidate Advance', sub: 'Receipts & balance', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
+                { id: 'release-cash', label: 'Release Cash Advance', sub: 'Approved advance', roles: ['superadmin', 'admin', 'approver'] },
+                { id: 'liquidate', label: 'Liquidate Cash Advance', sub: 'Receipts & balance', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
                 { id: 'search', label: 'Search Records', sub: 'All transactions', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
                 { id: 'materials', label: 'Materials DB', sub: 'Master list & approval', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
                 { id: 'equipment', label: 'Tools & Equipment', sub: 'Equipment inventory', roles: ['superadmin', 'admin', 'approver', 'request-only'] },

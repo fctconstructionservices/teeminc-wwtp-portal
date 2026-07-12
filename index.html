@@ -97,8 +97,8 @@
     <!-- ════════════════════════════════════════════ -->
     <section id="page-login" class="page active" aria-label="Login">
         <div class="login-card">
-            <div class="login-mark">F</div>
-            <h1>FCTC Operations Board</h1>
+            <div class="login-mark">FCTC</div>
+            <h1>FCTC ERP System</h1>
             <p class="sub">Sign in to continue</p>
             <form id="loginForm" onsubmit="return handleLogin(event)">
                 <div class="field" id="login-email-field">
@@ -114,8 +114,8 @@
                 <button type="submit" class="login-btn">Log In</button>
             </form>
             <p class="login-note">
-                Prototype — kahit anong credentials, papasok.
-                <small><strong>Test accounts:</strong> admin@fctc.com / admin123 · glenn@fctc.com / glenn123 · (any other email works)</small>
+                For FCTC Construction Services internal use only.
+                <small><strong>Under Development: </strong>Under Development</small>
             </p>
         </div>
     </section>
@@ -177,7 +177,7 @@
             </div>
 
             <p style="margin-top:16px;font-size:11px;color:var(--ink-soft);text-align:center">
-                Simulated data para sa prototyping.
+                Prototype
             </p>
         </div>
     </section>
@@ -188,10 +188,10 @@
     <section id="page-finance" class="page" aria-label="Finance Dashboard">
         <div class="wrap">
             <div class="topbar">
-                <div class="mark">F</div>
+                <div class="mark">FCTC</div>
                 <div class="brand">
                     <div class="name">Finance Dashboard</div>
-                    <div class="sub">Cost control · Cashflow · Business health</div>
+                    <div class="sub">Cost control · Cashflow · Forecasting</div>
                 </div>
                 <div class="spacer"></div>
                 <button class="hamburger" onclick="toggleMenu()"></button>
@@ -389,11 +389,11 @@
     <!-- ════════════════════════════════════════════ -->
     <!--  LIQUIDATE                                 -->
     <!-- ════════════════════════════════════════════ -->
-    <section id="page-liquidate" class="page" aria-label="Liquidate Advance">
+    <section id="page-liquidate" class="page" aria-label="Liquidate Cash Advance">
         <div class="wrap">
             <div class="topbar">
                 <div class="mark">F</div>
-                <div class="brand"><div class="name">Liquidate Advance</div><div class="sub">Submit receipts & balance</div></div>
+                <div class="brand"><div class="name">Liquidate Cash Advance</div><div class="sub">Submit receipts & balance</div></div>
                 <div class="spacer"></div>
                 <button class="hamburger" onclick="toggleMenu()"></button>
                 <div class="actions" id="topActionsLiquidate">
@@ -401,7 +401,7 @@
                     <button onclick="App.navigate('home')">Back</button>
                 </div>
             </div>
-            <div class="crumb"><button onclick="App.navigate('home')">Home</button> / Liquidate Advance</div>
+            <div class="crumb"><button onclick="App.navigate('home')">Home</button> / Liquidate Cash Advance</div>
             <div class="form-card">
                 <div class="requester-badge">Liquidated by: <strong>J. Fabon</strong></div>
                 <form id="liquidateForm" onsubmit="return submitLiquidateForm(event)">
@@ -541,7 +541,7 @@
                     
                     <!-- Project -->
                     <div class="field" id="rc-project-field">
-                        <label for="rc-project">Project / Type *</label>
+                        <label for="rc-project">Project</label>
                         <select id="rc-project" required>
                             <option value="">— Select Ongoing Project —</option>
                         </select>

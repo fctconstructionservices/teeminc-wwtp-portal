@@ -57,7 +57,7 @@ async function loadProjectsDropdown() {
             await loadSOWItemsForRequest();
         }
         
-        console.log('✅ Ongoing projects loaded:', ongoingProjects.length);
+        //console.log('✅ Ongoing projects loaded:', ongoingProjects.length);
         
     } catch (err) {
         console.error('Error loading ongoing projects:', err);
@@ -107,7 +107,7 @@ async function loadIncomingProjectsDropdown() {
             });
         }
         
-        console.log('✅ Incoming projects loaded:', ongoingProjects.length);
+        //console.log('✅ Incoming projects loaded:', ongoingProjects.length);
         
     } catch (err) {
         console.error('Error loading incoming projects:', err);
