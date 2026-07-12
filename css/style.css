@@ -2545,3 +2545,278 @@
         .items-center {
             align-items: center;
         }
+        /* ─── SOW BUDGET ENHANCEMENTS ─── */
+.sow-item {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 14px 12px;
+    border-bottom: 1px solid var(--line);
+    align-items: flex-start;
+    cursor: pointer;
+    transition: background .15s, border-color .2s;
+    border-radius: 4px;
+    border-left: 3px solid transparent;
+}
+.sow-item:hover {
+    background: var(--bg);
+}
+.sow-item[data-estimate-status="approved"] {
+    border-left-color: var(--green);
+}
+.sow-item[data-estimate-status="pending"] {
+    border-left-color: var(--amber);
+}
+.sow-item[data-estimate-status="draft"] {
+    border-left-color: var(--ink-soft);
+}
+.sow-item:last-child {
+    border-bottom: none;
+}
+
+.sow-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.sow-desc {
+    flex: 1;
+    min-width: 140px;
+    font-weight: 500;
+    font-size: 13px;
+}
+.sow-desc .sow-qty {
+    font-size: 11px;
+    color: var(--ink-soft);
+    font-weight: 400;
+}
+
+.sow-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 14px;
+    border-radius: 99px;
+    font-family: 'Oswald', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+.sow-status-badge.draft {
+    background: var(--bg);
+    color: var(--ink-soft);
+    border: 1.5px solid var(--line);
+}
+.sow-status-badge.pending {
+    background: #FBF1DE;
+    color: var(--amber);
+    border: 1.5px solid var(--amber);
+    animation: pulse-pending 2s ease-in-out infinite;
+}
+@keyframes pulse-pending {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+.sow-status-badge.approved {
+    background: #E7F3EA;
+    color: var(--green);
+    border: 1.5px solid var(--green);
+}
+.sow-status-badge .sow-status-date {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    font-weight: 400;
+    opacity: 0.7;
+    text-transform: none;
+}
+
+.sow-numbers {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    width: 100%;
+    padding: 4px 0;
+}
+.sow-number-group {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 2px 4px;
+    min-width: 70px;
+    flex: 1 0 auto;
+}
+.sow-number-group .sn-label {
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-soft);
+    font-family: 'Oswald', sans-serif;
+}
+.sow-number-group .sn-value {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 14px;
+    font-weight: 600;
+}
+.sow-number-group.estimate .sn-value {
+    color: var(--blueprint);
+}
+.sow-number-group.budget .sn-value {
+    color: var(--green);
+}
+.sow-number-group.budget .budget-source {
+    font-size: 8px;
+    color: var(--ink-soft);
+    font-style: italic;
+}
+.sow-number-group.actual .sn-value {
+    color: var(--safety);
+}
+.sow-number-group.actual .actual-status {
+    font-size: 8px;
+    color: var(--ink-soft);
+}
+.sow-number-group.variance.positive .sn-value {
+    color: var(--green);
+}
+.sow-number-group.variance.negative .sn-value {
+    color: var(--red);
+}
+
+.sow-progress {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    margin: 2px 0;
+}
+.sow-progress .sow-bar {
+    flex: 1;
+    min-width: 100px;
+    height: 6px;
+    border-radius: 99px;
+    background: var(--line);
+    overflow: hidden;
+}
+.sow-progress .sow-bar .fill {
+    height: 100%;
+    border-radius: 99px;
+    transition: width .4s ease;
+}
+
+.sow-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
+    padding-top: 6px;
+    border-top: 1px dashed var(--line);
+    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+
+.sow-status-legend {
+    display: flex;
+    gap: 16px;
+    padding: 8px 0 12px 0;
+    flex-wrap: wrap;
+    border-bottom: 1px dashed var(--line);
+    margin-bottom: 8px;
+}
+.sow-status-legend .legend-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    font-weight: 600;
+}
+.sow-status-legend .legend-item {
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--ink-soft);
+}
+.sow-status-legend .legend-item .badge-sample {
+    padding: 1px 8px;
+    font-size: 8px;
+    border-radius: 99px;
+    font-family: 'Oswald', sans-serif;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.sow-status-legend .legend-item .badge-sample.draft {
+    background: var(--bg);
+    color: var(--ink-soft);
+    border: 1px solid var(--line);
+}
+.sow-status-legend .legend-item .badge-sample.pending {
+    background: #FBF1DE;
+    color: var(--amber);
+    border: 1px solid var(--amber);
+}
+.sow-status-legend .legend-item .badge-sample.approved {
+    background: #E7F3EA;
+    color: var(--green);
+    border: 1px solid var(--green);
+}
+
+.sow-status-summary {
+    display: flex;
+    gap: 24px;
+    padding: 12px 8px 4px 8px;
+    border-top: 2px solid var(--line);
+    margin-top: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+.sow-status-summary .summary-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ink);
+}
+.sow-status-summary .summary-item {
+    font-size: 11px;
+    color: var(--ink-soft);
+}
+.sow-status-summary .summary-item .count {
+    font-weight: 600;
+}
+.sow-status-summary .summary-item .count.approved { color: var(--green); }
+.sow-status-summary .summary-item .count.pending { color: var(--amber); }
+.sow-status-summary .summary-item .count.draft { color: var(--ink-soft); }
+.sow-status-summary .summary-alert {
+    font-size: 10px;
+    margin-left: auto;
+}
+.sow-status-summary .summary-alert.pending {
+    color: var(--amber);
+}
+.sow-status-summary .summary-alert.success {
+    color: var(--green);
+}
+.sow-status-summary .summary-alert.info {
+    color: var(--ink-soft);
+}
+
+@media (max-width: 700px) {
+    .sow-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .sow-number-group {
+        min-width: 50px;
+        flex: 1 1 40%;
+    }
+    .sow-numbers {
+        gap: 10px;
+    }
+    .sow-status-summary {
+        gap: 12px;
+    }
+}
