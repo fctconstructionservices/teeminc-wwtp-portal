@@ -11,7 +11,6 @@
 //  - NEW: SOW dropdown dynamically loads based on selected project
 //  - NEW: Record Incoming Cash now requires approval
 //  - NEW: All fields required for Record Incoming Cash
-//  - NEW: Release Cash now includes SOW dropdown to link releases to SOW items
 // ================================================================
 
 /**
@@ -552,9 +551,48 @@ async function submitRecordCashForm(e) {
 
 // ─── RELEASE CASH FORM ──────────────────────────────────────────────
 
+async function submitReleaseForm(e) {
+    e.preventDefault();
+    
+    const requestId = document.getElementById('rel-req-id').value;
+    const amount = parseFloat(document.getElementById('rel-amount').value);
+    
+    let valid = true;
+    
+    if (!requestId) { 
+        document.getElementById('rel-req-field').classList.add('error');
+        valid = false; 
+    } else { 
+        document.getElementById('rel-req-field').classList.remove('error'); 
+    }
+    
+    if (!amount || amount <= 0) { 
+        document.getElementById('rel-amount-field').classList.add('error');
+        valid = false; 
+    } else { 
+        document.getElementById('rel-amount-field').classList.remove('error'); 
+    }
+    
+    if (!valid) return false;
+    
+    const confirmed = await Confirm.open('Release Cash?', `Release ₱${amount.toFixed(2)}?`);
+    if (!confirmed) return false;
+    
+    try {
+        await DataService.submitRelease({ requestId, amount });
+        UI.toast('Cash released!', 'success');
+        document.getElementById('releaseForm').reset();
+        await loadReleaseDropdown();
+        App.navigate('home');
+    } catch (err) { 
+        UI.toast('' + err.message, 'error'); 
+    }
+    
+    return false;
+}
+
 /**
  * loadReleaseDropdown - I-load ang approved cash advances sa dropdown
- * FIX: Now includes projectId as data attribute for SOW loading
  */
 async function loadReleaseDropdown() {
     try {
@@ -577,7 +615,6 @@ async function loadReleaseDropdown() {
         advances.forEach(function(ca) {
             const option = document.createElement('option');
             option.value = ca.id;
-            option.dataset.projectId = ca.projectId || '';  // ← NEW
             const dateStr = ca.date ? new Date(ca.date).toLocaleDateString() : 'N/A';
             option.textContent = `${ca.id} · ${ca.requestor} · ₱${ca.amount.toFixed(2)} · ${dateStr}`;
             select.appendChild(option);
@@ -592,147 +629,17 @@ async function loadReleaseDropdown() {
     }
 }
 
-/**
- * loadSOWItemsForRelease - Punoan ang SOW dropdown sa Release Cash form
- * PURPOSE: Load SOW items based on the selected cash advance's project
- */
-async function loadSOWItemsForRelease() {
-    const cashSelect = document.getElementById('rel-req-id');
-    const sowSelect = document.getElementById('rel-sow');
-    if (!cashSelect || !sowSelect) return;
-
-    const requestId = cashSelect.value;
-    if (!requestId) {
-        sowSelect.innerHTML = '<option value="">— Select SOW Item —</option>';
-        sowSelect.disabled = false;
-        return;
-    }
-
-    const selectedOption = cashSelect.options[cashSelect.selectedIndex];
-    const projectId = selectedOption ? selectedOption.dataset.projectId : '';
-    if (!projectId) {
-        sowSelect.innerHTML = '<option value="">— Select SOW Item —</option>';
-        sowSelect.disabled = false;
-        return;
-    }
-
-    sowSelect.innerHTML = '<option value="">Loading SOW items...</option>';
-    sowSelect.disabled = true;
-
-    try {
-        const sowItems = await DataService.getSOWItemsForProject(projectId);
-        sowSelect.innerHTML = '';
-        const defaultOpt = document.createElement('option');
-        defaultOpt.value = '';
-        defaultOpt.textContent = '— Select SOW Item —';
-        defaultOpt.disabled = true;
-        defaultOpt.selected = true;
-        sowSelect.appendChild(defaultOpt);
-
-        if (sowItems.length === 0) {
-            const noOpt = document.createElement('option');
-            noOpt.value = '';
-            noOpt.textContent = '— No SOW items for this project —';
-            noOpt.disabled = true;
-            sowSelect.appendChild(noOpt);
-        } else {
-            sowItems.forEach(function(item) {
-                const opt = document.createElement('option');
-                opt.value = item.id;
-                opt.textContent = item.id + ' - ' + (item.description || 'No description');
-                sowSelect.appendChild(opt);
-            });
-        }
-        sowSelect.disabled = false;
-    } catch (err) {
-        console.error('Error loading SOW items:', err);
-        sowSelect.innerHTML = '<option value="">Error loading SOW items</option>';
-        sowSelect.disabled = false;
-        UI.toast('Failed to load SOW items.', 'error');
-    }
-}
-
-/**
- * submitReleaseForm - Handles Cash Release submission with SOW linking
- * FIX: Now includes sowId in the payload
- */
-async function submitReleaseForm(e) {
-    e.preventDefault();
-
-    const requestId = document.getElementById('rel-req-id').value;
-    const amount = parseFloat(document.getElementById('rel-amount').value);
-    const sowId = document.getElementById('rel-sow').value;  // ← NEW
-
-    let valid = true;
-
-    if (!requestId) {
-        document.getElementById('rel-req-field').classList.add('error');
-        valid = false;
-    } else {
-        document.getElementById('rel-req-field').classList.remove('error');
-    }
-
-    if (!amount || amount <= 0) {
-        document.getElementById('rel-amount-field').classList.add('error');
-        valid = false;
-    } else {
-        document.getElementById('rel-amount-field').classList.remove('error');
-    }
-
-    // SOW is optional – you can uncomment to make it required:
-    // if (!sowId) {
-    //     document.getElementById('rel-sow-field').classList.add('error');
-    //     valid = false;
-    // } else {
-    //     document.getElementById('rel-sow-field').classList.remove('error');
-    // }
-
-    if (!valid) return false;
-
-    const confirmed = await Confirm.open('Release Cash?', `Release ₱${amount.toFixed(2)}?`);
-    if (!confirmed) return false;
-
-    try {
-        const cashSelect = document.getElementById('rel-req-id');
-        const selectedOption = cashSelect.options[cashSelect.selectedIndex];
-        const projectId = selectedOption ? selectedOption.dataset.projectId : '';
-
-        await DataService.submitRelease({
-            requestId: requestId,
-            amount: amount,
-            projectId: projectId,
-            sowId: sowId   // ← NEW
-        });
-        UI.toast('Cash release submitted for approval!', 'success');
-        document.getElementById('releaseForm').reset();
-        await loadReleaseDropdown();
-        App.navigate('home');
-    } catch (err) {
-        UI.toast('' + err.message, 'error');
-    }
-
-    return false;
-}
-
 // ─── DOM EVENT LISTENERS ───────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Cash Advance – Project & SOW
     const projectSelect = document.getElementById('req-project');
     if (projectSelect) {
         loadProjectsDropdown();
         projectSelect.addEventListener('change', loadSOWItemsForRequest);
     }
     
-    // Record Incoming Cash – Project dropdown
     const rcProjectSelect = document.getElementById('rc-project');
     if (rcProjectSelect) {
         loadIncomingProjectsDropdown();
-    }
-
-    // Release Cash – SOW dropdown on cash advance change
-    const relReqSelect = document.getElementById('rel-req-id');
-    if (relReqSelect) {
-        relReqSelect.addEventListener('change', loadSOWItemsForRelease);
     }
 });
