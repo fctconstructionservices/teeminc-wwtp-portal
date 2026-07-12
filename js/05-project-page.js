@@ -1286,25 +1286,43 @@ renderDailyRecords(p) {
                 const isApproved = group.status === 'approved';
                 const isPending = group.status === 'pending';
                 const isDraft = group.status === 'draft' || !group.status;
+                // FIX (#1): Once submitted (pending) OR approved, nothing in the card is
+                // editable — dropdowns, qty/rate/desc inputs, add/remove buttons all lock.
+                const isLocked = isApproved || isPending;
                 const cardCls = isApproved ? 'approved' : isPending ? 'pending' : 'draft';
-                const readonlyCls = isApproved ? 'readonly' : '';
+                const readonlyCls = isLocked ? 'readonly' : '';
+
+                // FIX (#2): Figure out whether the CURRENT user is the one who submitted
+                // this estimate (via the linked Requests row), so the Approve button and
+                // the "pending" badge only ever show to an approver reviewing someone
+                // else's submission — never to the submitter looking at their own.
+                const currentEmail = ((App.getUser() && App.getUser().email) || '').toLowerCase();
+                const relatedEstimateReq = isPending
+                    ? (p.requests || []).find(r => r.type === 'Estimate' && r.scope === group.sowId && r.status === 'Pending')
+                    : null;
+                const isSubmitter = !!(relatedEstimateReq && relatedEstimateReq.requestorEmail &&
+                    relatedEstimateReq.requestorEmail.toLowerCase() === currentEmail);
+                const canApproveThis = isPending && !isSubmitter && App.isApprover();
+                const hideStatusForSubmitter = isPending && isSubmitter;
 
                 html += `
                         <div class="est-group-card ${cardCls} ${readonlyCls}" data-group-idx="${gIdx}">
                             <div class="eg-header">
                                 <span class="eg-sow">${group.sowId || '—'}</span>
                                 <span class="eg-desc">${group.sowDescription || 'No description'}</span>
-                                <span class="eg-status ${group.status || 'draft'}">${group.status || 'draft'}</span>
+                                ${hideStatusForSubmitter
+                                    ? `<span style="font-size:10.5px;color:var(--ink-soft);">Submitted — awaiting approval</span>`
+                                    : `<span class="eg-status ${group.status || 'draft'}">${group.status || 'draft'}</span>`}
                                 <div class="eg-actions">
-                                    ${isPending ? `<button class="btn-sm success" onclick="ProjectPage.approveEstimateGroup('${gIdx}')">Approve</button>` : ''}
+                                    ${canApproveThis ? `<button class="btn-sm success" onclick="ProjectPage.approveEstimateGroup('${gIdx}')">Approve</button>` : ''}
                                     ${isApproved ? `<span style="font-size:11px;color:var(--green);">${Icon.lock({size:12})} Approved</span>` : ''}
                                 </div>
                             </div>
                             <div class="eg-body">
-                                ${this._renderEstimateCategory('Materials', group.materials || [], gIdx, 'materials', isApproved, approvedMats)}
-                                ${this._renderEstimateCategory('Labor', group.labor || [], gIdx, 'labor', isApproved)}
-                                ${this._renderEstimateCategory('Equipment', group.equipment || [], gIdx, 'equipment', isApproved, approvedEquip)}
-                                ${this._renderEstimateCategory('Indirect Costs', group.indirect || [], gIdx, 'indirect', isApproved)}
+                                ${this._renderEstimateCategory('Materials', group.materials || [], gIdx, 'materials', isLocked, approvedMats)}
+                                ${this._renderEstimateCategory('Labor', group.labor || [], gIdx, 'labor', isLocked)}
+                                ${this._renderEstimateCategory('Equipment', group.equipment || [], gIdx, 'equipment', isLocked, approvedEquip)}
+                                ${this._renderEstimateCategory('Indirect Costs', group.indirect || [], gIdx, 'indirect', isLocked)}
                                 <div class="eg-subtotal">
                                     <span class="eg-subtotal-label">Subtotal</span>
                                     ₱${(group._total || 0).toFixed(2)}
@@ -1328,7 +1346,7 @@ renderDailyRecords(p) {
         container.innerHTML = html;
     },
 
-    _renderEstimateCategory(label, items, gIdx, cat, isApproved, options = []) {
+    _renderEstimateCategory(label, items, gIdx, cat, isLocked, options = []) {
         if (!items) items = [];
         const catKey = cat;
         let html = `
@@ -1354,55 +1372,55 @@ renderDailyRecords(p) {
                     }).join('');
                     html += `
                                 <div class="field"><label>Material</label>
-                                    ${isApproved ? `<span style="font-size:12px;font-weight:500;">${item.materialName || item.material || '—'}</span>` :
+                                    ${isLocked ? `<span style="font-size:12px;font-weight:500;">${item.materialName || item.material || '—'}</span>` :
                                     `<select class="est-mat-select" data-g="${gIdx}" data-idx="${idx}" data-cat="${catKey}" onchange="ProjectPage.selectMaterialForItem(${gIdx},${idx},this)">
                                         <option value="">Select...</option>
                                         ${matOptionsHtml}
                                     </select>`}
                                 </div>
                                 <div class="field"><label>Desc</label>
-                                    ${isApproved ? `<span style="font-size:12px;">${item.desc || '—'}</span>` :
+                                    ${isLocked ? `<span style="font-size:12px;">${item.desc || '—'}</span>` :
                                     `<input type="text" class="est-item-desc" data-g="${gIdx}" data-idx="${idx}" data-cat="${catKey}" value="${item.desc || ''}" onchange="ProjectPage.updateEstimateItem(${gIdx},${idx},'${catKey}','desc',this.value)" />`}
                                 </div>
                                 <div class="field"><label>Qty</label>
-                                    ${isApproved ? `<span style="font-size:12px;">${item.qty || 0}</span>` :
+                                    ${isLocked ? `<span style="font-size:12px;">${item.qty || 0}</span>` :
                                     `<input type="number" class="est-item-qty" data-g="${gIdx}" data-idx="${idx}" data-cat="${catKey}" value="${item.qty || 0}" onchange="ProjectPage.updateEstimateItem(${gIdx},${idx},'${catKey}','qty',parseFloat(this.value)||0)" />`}
                                 </div>
                                 <div class="field"><label>Rate</label>
-                                    ${isApproved ? `<span style="font-size:12px;">₱${(item.rate || 0).toFixed(2)}</span>` :
+                                    ${isLocked ? `<span style="font-size:12px;">₱${(item.rate || 0).toFixed(2)}</span>` :
                                     `<input type="number" class="est-item-rate" data-g="${gIdx}" data-idx="${idx}" data-cat="${catKey}" value="${item.rate || 0}" onchange="ProjectPage.updateEstimateItem(${gIdx},${idx},'${catKey}','rate',parseFloat(this.value)||0)" />`}
                                 </div>
                                 <div class="field"><label>Cost</label>
                                     <span class="cost-display">₱${cost.toFixed(2)}</span>
                                 </div>
-                                ${!isApproved ? `<div class="field"><button class="remove-btn" onclick="ProjectPage.removeEstimateItem(${gIdx},${idx},'${catKey}')">${Icon.close({size:13})}</button></div>` : ''}
+                                ${!isLocked ? `<div class="field"><button class="remove-btn" onclick="ProjectPage.removeEstimateItem(${gIdx},${idx},'${catKey}')">${Icon.close({size:13})}</button></div>` : ''}
                             `;
                 } else if (cat === 'labor') {
                     html += `
                                 <div class="field"><label>Role</label>
-                                    ${isApproved ? `<span style="font-size:12px;font-weight:500;">${item.role || '—'}</span>` :
+                                    ${isLocked ? `<span style="font-size:12px;font-weight:500;">${item.role || '—'}</span>` :
                                     `<input type="text" class="est-item-role" data-g="${gIdx}" data-idx="${idx}" data-cat="${catKey}" value="${item.role || ''}" onchange="ProjectPage.updateEstimateItem(${gIdx},${idx},'${catKey}','role',this.value)" />`}
                                 </div>
                                 <div class="field"><label>Desc</label>
-                                    ${isApproved ? `<span style="font-size:12px;">${item.desc || '—'}</span>` :
+                                    ${isLocked ? `<span style="font-size:12px;">${item.desc || '—'}</span>` :
                                     `<input type="text" class="est-item-desc" data-g="${gIdx}" data-idx="${idx}" data-cat="${catKey}" value="${item.desc || ''}" onchange="ProjectPage.updateEstimateItem(${gIdx},${idx},'${catKey}','desc',this.value)" />`}
                                 </div>
                                 <div class="field"><label>Qty</label>
-                                    ${isApproved ? `<span style="font-size:12px;">${item.qty || 0}</span>` :
+                                    ${isLocked ? `<span style="font-size:12px;">${item.qty || 0}</span>` :
                                     `<input type="number" class="est-item-qty" data-g="${gIdx}" data-idx="${idx}" data-cat="${catKey}" value="${item.qty || 0}" onchange="ProjectPage.updateEstimateItem(${gIdx},${idx},'${catKey}','qty',parseFloat(this.value)||0)" />`}
                                 </div>
                                 <div class="field"><label>Days</label>
-                                    ${isApproved ? `<span style="font-size:12px;">${item.duration || 0}</span>` :
+                                    ${isLocked ? `<span style="font-size:12px;">${item.duration || 0}</span>` :
                                     `<input type="number" class="est-item-duration" data-g="${gIdx}" data-idx="${idx}" data-cat="${catKey}" value="${item.duration || 0}" onchange="ProjectPage.updateEstimateItem(${gIdx},${idx},'${catKey}','duration',parseFloat(this.value)||0)" />`}
                                 </div>
                                 <div class="field"><label>Rate</label>
-                                    ${isApproved ? `<span style="font-size:12px;">₱${(item.rate || 0).toFixed(2)}</span>` :
+                                    ${isLocked ? `<span style="font-size:12px;">₱${(item.rate || 0).toFixed(2)}</span>` :
                                     `<input type="number" class="est-item-rate" data-g="${gIdx}" data-idx="${idx}" data-cat="${catKey}" value="${item.rate || 0}" onchange="ProjectPage.updateEstimateItem(${gIdx},${idx},'${catKey}','rate',parseFloat(this.value)||0)" />`}
                                 </div>
                                 <div class="field"><label>Cost</label>
                                     <span class="cost-display">₱${cost.toFixed(2)}</span>
                                 </div>
-                                ${!isApproved ? `<div class="field"><button class="remove-btn" onclick="ProjectPage.removeEstimateItem(${gIdx},${idx},'${catKey}')">${Icon.close({size:13})}</button></div>` : ''}
+                                ${!isLocked ? `<div class="field"><button class="remove-btn" onclick="ProjectPage.removeEstimateItem(${gIdx},${idx},'${catKey}')">${Icon.close({size:13})}</button></div>` : ''}
                             `;
                 } else if (cat === 'equipment') {
                     const eqOptionsHtml = (options || []).map(e => {
@@ -1412,41 +1430,41 @@ renderDailyRecords(p) {
                     }).join('');
                     html += `
                                 <div class="field"><label>Equipment</label>
-                                    ${isApproved ? `<span style="font-size:12px;font-weight:500;">${item.equipName || item.equipment || '—'}</span>` :
+                                    ${isLocked ? `<span style="font-size:12px;font-weight:500;">${item.equipName || item.equipment || '—'}</span>` :
                                     `<select class="est-eq-select" data-g="${gIdx}" data-idx="${idx}" data-cat="${catKey}" onchange="ProjectPage.selectEquipmentForItem(${gIdx},${idx},this)">
                                         <option value="">Select...</option>
                                         ${eqOptionsHtml}
                                     </select>`}
                                 </div>
                                 <div class="field"><label>Desc</label>
-                                    ${isApproved ? `<span style="font-size:12px;">${item.desc || '—'}</span>` :
+                                    ${isLocked ? `<span style="font-size:12px;">${item.desc || '—'}</span>` :
                                     `<input type="text" class="est-item-desc" data-g="${gIdx}" data-idx="${idx}" data-cat="${catKey}" value="${item.desc || ''}" onchange="ProjectPage.updateEstimateItem(${gIdx},${idx},'${catKey}','desc',this.value)" />`}
                                 </div>
                                 <div class="field"><label>Qty</label>
-                                    ${isApproved ? `<span style="font-size:12px;">${item.qty || 0}</span>` :
+                                    ${isLocked ? `<span style="font-size:12px;">${item.qty || 0}</span>` :
                                     `<input type="number" class="est-item-qty" data-g="${gIdx}" data-idx="${idx}" data-cat="${catKey}" value="${item.qty || 0}" onchange="ProjectPage.updateEstimateItem(${gIdx},${idx},'${catKey}','qty',parseFloat(this.value)||0)" />`}
                                 </div>
                                 <div class="field"><label>Days</label>
-                                    ${isApproved ? `<span style="font-size:12px;">${item.duration || 0}</span>` :
+                                    ${isLocked ? `<span style="font-size:12px;">${item.duration || 0}</span>` :
                                     `<input type="number" class="est-item-duration" data-g="${gIdx}" data-idx="${idx}" data-cat="${catKey}" value="${item.duration || 0}" onchange="ProjectPage.updateEstimateItem(${gIdx},${idx},'${catKey}','duration',parseFloat(this.value)||0)" />`}
                                 </div>
                                 <div class="field"><label>Rate</label>
-                                    ${isApproved ? `<span style="font-size:12px;">₱${(item.rate || 0).toFixed(2)}</span>` :
+                                    ${isLocked ? `<span style="font-size:12px;">₱${(item.rate || 0).toFixed(2)}</span>` :
                                     `<input type="number" class="est-item-rate" data-g="${gIdx}" data-idx="${idx}" data-cat="${catKey}" value="${item.rate || 0}" onchange="ProjectPage.updateEstimateItem(${gIdx},${idx},'${catKey}','rate',parseFloat(this.value)||0)" />`}
                                 </div>
                                 <div class="field"><label>Cost</label>
                                     <span class="cost-display">₱${cost.toFixed(2)}</span>
                                 </div>
-                                ${!isApproved ? `<div class="field"><button class="remove-btn" onclick="ProjectPage.removeEstimateItem(${gIdx},${idx},'${catKey}')">${Icon.close({size:13})}</button></div>` : ''}
+                                ${!isLocked ? `<div class="field"><button class="remove-btn" onclick="ProjectPage.removeEstimateItem(${gIdx},${idx},'${catKey}')">${Icon.close({size:13})}</button></div>` : ''}
                             `;
                 } else if (cat === 'indirect') {
                     html += `
                                 <div class="field"><label>Desc</label>
-                                    ${isApproved ? `<span style="font-size:12px;">${item.desc || '—'}</span>` :
+                                    ${isLocked ? `<span style="font-size:12px;">${item.desc || '—'}</span>` :
                                     `<input type="text" class="est-item-desc" data-g="${gIdx}" data-idx="${idx}" data-cat="${catKey}" value="${item.desc || ''}" onchange="ProjectPage.updateEstimateItem(${gIdx},${idx},'${catKey}','desc',this.value)" />`}
                                 </div>
                                 <div class="field"><label>Type</label>
-                                    ${isApproved ? `<span style="font-size:12px;">${item.type || '—'}</span>` :
+                                    ${isLocked ? `<span style="font-size:12px;">${item.type || '—'}</span>` :
                                     `<select class="est-item-type" data-g="${gIdx}" data-idx="${idx}" data-cat="${catKey}" onchange="ProjectPage.updateEstimateItem(${gIdx},${idx},'${catKey}','type',this.value)">
                                         <option value="Contingency" ${item.type === 'Contingency' ? 'selected' : ''}>Contingency</option>
                                         <option value="VAT" ${item.type === 'VAT' ? 'selected' : ''}>VAT</option>
@@ -1456,13 +1474,13 @@ renderDailyRecords(p) {
                                     </select>`}
                                 </div>
                                 <div class="field"><label>Amount</label>
-                                    ${isApproved ? `<span style="font-size:12px;">₱${(item.amount || 0).toFixed(2)}</span>` :
+                                    ${isLocked ? `<span style="font-size:12px;">₱${(item.amount || 0).toFixed(2)}</span>` :
                                     `<input type="number" class="est-item-amount" data-g="${gIdx}" data-idx="${idx}" data-cat="${catKey}" value="${item.amount || 0}" onchange="ProjectPage.updateEstimateItem(${gIdx},${idx},'${catKey}','amount',parseFloat(this.value)||0)" />`}
                                 </div>
                                 <div class="field"><label>Cost</label>
                                     <span class="cost-display">₱${cost.toFixed(2)}</span>
                                 </div>
-                                ${!isApproved ? `<div class="field"><button class="remove-btn" onclick="ProjectPage.removeEstimateItem(${gIdx},${idx},'${catKey}')">${Icon.close({size:13})}</button></div>` : ''}
+                                ${!isLocked ? `<div class="field"><button class="remove-btn" onclick="ProjectPage.removeEstimateItem(${gIdx},${idx},'${catKey}')">${Icon.close({size:13})}</button></div>` : ''}
                             `;
                 }
 
@@ -1472,7 +1490,7 @@ renderDailyRecords(p) {
 
         html += `
                     </div>
-                    ${!isApproved ? `<div class="eg-add-btn"><button class="btn-sm" onclick="ProjectPage.addEstimateItem(${gIdx},'${catKey}')">+ Add</button></div>` : ''}
+                    ${!isLocked ? `<div class="eg-add-btn"><button class="btn-sm" onclick="ProjectPage.addEstimateItem(${gIdx},'${catKey}')">+ Add</button></div>` : ''}
                 </div>`;
         return html;
     },
@@ -1481,7 +1499,7 @@ renderDailyRecords(p) {
         const est = this._estimatesData;
         if (!est || !est.groups[gIdx]) { UI.toast('Group not found.', 'error'); return; }
         const group = est.groups[gIdx];
-        if (group.status === 'approved') { UI.toast('Cannot edit approved estimate.', 'error'); return; }
+        if (group.status === 'approved' || group.status === 'pending') { UI.toast('This estimate has been submitted and can no longer be edited.', 'error'); return; }
         const newItem = { id: 'est-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4) };
         if (cat === 'materials') { newItem.material = '';
             newItem.materialName = '';
@@ -1510,7 +1528,7 @@ renderDailyRecords(p) {
         const est = this._estimatesData;
         if (!est || !est.groups[gIdx]) { UI.toast('Group not found.', 'error'); return; }
         const group = est.groups[gIdx];
-        if (group.status === 'approved') { UI.toast('Cannot edit approved estimate.', 'error'); return; }
+        if (group.status === 'approved' || group.status === 'pending') { UI.toast('This estimate has been submitted and can no longer be edited.', 'error'); return; }
         if (group[cat] && group[cat].length > idx) {
             group[cat].splice(idx, 1);
             this.renderEstimates(this._data);
@@ -1521,7 +1539,7 @@ renderDailyRecords(p) {
         const est = this._estimatesData;
         if (!est || !est.groups[gIdx]) return;
         const group = est.groups[gIdx];
-        if (group.status === 'approved') return;
+        if (group.status === 'approved' || group.status === 'pending') return;
         const item = group[cat] && group[cat][idx];
         if (!item) return;
         item[field] = value;
@@ -1565,7 +1583,7 @@ renderDailyRecords(p) {
         const est = this._estimatesData;
         if (!est || !est.groups[gIdx]) return;
         const group = est.groups[gIdx];
-        if (group.status === 'approved') return;
+        if (group.status === 'approved' || group.status === 'pending') return;
         const item = group.materials && group.materials[idx];
         if (!item) return;
 
@@ -1603,7 +1621,7 @@ renderDailyRecords(p) {
         const est = this._estimatesData;
         if (!est || !est.groups[gIdx]) return;
         const group = est.groups[gIdx];
-        if (group.status === 'approved') return;
+        if (group.status === 'approved' || group.status === 'pending') return;
         const item = group.equipment && group.equipment[idx];
         if (!item) return;
 
@@ -1668,6 +1686,12 @@ renderDailyRecords(p) {
         const confirmed = await Confirm.open('Submit for Approval?',
             `Submit ${group.sowId} — ${group.sowDescription} for approval?`);
         if (!confirmed) return;
+
+        // FIX (#3): Give the user visible feedback that submission is in progress.
+        const submitBtn = document.querySelector(`.est-group-card[data-group-idx="${gIdx}"] .eg-footer-actions button`);
+        const originalLabel = submitBtn ? submitBtn.textContent : '';
+        if (submitBtn) { submitBtn.textContent = 'Submitting...'; submitBtn.disabled = true; }
+
         try {
             // FIX (#1): Persist the current line items first. Submitting for approval
             // previously only flipped the status flag — the materials/labor/equipment/
@@ -1679,7 +1703,10 @@ renderDailyRecords(p) {
             this.renderEstimates(this._data);
             UI.toast(`${group.sowId} submitted for approval.`, 'success');
             this._updateApprovalBadge();
-        } catch (err) { UI.toast('' + err.message, 'error'); }
+        } catch (err) {
+            UI.toast('' + err.message, 'error');
+            if (submitBtn) { submitBtn.textContent = originalLabel; submitBtn.disabled = false; }
+        }
     },
 
     async approveEstimateGroup(gIdx) {
