@@ -37,7 +37,23 @@ const ProjectPage = {
             
             this._data = p;
             this._estimatesData = p.estimates || { groups: [] };
-            
+
+            // FIX (#4/#5): Estimate dropdowns must be built from APPROVED Materials/Equipment
+            // only (by name), not the full/raw list keyed by ID. Fetch fresh so this works
+            // regardless of whether the Materials/Equipment pages have been visited yet.
+            try {
+                this._approvedMaterials = await DataService.getMaterials('approved');
+            } catch (e) {
+                console.error('Failed to load approved materials:', e);
+                this._approvedMaterials = [];
+            }
+            try {
+                this._approvedEquipment = await DataService.getEquipment('approved');
+            } catch (e) {
+                console.error('Failed to load approved equipment:', e);
+                this._approvedEquipment = [];
+            }
+
             // Ensure SOW items have corresponding estimate groups
             p.sowItems.forEach(sow => {
                 if (!this._estimatesData.groups.find(g => g.sowId === sow.id)) {
@@ -1235,15 +1251,12 @@ renderDailyRecords(p) {
         const container = document.getElementById('proj-tab-estimates');
         const est = this._estimatesData || { groups: [] };
 
-        const allMat = DataService._materials || [];
-        const matOptions = allMat.map(m =>
-            `<option value="${m.id}" data-name="${m.brand || m.name} ${m.specs || ''}" data-rate="${m.rate || 0}">${m.id} - ${m.brand || m.name} ${m.specs || ''}</option>`
-        ).join('');
-
-        const allEq = DataService._equipment || [];
-        const eqOptions = allEq.map(e =>
-            `<option value="${e.id}" data-name="${e.brand || e.name} ${e.model || ''}" data-rate="${e.rate || 0}">${e.id} - ${e.brand || e.name} ${e.model || ''}</option>`
-        ).join('');
+        // FIX (#4/#5): Dropdowns are built from APPROVED materials/equipment only, and
+        // each row's <select> renders its own options so the correct one can be marked
+        // `selected` (see _renderEstimateCategory) — both the label shown and the name
+        // stored on the item are the material/equipment's NAME, not its ID.
+        const approvedMats = this._approvedMaterials || [];
+        const approvedEquip = this._approvedEquipment || [];
 
         let grandTotal = 0;
         est.groups.forEach(g => {
@@ -1283,24 +1296,22 @@ renderDailyRecords(p) {
                                 <span class="eg-desc">${group.sowDescription || 'No description'}</span>
                                 <span class="eg-status ${group.status || 'draft'}">${group.status || 'draft'}</span>
                                 <div class="eg-actions">
-                                    ${!isApproved ? `<button class="btn-sm primary" onclick="ProjectPage.addEstimateItem('${gIdx}','materials')">+ Mat</button>` : ''}
-                                    ${!isApproved ? `<button class="btn-sm primary" onclick="ProjectPage.addEstimateItem('${gIdx}','labor')">+ Lab</button>` : ''}
-                                    ${!isApproved ? `<button class="btn-sm primary" onclick="ProjectPage.addEstimateItem('${gIdx}','equipment')">+ Eq</button>` : ''}
-                                    ${!isApproved ? `<button class="btn-sm primary" onclick="ProjectPage.addEstimateItem('${gIdx}','indirect')">+ Ind</button>` : ''}
-                                    ${isDraft ? `<button class="btn-sm amber" onclick="ProjectPage.submitEstimateGroup('${gIdx}')">Submit</button>` : ''}
                                     ${isPending ? `<button class="btn-sm success" onclick="ProjectPage.approveEstimateGroup('${gIdx}')">Approve</button>` : ''}
                                     ${isApproved ? `<span style="font-size:11px;color:var(--green);">${Icon.lock({size:12})} Approved</span>` : ''}
                                 </div>
                             </div>
                             <div class="eg-body">
-                                ${this._renderEstimateCategory('Materials', group.materials || [], gIdx, 'materials', isApproved, matOptions)}
+                                ${this._renderEstimateCategory('Materials', group.materials || [], gIdx, 'materials', isApproved, approvedMats)}
                                 ${this._renderEstimateCategory('Labor', group.labor || [], gIdx, 'labor', isApproved)}
-                                ${this._renderEstimateCategory('Equipment', group.equipment || [], gIdx, 'equipment', isApproved, eqOptions)}
+                                ${this._renderEstimateCategory('Equipment', group.equipment || [], gIdx, 'equipment', isApproved, approvedEquip)}
                                 ${this._renderEstimateCategory('Indirect Costs', group.indirect || [], gIdx, 'indirect', isApproved)}
                                 <div class="eg-subtotal">
                                     <span class="eg-subtotal-label">Subtotal</span>
                                     ₱${(group._total || 0).toFixed(2)}
                                 </div>
+                                ${isDraft ? `<div class="eg-footer-actions" style="margin-top:12px;display:flex;justify-content:flex-end;border-top:1px dashed var(--line);padding-top:12px;">
+                                    <button class="btn-sm amber" onclick="ProjectPage.submitEstimateGroup('${gIdx}')">Submit for Approval</button>
+                                </div>` : ''}
                             </div>
                         </div>`;
             });
@@ -1317,7 +1328,7 @@ renderDailyRecords(p) {
         container.innerHTML = html;
     },
 
-    _renderEstimateCategory(label, items, gIdx, cat, isApproved, options = '') {
+    _renderEstimateCategory(label, items, gIdx, cat, isApproved, options = []) {
         if (!items) items = [];
         const catKey = cat;
         let html = `
@@ -1336,12 +1347,17 @@ renderDailyRecords(p) {
                 html += `<div class="eg-item-row" data-item-idx="${idx}" data-cat="${catKey}">`;
 
                 if (cat === 'materials') {
+                    const matOptionsHtml = (options || []).map(m => {
+                        const label = ProjectPage._materialLabel(m);
+                        const sel = String(item.material) === String(m.id) ? 'selected' : '';
+                        return `<option value="${m.id}" data-name="${label}" data-rate="${m.rate || 0}" ${sel}>${label}</option>`;
+                    }).join('');
                     html += `
                                 <div class="field"><label>Material</label>
                                     ${isApproved ? `<span style="font-size:12px;font-weight:500;">${item.materialName || item.material || '—'}</span>` :
-                                    `<select class="est-mat-select" data-g="${gIdx}" data-idx="${idx}" data-cat="${catKey}" onchange="ProjectPage.updateEstimateItem(${gIdx},${idx},'${catKey}','material',this.value)">
+                                    `<select class="est-mat-select" data-g="${gIdx}" data-idx="${idx}" data-cat="${catKey}" onchange="ProjectPage.selectMaterialForItem(${gIdx},${idx},this)">
                                         <option value="">Select...</option>
-                                        ${options}
+                                        ${matOptionsHtml}
                                     </select>`}
                                 </div>
                                 <div class="field"><label>Desc</label>
@@ -1389,12 +1405,17 @@ renderDailyRecords(p) {
                                 ${!isApproved ? `<div class="field"><button class="remove-btn" onclick="ProjectPage.removeEstimateItem(${gIdx},${idx},'${catKey}')">${Icon.close({size:13})}</button></div>` : ''}
                             `;
                 } else if (cat === 'equipment') {
+                    const eqOptionsHtml = (options || []).map(e => {
+                        const label = ProjectPage._equipmentLabel(e);
+                        const sel = String(item.equipment) === String(e.id) ? 'selected' : '';
+                        return `<option value="${e.id}" data-name="${label}" data-rate="${e.rate || 0}" ${sel}>${label}</option>`;
+                    }).join('');
                     html += `
                                 <div class="field"><label>Equipment</label>
                                     ${isApproved ? `<span style="font-size:12px;font-weight:500;">${item.equipName || item.equipment || '—'}</span>` :
-                                    `<select class="est-eq-select" data-g="${gIdx}" data-idx="${idx}" data-cat="${catKey}" onchange="ProjectPage.updateEstimateItem(${gIdx},${idx},'${catKey}','equipment',this.value)">
+                                    `<select class="est-eq-select" data-g="${gIdx}" data-idx="${idx}" data-cat="${catKey}" onchange="ProjectPage.selectEquipmentForItem(${gIdx},${idx},this)">
                                         <option value="">Select...</option>
-                                        ${options}
+                                        ${eqOptionsHtml}
                                     </select>`}
                                 </div>
                                 <div class="field"><label>Desc</label>
@@ -1515,6 +1536,100 @@ renderDailyRecords(p) {
         this.renderEstimates(this._data);
     },
 
+    /**
+     * _materialLabel - Human-readable name for a Material record.
+     * PURPOSE (#4): Estimate dropdowns must show/store the material's NAME, not its ID.
+     */
+    _materialLabel(m) {
+        if (!m) return '';
+        return m.name || [m.brand, m.specs].filter(Boolean).join(' ') || m.id;
+    },
+
+    /**
+     * _equipmentLabel - Human-readable name for an Equipment record.
+     * PURPOSE (#5): Estimate dropdowns must show/store the equipment's NAME, not its ID.
+     */
+    _equipmentLabel(e) {
+        if (!e) return '';
+        return e.name || [e.brand, e.model].filter(Boolean).join(' ') || e.id;
+    },
+
+    /**
+     * selectMaterialForItem - Handles picking a material in an estimate row.
+     * FIX (#4): Stores the material's NAME (materialName) alongside its ID, and
+     * auto-fills the rate from the Materials master list.
+     * FIX (#6): Blocks picking a material that's already used elsewhere in this
+     * same SOW estimate (no duplicate material lines per SOW).
+     */
+    selectMaterialForItem(gIdx, idx, selectEl) {
+        const est = this._estimatesData;
+        if (!est || !est.groups[gIdx]) return;
+        const group = est.groups[gIdx];
+        if (group.status === 'approved') return;
+        const item = group.materials && group.materials[idx];
+        if (!item) return;
+
+        const materialId = selectEl.value;
+        if (!materialId) {
+            item.material = '';
+            item.materialName = '';
+            this.renderEstimates(this._data);
+            return;
+        }
+
+        const isDuplicate = group.materials.some((m, i) => i !== idx && String(m.material) === String(materialId));
+        if (isDuplicate) {
+            UI.toast('This material is already added to this SOW estimate. Adjust the qty on the existing line instead.', 'error');
+            selectEl.value = item.material || '';
+            return;
+        }
+
+        const opt = selectEl.selectedOptions[0];
+        item.material = materialId;
+        item.materialName = opt ? opt.dataset.name : '';
+        item.rate = opt ? (parseFloat(opt.dataset.rate) || 0) : (item.rate || 0);
+        item.cost = (parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0);
+        this.renderEstimates(this._data);
+    },
+
+    /**
+     * selectEquipmentForItem - Handles picking equipment in an estimate row.
+     * FIX (#5): Stores the equipment's NAME (equipName) alongside its ID, and
+     * auto-fills the rate from the Equipment master list.
+     * FIX (#6): Blocks picking equipment that's already used elsewhere in this
+     * same SOW estimate (no duplicate equipment lines per SOW).
+     */
+    selectEquipmentForItem(gIdx, idx, selectEl) {
+        const est = this._estimatesData;
+        if (!est || !est.groups[gIdx]) return;
+        const group = est.groups[gIdx];
+        if (group.status === 'approved') return;
+        const item = group.equipment && group.equipment[idx];
+        if (!item) return;
+
+        const equipId = selectEl.value;
+        if (!equipId) {
+            item.equipment = '';
+            item.equipName = '';
+            this.renderEstimates(this._data);
+            return;
+        }
+
+        const isDuplicate = group.equipment.some((e, i) => i !== idx && String(e.equipment) === String(equipId));
+        if (isDuplicate) {
+            UI.toast('This equipment is already added to this SOW estimate. Adjust the qty/duration on the existing line instead.', 'error');
+            selectEl.value = item.equipment || '';
+            return;
+        }
+
+        const opt = selectEl.selectedOptions[0];
+        item.equipment = equipId;
+        item.equipName = opt ? opt.dataset.name : '';
+        item.rate = opt ? (parseFloat(opt.dataset.rate) || 0) : (item.rate || 0);
+        item.cost = (parseFloat(item.qty) || 0) * (parseFloat(item.duration) || 0) * (parseFloat(item.rate) || 0);
+        this.renderEstimates(this._data);
+    },
+
     addSOWGroup() {
         const est = this._estimatesData;
         const p = this._data;
@@ -1554,6 +1669,11 @@ renderDailyRecords(p) {
             `Submit ${group.sowId} — ${group.sowDescription} for approval?`);
         if (!confirmed) return;
         try {
+            // FIX (#1): Persist the current line items first. Submitting for approval
+            // previously only flipped the status flag — the materials/labor/equipment/
+            // indirect rows the user just edited were never saved to the sheets, so the
+            // eventual approved total (and the SOW Budget it feeds) could be wrong or zero.
+            await DataService.saveEstimates(this._currentProjectId, est.groups);
             await DataService.submitEstimatesForApproval(this._currentProjectId, group.sowId);
             group.status = 'pending';
             this.renderEstimates(this._data);
@@ -1568,14 +1688,16 @@ renderDailyRecords(p) {
         const group = est.groups[gIdx];
         if (group.status !== 'pending') { UI.toast('Only pending estimates can be approved.', 'error'); return; }
         const confirmed = await Confirm.open('Approve Estimate?',
-            `Approve ${group.sowId} — ${group.sowDescription}? This will lock it from further edits.`);
+            `Approve ${group.sowId} — ${group.sowDescription}? This will lock it from further edits and set it as this SOW's official Budget.`);
         if (!confirmed) return;
         try {
             await DataService.approveEstimates(this._currentProjectId, group.sowId);
-            group.status = 'approved';
-            this.renderEstimates(this._data);
-            UI.toast(`${group.sowId} approved and locked.`, 'success');
+            UI.toast(`${group.sowId} approved and locked. SOW Budget updated.`, 'success');
             this._updateApprovalBadge();
+            // FIX (#1): Reload the full project so the SOW Budget tab picks up the new
+            // Budget figure that the backend just synced from this approved estimate.
+            await this.open(this._currentProjectId);
+            this.switchTab('estimates');
         } catch (err) { UI.toast('' + err.message, 'error'); }
     },
 
