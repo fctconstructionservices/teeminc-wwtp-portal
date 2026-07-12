@@ -173,14 +173,240 @@ async function loadSOWItemsForRequest() {
     }
 }
 
-// ─── RECORD INCOMING CASH FORM (UPDATED) ──────────────────────
+/**
+ * submitRequestForm - Handles Cash Advance request submission
+ */
+async function submitRequestForm(e) {
+    e.preventDefault();
+
+    const project = document.getElementById('req-project').value;
+    const description = document.getElementById('req-desc').value.trim();
+    const amount = parseFloat(document.getElementById('req-amount').value);
+    const requestType = document.getElementById('req-type').value;
+    const scopeOfWork = document.getElementById('req-scope').value.trim();
+    const dateNeeded = document.getElementById('req-date').value;
+    const fileInput = document.getElementById('req-file');
+
+    let valid = true;
+    let missingFields = [];
+    
+    if (!project) {
+        document.getElementById('req-project-field').classList.add('error');
+        valid = false;
+        missingFields.push('Project');
+    } else {
+        document.getElementById('req-project-field').classList.remove('error');
+    }
+    
+    if (!description) {
+        document.getElementById('req-desc-field').classList.add('error');
+        valid = false;
+        missingFields.push('Description');
+    } else {
+        document.getElementById('req-desc-field').classList.remove('error');
+    }
+
+    if (!scopeOfWork) {
+        document.getElementById('req-scope-field').classList.add('error');
+        valid = false;
+        missingFields.push('SOW Item');
+    } else {
+        document.getElementById('req-scope-field').classList.remove('error');
+    }
+    
+    if (!amount || amount <= 0) {
+        document.getElementById('req-amount-field').classList.add('error');
+        valid = false;
+        missingFields.push('Amount');
+    } else {
+        document.getElementById('req-amount-field').classList.remove('error');
+    }
+    
+    if (!dateNeeded) {
+        document.getElementById('req-date-field').classList.add('error');
+        valid = false;
+        missingFields.push('Date Needed');
+    } else {
+        document.getElementById('req-date-field').classList.remove('error');
+    }
+
+    const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
+    if (!hasFile) {
+        document.getElementById('req-file-field').classList.add('error');
+        valid = false;
+        missingFields.push('Quotation/Basis file');
+    } else {
+        document.getElementById('req-file-field').classList.remove('error');
+    }
+    
+    if (!valid) {
+        UI.toast(`Please fill in all required fields: ${missingFields.join(', ')}`, 'error');
+        return false;
+    }
+
+    const confirmed = await Confirm.open('Submit Request?', `Submit for ₱${amount.toFixed(2)}?`);
+    if (!confirmed) return false;
+
+    const resultDiv = document.getElementById('submissionResult');
+    if (resultDiv) {
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = `
+            <div style="display:flex;gap:10px;align-items:center;color:var(--ink);">
+                <span class="loader" style="width:20px;height:20px;border-width:2px;"></span>
+                Submitting…
+            </div>
+        `;
+        resultDiv.style.background = 'var(--blueprint-tint)';
+        resultDiv.style.color = 'var(--ink)';
+    }
+
+    try {
+        const payload = {
+            project, 
+            description, 
+            amount, 
+            requestType, 
+            scopeOfWork, 
+            dateNeeded
+        };
+
+        if (fileInput && fileInput.files.length > 0) {
+            const file = fileInput.files[0];
+            payload.fileBase64 = await fileToBase64_(file);
+            payload.fileName = file.name;
+            payload.fileMimeType = file.type;
+        }
+
+        const data = await DataService.submitCashAdvance(payload);
+        UI.toast(`Request submitted successfully!`, 'success');
+
+        if (resultDiv) {
+            resultDiv.style.background = '#E7F3EA';
+            resultDiv.style.color = '#1C2321';
+            resultDiv.innerHTML = `
+                <div style="display:flex;gap:10px;align-items:center;">
+                    <span>${Icon.checkCircle({size:20})}</span>
+                    <strong>Request submitted successfully!</strong>
+                </div>
+            `;
+            clearTimeout(resultDiv._hideTimer);
+            resultDiv._hideTimer = setTimeout(() => { 
+                resultDiv.style.display = 'none'; 
+            }, 3000);
+        }
+
+        document.getElementById('requestForm').reset();
+        if (fileInput) fileInput.value = '';
+
+        if (typeof HomePage !== 'undefined' && HomePage.load) {
+            HomePage.load();
+        }
+
+    } catch (err) {
+        console.error('Submission error:', err);
+        UI.toast('' + err.message, 'error');
+
+        if (resultDiv) {
+            resultDiv.style.background = '#FAEBE9';
+            resultDiv.style.color = '#1C2321';
+            resultDiv.innerHTML = `
+                <div style="display:flex;gap:12px;align-items:center;">
+                    <span>${Icon.xCircle({size:28})}</span>
+                    <div>
+                        <strong style="color:#B23A2E;">Submission failed</strong>
+                        <br /><span style="font-size:13px;color:#5B6360;">${err.message}</span>
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * fileToBase64_ - Convert a File object to base64 string
+ */
+function fileToBase64_(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const base64 = reader.result.split(',')[1];
+            resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
+// ─── LIQUIDATE FORM ──────────────────────────────────────────────────
+
+async function submitLiquidateForm(e) {
+    e.preventDefault();
+    
+    const requestId = document.getElementById('liq-req-id').value;
+    const receiptNo = document.getElementById('liq-receipt').value.trim();
+    const amount = parseFloat(document.getElementById('liq-amount').value);
+    const description = document.getElementById('liq-desc').value.trim();
+    
+    let valid = true;
+    
+    if (!requestId) { 
+        document.getElementById('liq-req-field').classList.add('error');
+        valid = false; 
+    } else { 
+        document.getElementById('liq-req-field').classList.remove('error'); 
+    }
+    
+    if (!receiptNo) { 
+        document.getElementById('liq-receipt-field').classList.add('error');
+        valid = false; 
+    } else { 
+        document.getElementById('liq-receipt-field').classList.remove('error'); 
+    }
+    
+    if (!amount || amount <= 0) { 
+        document.getElementById('liq-amount-field').classList.add('error');
+        valid = false; 
+    } else { 
+        document.getElementById('liq-amount-field').classList.remove('error'); 
+    }
+    
+    if (!description) { 
+        document.getElementById('liq-desc-field').classList.add('error');
+        valid = false; 
+    } else { 
+        document.getElementById('liq-desc-field').classList.remove('error'); 
+    }
+    
+    if (!valid) return false;
+    
+    const confirmed = await Confirm.open('Submit Liquidation?', `Liquidate ${requestId}?`);
+    if (!confirmed) return false;
+    
+    try {
+        await DataService.submitLiquidation({ 
+            requestId, 
+            receiptNo, 
+            amount, 
+            description 
+        });
+        
+        UI.toast('Liquidation submitted!', 'success');
+        document.getElementById('liquidateForm').reset();
+        App.navigate('home');
+    } catch (err) { 
+        UI.toast('' + err.message, 'error'); 
+    }
+    
+    return false;
+}
+
+// ─── RECORD INCOMING CASH FORM ──────────────────────────────────────
 
 /**
  * submitRecordCashForm - Handles Incoming Cash recording with approval
- * 
  * PURPOSE: Records incoming cash transactions with proof attachment
- * Supports file upload for transfer receipts
- * 
  * FIX: All fields are now required
  * FIX: Creates a request that requires approval
  * FIX: Project dropdown shows ongoing projects only
@@ -188,7 +414,6 @@ async function loadSOWItemsForRequest() {
 async function submitRecordCashForm(e) {
     e.preventDefault();
     
-    // Get form values
     const type = document.getElementById('rc-type').value;
     const description = document.getElementById('rc-desc').value.trim();
     const amount = parseFloat(document.getElementById('rc-amount').value);
@@ -202,7 +427,6 @@ async function submitRecordCashForm(e) {
     let valid = true;
     let missingFields = [];
     
-    // Validate Type
     if (!type) {
         document.getElementById('rc-type-field').classList.add('error');
         valid = false;
@@ -211,7 +435,6 @@ async function submitRecordCashForm(e) {
         document.getElementById('rc-type-field').classList.remove('error');
     }
     
-    // Validate Description
     if (!description) {
         document.getElementById('rc-desc-field').classList.add('error');
         valid = false;
@@ -220,7 +443,6 @@ async function submitRecordCashForm(e) {
         document.getElementById('rc-desc-field').classList.remove('error');
     }
     
-    // Validate Amount
     if (!amount || amount <= 0) {
         document.getElementById('rc-amount-field').classList.add('error');
         valid = false;
@@ -229,7 +451,6 @@ async function submitRecordCashForm(e) {
         document.getElementById('rc-amount-field').classList.remove('error');
     }
     
-    // Validate Payment Method
     if (!method) {
         document.getElementById('rc-method-field').classList.add('error');
         valid = false;
@@ -238,7 +459,6 @@ async function submitRecordCashForm(e) {
         document.getElementById('rc-method-field').classList.remove('error');
     }
     
-    // Validate Reference Number
     if (!reference) {
         document.getElementById('rc-ref-field').classList.add('error');
         valid = false;
@@ -247,7 +467,6 @@ async function submitRecordCashForm(e) {
         document.getElementById('rc-ref-field').classList.remove('error');
     }
     
-    // Validate Date
     if (!date) {
         document.getElementById('rc-date-field').classList.add('error');
         valid = false;
@@ -256,7 +475,6 @@ async function submitRecordCashForm(e) {
         document.getElementById('rc-date-field').classList.remove('error');
     }
     
-    // Validate Project
     if (!project) {
         document.getElementById('rc-project-field').classList.add('error');
         valid = false;
@@ -265,7 +483,6 @@ async function submitRecordCashForm(e) {
         document.getElementById('rc-project-field').classList.remove('error');
     }
     
-    // Validate File Upload (now required)
     const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
     if (!hasFile) {
         document.getElementById('rc-file-field').classList.add('error');
@@ -275,7 +492,6 @@ async function submitRecordCashForm(e) {
         document.getElementById('rc-file-field').classList.remove('error');
     }
     
-    // If validation fails
     if (!valid) {
         UI.toast(`Please fill in all required fields: ${missingFields.join(', ')}`, 'error');
         return false;
@@ -304,7 +520,6 @@ async function submitRecordCashForm(e) {
             project
         };
         
-        // Handle file attachment
         if (fileInput && fileInput.files.length > 0) {
             const file = fileInput.files[0];
             payload.fileBase64 = await fileToBase64_(file);
@@ -319,7 +534,6 @@ async function submitRecordCashForm(e) {
         if (fileInput) fileInput.value = '';
         App.navigate('home');
         
-        // Reload home to update pending count
         if (typeof HomePage !== 'undefined' && HomePage.load) {
             HomePage.load();
         }
@@ -335,65 +549,95 @@ async function submitRecordCashForm(e) {
     return false;
 }
 
-/**
- * submitRequestForm - Handles Cash Advance request submission
- * (Unchanged — keep as is)
- */
-async function submitRequestForm(e) {
-    // ... existing code (unchanged) ...
-}
+// ─── RELEASE CASH FORM ──────────────────────────────────────────────
 
-/**
- * submitLiquidateForm - Handles Liquidation submission
- * (Unchanged — keep as is)
- */
-async function submitLiquidateForm(e) {
-    // ... existing code (unchanged) ...
-}
-
-/**
- * submitReleaseForm - Handles Cash Release submission
- * (Unchanged — keep as is)
- */
 async function submitReleaseForm(e) {
-    // ... existing code (unchanged) ...
-}
-
-/**
- * fileToBase64_ - Convert a File object to base64 string
- * (Unchanged — keep as is)
- */
-function fileToBase64_(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-            const base64 = reader.result.split(',')[1];
-            resolve(base64);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-    });
+    e.preventDefault();
+    
+    const requestId = document.getElementById('rel-req-id').value;
+    const amount = parseFloat(document.getElementById('rel-amount').value);
+    
+    let valid = true;
+    
+    if (!requestId) { 
+        document.getElementById('rel-req-field').classList.add('error');
+        valid = false; 
+    } else { 
+        document.getElementById('rel-req-field').classList.remove('error'); 
+    }
+    
+    if (!amount || amount <= 0) { 
+        document.getElementById('rel-amount-field').classList.add('error');
+        valid = false; 
+    } else { 
+        document.getElementById('rel-amount-field').classList.remove('error'); 
+    }
+    
+    if (!valid) return false;
+    
+    const confirmed = await Confirm.open('Release Cash?', `Release ₱${amount.toFixed(2)}?`);
+    if (!confirmed) return false;
+    
+    try {
+        await DataService.submitRelease({ requestId, amount });
+        UI.toast('Cash released!', 'success');
+        document.getElementById('releaseForm').reset();
+        await loadReleaseDropdown();
+        App.navigate('home');
+    } catch (err) { 
+        UI.toast('' + err.message, 'error'); 
+    }
+    
+    return false;
 }
 
 /**
  * loadReleaseDropdown - I-load ang approved cash advances sa dropdown
- * (Unchanged — keep as is)
  */
 async function loadReleaseDropdown() {
-    // ... existing code (unchanged) ...
+    try {
+        const select = document.getElementById('rel-req-id');
+        if (!select) return;
+    
+        const advances = await DataService.getApprovedCashAdvancesForRelease();
+        
+        select.innerHTML = '<option value="">— Select approved request —</option>';
+        
+        if (!advances || advances.length === 0) {
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = '— No approved cash advances available —';
+            option.disabled = true;
+            select.appendChild(option);
+            return;
+        }
+        
+        advances.forEach(function(ca) {
+            const option = document.createElement('option');
+            option.value = ca.id;
+            const dateStr = ca.date ? new Date(ca.date).toLocaleDateString() : 'N/A';
+            option.textContent = `${ca.id} · ${ca.requestor} · ₱${ca.amount.toFixed(2)} · ${dateStr}`;
+            select.appendChild(option);
+        });
+        
+    } catch (err) {
+        console.error('Error loading release dropdown:', err);
+        const select = document.getElementById('rel-req-id');
+        if (select) {
+            select.innerHTML = '<option value="">— Error loading requests —</option>';
+        }
+    }
 }
 
 // ─── DOM EVENT LISTENERS ───────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Cash Advance: Project dropdown - load ongoing projects
     const projectSelect = document.getElementById('req-project');
     if (projectSelect) {
         loadProjectsDropdown();
         projectSelect.addEventListener('change', loadSOWItemsForRequest);
     }
     
-    // Record Incoming Cash: Project dropdown - load ongoing projects
     const rcProjectSelect = document.getElementById('rc-project');
     if (rcProjectSelect) {
         loadIncomingProjectsDropdown();
