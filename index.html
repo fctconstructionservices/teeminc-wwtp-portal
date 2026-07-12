@@ -67,7 +67,7 @@
     </div>
 
     <!-- ════════════════════════════════════════════ -->
-    <!--  REQUEST DETAIL MODAL (BAGO)                -->
+    <!--  REQUEST DETAIL MODAL                       -->
     <!-- ════════════════════════════════════════════ -->
     <div class="print-modal-overlay" id="requestDetailModal">
         <div class="print-modal-content" id="requestDetailContent">
@@ -372,7 +372,7 @@
                         <div class="file-drop">
                             <input type="file" accept="image/*,.pdf" id="req-file" required />
                             <span class="file-drop-hint">Upload quotation, screenshot, or basis — JPG, PNG, or PDF</span>
-                         <div class="error-msg">Please upload a qoutation or basis document.</div>
+                         <div class="error-msg">Please upload a quotation or basis document.</div>
                         </div>
                     </div>
                     <div class="submit-row">
@@ -458,13 +458,16 @@
     </section>
 
     <!-- ════════════════════════════════════════════ -->
-    <!--  RECORD INCOMING CASH                      -->
+    <!--  RECORD INCOMING CASH — FIXED               -->
     <!-- ════════════════════════════════════════════ -->
     <section id="page-record-cash" class="page" aria-label="Record Incoming Cash">
         <div class="wrap">
             <div class="topbar">
                 <div class="mark">F</div>
-                <div class="brand"><div class="name">Record Incoming Cash</div><div class="sub">Capital / cash injections</div></div>
+                <div class="brand">
+                    <div class="name">Record Incoming Cash</div>
+                    <div class="sub">Capital / cash injections</div>
+                </div>
                 <div class="spacer"></div>
                 <button class="hamburger" onclick="toggleMenu()"></button>
                 <div class="actions" id="topActionsRecordCash">
@@ -475,59 +478,88 @@
             <div class="crumb"><button onclick="App.navigate('home')">Home</button> / Record Incoming Cash</div>
             <div class="form-card">
                 <div class="requester-badge">Logged by: <strong>J. Fabon</strong></div>
+                
+                <div class="system-check-note" style="margin-bottom:16px;">
+                    ⚠️ This transaction requires approval before it is recorded.
+                    <br>All fields are required. Upload proof of transaction.
+                </div>
+                
                 <form id="recordCashForm" onsubmit="return submitRecordCashForm(event)">
+                    <!-- Type of Transaction -->
                     <div class="field" id="rc-type-field">
-                        <label>Type of Transaction</label>
-                        <select id="rc-type">
-                            <option>Cash Injection</option>
-                            <option>Client Payment</option>
-                            <option>Other Income</option>
+                        <label for="rc-type">Type of Transaction *</label>
+                        <select id="rc-type" required>
+                            <option value="">— Select type —</option>
+                            <option value="Cash Injection">Cash Injection</option>
+                            <option value="Client Payment">Client Payment</option>
+                            <option value="Other Income">Other Income</option>
                         </select>
+                        <div class="error-msg">Please select a transaction type.</div>
                     </div>
+                    
+                    <!-- Description -->
                     <div class="field" id="rc-desc-field">
-                        <label>Description</label>
-                        <textarea id="rc-desc" rows="3" placeholder="e.g. Initial Capital - FCTC Construction Services"></textarea>
+                        <label for="rc-desc">Description *</label>
+                        <textarea id="rc-desc" rows="3" placeholder="e.g. Initial Capital - FCTC Construction Services" required></textarea>
                         <div class="error-msg">Description is required.</div>
                     </div>
+                    
+                    <!-- Amount -->
                     <div class="field" id="rc-amount-field">
-                        <label>Amount (₱)</label>
-                        <input type="number" id="rc-amount" placeholder="0.00" step="0.01" />
-                        <div class="error-msg">Please enter a valid amount.</div>
+                        <label for="rc-amount">Amount (₱) *</label>
+                        <input type="number" id="rc-amount" placeholder="0.00" step="0.01" required />
+                        <div class="error-msg">Please enter a valid amount greater than 0.</div>
                     </div>
-                    <div class="field">
-                        <label>Payment Method</label>
-                        <select id="rc-method">
-                            <option>Online Transfer (InstaPay)</option>
-                            <option>Bank Transfer</option>
-                            <option>Cash</option>
-                            <option>Other</option>
+                    
+                    <!-- Payment Method -->
+                    <div class="field" id="rc-method-field">
+                        <label for="rc-method">Payment Method *</label>
+                        <select id="rc-method" required>
+                            <option value="">— Select method —</option>
+                            <option value="Online Transfer (InstaPay)">Online Transfer (InstaPay)</option>
+                            <option value="Bank Transfer">Bank Transfer</option>
+                            <option value="Cash">Cash</option>
+                            <option value="Check">Check</option>
+                            <option value="Other">Other</option>
                         </select>
+                        <div class="error-msg">Please select a payment method.</div>
                     </div>
-                    <div class="field">
-                        <label>Reference Number</label>
-                        <input type="text" id="rc-ref" placeholder="e.g. 704371" />
+                    
+                    <!-- Reference Number -->
+                    <div class="field" id="rc-ref-field">
+                        <label for="rc-ref">Reference Number *</label>
+                        <input type="text" id="rc-ref" placeholder="e.g. 704371" required />
+                        <div class="error-msg">Reference number is required.</div>
                     </div>
-                    <div class="field">
-                        <label>Date of Transaction</label>
-                        <input type="date" id="rc-date" />
+                    
+                    <!-- Date of Transaction -->
+                    <div class="field" id="rc-date-field">
+                        <label for="rc-date">Date of Transaction *</label>
+                        <input type="date" id="rc-date" required />
+                        <div class="error-msg">Please select a transaction date.</div>
                     </div>
+                    
+                    <!-- Project -->
                     <div class="field" id="rc-project-field">
-                        <label>Project / Type</label>
-                        <select id="rc-project">
-                            <option value="fctc-cs">FCTC Construction Services</option>
-                            <option value="ga-overhead">General and Administrative Expenses (G&amp;A)</option>
+                        <label for="rc-project">Project / Type *</label>
+                        <select id="rc-project" required>
+                            <option value="">— Select Ongoing Project —</option>
                         </select>
                         <div class="error-msg">Please select a project.</div>
                     </div>
-                    <div class="field">
-                        <label>Proof of Transaction</label>
+                    
+                    <!-- Proof of Transaction -->
+                    <div class="field" id="rc-file-field">
+                        <label>Proof of Transaction *</label>
                         <div class="file-drop">
-                            <input type="file" accept="image/*,.pdf" id="rc-file" />
-                            <span class="file-drop-hint">Upload transfer receipt or screenshot</span>
+                            <input type="file" accept="image/*,.pdf" id="rc-file" required />
+                            <span class="file-drop-hint">Upload transfer receipt or screenshot — JPG, PNG, or PDF (Required)</span>
+                            <div class="error-msg">Please upload proof of transaction.</div>
                         </div>
                     </div>
+                    
                     <div class="submit-row">
-                        <button type="submit" class="btn-primary">Submit Entry</button>
+                        <button type="submit" class="btn-primary">Submit for Approval</button>
                         <button type="button" class="btn-ghost" onclick="App.navigate('home')">Cancel</button>
                     </div>
                 </form>
@@ -624,6 +656,9 @@
         </div>
     </section>
 
+    <!-- ════════════════════════════════════════════ -->
+    <!--  SCRIPTS                                   -->
+    <!-- ════════════════════════════════════════════ -->
     <script src="js/00-icons.js"></script>
     <script src="js/01-auth.js"></script>
     <script src="js/02-app-core.js"></script>
@@ -640,17 +675,11 @@
 
     <!-- ════════════════════════════════════════════════════════════════ -->
     <!--  DYNAMIC TOPBAR USER LABEL UPDATER                            -->
-    <!--  Ina-update ang "Managing Partner — J.Fabon"                  -->
-    <!--  sa aktwal na nakalog-in na user                              -->
     <!-- ════════════════════════════════════════════════════════════════ -->
     <script>
         (function() {
             'use strict';
 
-            /**
-             * updateTopbarUserLabel - Ina-update ang home-user-label
-             * gamit ang pangalan at role ng kasalukuyang user
-             */
             function updateTopbarUserLabel() {
                 try {
                     const stored = localStorage.getItem('fctc_user');
@@ -662,13 +691,11 @@
                     const userName = user.name;
                     const roleLabel = user.roleLabel || user.role || 'User';
 
-                    // I-update ang topbar label
                     const label = document.getElementById('home-user-label');
                     if (label) {
                         label.textContent = roleLabel + ' — ' + userName;
                     }
 
-                    // I-update din ang lahat ng requester badges (kung mayroon)
                     document.querySelectorAll('.requester-badge').forEach(function(el) {
                         const strong = el.querySelector('strong');
                         if (strong) {
@@ -688,36 +715,29 @@
                 } catch (_) { /* ignore errors */ }
             }
 
-            // ─── Execute on page load ──────────────────────────
             if (document.readyState === 'loading') {
                 document.addEventListener('DOMContentLoaded', updateTopbarUserLabel);
             } else {
                 updateTopbarUserLabel();
             }
 
-            // ─── Listen for localStorage changes (cross-tab) ──
             window.addEventListener('storage', function(e) {
                 if (e.key === 'fctc_user') {
                     updateTopbarUserLabel();
                 }
             });
 
-            // ─── Expose function para sa manual calls ──────────
             window.updateTopbarUserLabel = updateTopbarUserLabel;
 
-            // ─── Patch App.navigate para mag-update pagkatapos ng navigation ──
             if (typeof App !== 'undefined' && App && App.navigate) {
                 const originalNavigate = App.navigate;
                 App.navigate = function(page) {
-                    // Tawagin ang original
                     const result = originalNavigate.call(this, page);
-                    // I-update ang label pagkatapos ng navigation
                     setTimeout(updateTopbarUserLabel, 100);
                     return result;
                 };
             }
 
-            // ─── Patch handleLogin para mag-update pagkatapos mag-login ──
             if (typeof handleLogin === 'function') {
                 const originalLogin = handleLogin;
                 window.handleLogin = async function(e) {
@@ -730,7 +750,5 @@
             console.log('✅ Dynamic topbar user label updater loaded.');
         })();
     </script>
-</body>
-</html>
 </body>
 </html>
