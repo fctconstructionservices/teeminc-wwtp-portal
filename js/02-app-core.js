@@ -3,6 +3,9 @@
 //  FIX: Dynamic requesting badge based on logged-in user
 //  FIX: Page reload badge fix - await page loads before updating badges
 //  FIX: Added loadIncomingProjectsDropdown for record-cash page
+//  FIX: Fixed duplicate restrictedPages declaration (Issue 5.1)
+//  FIX: Added isSuperAdmin() method
+//  FIX: Updated updateApprovalBadge() for new sheets structure
 // ================================================================
 
 const App = {
@@ -27,19 +30,29 @@ const App = {
     },
 
     async navigate(page) {
-        const restrictedPages = ['release-cash', 'record-cash'];
-        if (page === 'request') {
-            loadProjectsDropdown();
+        // ─── RELEASE CASH: Super Admin only ──────────────────
+        if (page === 'release-cash' && !this.isSuperAdmin()) {
+            UI.toast('Access denied. Super Admin only.', 'error');
+            if (page !== 'home') {
+                setTimeout(() => this.navigate('home'), 800);
+                return;
+            }
         }
-        if (page === 'record-cash') {
-            setTimeout(loadIncomingProjectsDropdown, 100);
-        }
-        if (restrictedPages.includes(page) && !this.isApprover()) {
+
+        // ─── RECORD CASH: Approvers only ──────────────────────
+        if (page === 'record-cash' && !this.isApprover()) {
             UI.toast('Access denied. Approvers only.', 'error');
             if (page !== 'home') {
                 setTimeout(() => this.navigate('home'), 800);
                 return;
             }
+        }
+
+        if (page === 'request') {
+            loadProjectsDropdown();
+        }
+        if (page === 'record-cash') {
+            setTimeout(loadIncomingProjectsDropdown, 100);
         }
 
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -99,6 +112,11 @@ const App = {
         return this.hasRole('approver') || this.hasRole('admin') || this.hasRole('superadmin');
     },
 
+    // ✅ NEW: Check if user is Super Admin
+    isSuperAdmin() {
+        return this.hasRole('superadmin');
+    },
+
     isRequestOnly() {
         return this.hasRole('request-only');
     },
@@ -149,11 +167,32 @@ const App = {
             const pendingData = await DataService.getPendingApprovals();
             const userEmail = this.getUser().email.toLowerCase();
 
-            const pendingForApproval = pendingData.requests.filter(function(r) {
+            // Count pending cash advances (excluding self)
+            const pendingCashAdvances = (pendingData.cashAdvances || []).filter(function(r) {
                 return r.requestorEmail && r.requestorEmail.toLowerCase() !== userEmail;
             });
             
-            this._pendingCount = pendingForApproval.length;
+            // Count reviewing releases (for Admins)
+            const pendingReleases = (pendingData.releases || []).filter(function(r) {
+                return r.releasedBy && r.releasedBy.toLowerCase() !== userEmail;
+            });
+            
+            const pendingMaterials = (pendingData.materials || []).filter(function(m) {
+                return m.requestedBy && m.requestedBy.toLowerCase() !== userEmail;
+            });
+            
+            const pendingEquipment = (pendingData.equipment || []).filter(function(e) {
+                return e.requestedBy && e.requestedBy.toLowerCase() !== userEmail;
+            });
+            
+            const pendingEstimates = pendingData.estimates || [];
+            const pendingDailyRecords = (pendingData.dailyRecords || []).filter(function(d) {
+                return d.createdBy && d.createdBy.toLowerCase() !== userEmail;
+            });
+            
+            this._pendingCount = pendingCashAdvances.length + pendingReleases.length + 
+                                 pendingMaterials.length + pendingEquipment.length + 
+                                 pendingEstimates.length + pendingDailyRecords.length;
             
             document.querySelectorAll('.t-badge, #approvalBadgeHome').forEach(el => {
                 el.textContent = this._pendingCount;

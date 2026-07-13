@@ -1,6 +1,7 @@
 // ================================================================
 //  DATA SERVICE — fetch() bridge to Google Apps Script API
 //  PURPOSE: Provides a clean JavaScript API for all backend operations 
+//  UPDATED: New structure with separate sheets for each request type
 // ================================================================
 
 // PALITAN ITO ng iyong Apps Script Web App URL (nagtatapos sa /exec)
@@ -21,9 +22,6 @@ function getCurrentUserEmail() {
 /**
  * gasCall - Generic API caller
  * PURPOSE: Sends requests to the backend with proper authentication
- * 
- * FIX: Added support for new API methods (getMyApprovedRequests, getMyRejectedRequests)
- * FIX: Added forceReject method
  */
 async function gasCall(action) {
     const params = Array.prototype.slice.call(arguments, 1);
@@ -52,13 +50,6 @@ async function gasCall(action) {
 /**
  * DataService - Main API service object
  * PURPOSE: Provides all data operations with consistent error handling
- * 
- * FIX: Added getMyApprovedRequests and getMyRejectedRequests (Issue 3.6)
- * FIX: Added pending filtering methods for approvals (Issue 3.1, 3.9)
- * FIX: Added daily record approval methods
- * FIX: Added SOW management methods
- * FIX: Added photo upload method
- * FIX: Added forceReject method for Super Admin
  */
 const DataService = {
     _pendingMaterials: [],
@@ -81,7 +72,6 @@ const DataService = {
         return await gasCall('getProjectData', projectId);
     },
 
-    // addProject - Magdagdag ng bagong project
     async addProject(id, name, status, revenue, expenses, cashPosition) {
         return await gasCall('addProject', id, name, status, revenue, expenses, cashPosition);
     },
@@ -190,7 +180,18 @@ const DataService = {
 
     // ─── APPROVALS ────────────────────────────────────────────
     async getPendingApprovals() {
-        return await gasCall('getPendingApprovals');
+        const data = await gasCall('getPendingApprovals');
+        // Map to old format for compatibility with existing UI
+        const requests = [...(data.cashAdvances || []), ...(data.releases || [])];
+        return {
+            requests: requests,
+            cashAdvances: data.cashAdvances || [],
+            releases: data.releases || [],
+            materials: data.materials || [],
+            equipment: data.equipment || [],
+            estimates: data.estimates || [],
+            dailyRecords: data.dailyRecords || []
+        };
     },
     async getMyPendingRequests() {
         return await gasCall('getMyPendingRequests');
@@ -213,32 +214,39 @@ const DataService = {
     async forceApprove(id, type) {
         return await gasCall('forceApprove', id, type);
     },
-    // ✅ NEW: Force Reject for Super Admin
     async forceReject(id, type) {
         return await gasCall('forceReject', id, type);
     },
 
-    // ─── CASH REQUESTS ────────────────────────────────────────
+    // ─── CASH ADVANCE ──────────────────────────────────────────
     async submitCashAdvance(payload) {
         return await gasCall('submitCashAdvance', payload);
     },
+    async approveCashAdvance(id) {
+        return await gasCall('approveCashAdvance', id);
+    },
 
-    async getSOWItemsForProject(projectId) {
-        return await gasCall('getSOWItemsForProject', projectId);
-    },
-    
-    async submitLiquidation(payload) {
-        return await gasCall('submitLiquidation', payload);
-    },
-    async submitIncomingCash(payload) {
-        return await gasCall('submitIncomingCash', payload);
+    // ─── CASH RELEASE ──────────────────────────────────────────
+    async getPendingCashReleases() {
+        return await gasCall('getPendingCashReleases');
     },
     async submitRelease(payload) {
         return await gasCall('submitRelease', payload);
     },
+    async reviewRelease(id, reviewerEmail) {
+        return await gasCall('reviewRelease', id, reviewerEmail);
+    },
 
-    // ─── RELEASE CASH ──────────────────────────────────────────
-    async getApprovedCashAdvancesForRelease() {
-        return await gasCall('getApprovedCashAdvancesForRelease');
+    // ─── INCOMING CASH ──────────────────────────────────────────
+    async submitIncomingCash(payload) {
+        return await gasCall('submitIncomingCash', payload);
+    },
+    async approveIncomingCash(id) {
+        return await gasCall('approveIncomingCash', id);
+    },
+
+    // ─── SOW ITEMS FOR PROJECT ────────────────────────────────
+    async getSOWItemsForProject(projectId) {
+        return await gasCall('getSOWItemsForProject', projectId);
     }
 };

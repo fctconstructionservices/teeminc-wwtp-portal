@@ -2,16 +2,35 @@
 //  FORM SUBMISSIONS — with Google Sheets & Drive integration
 //  PURPOSE: Handles all form submissions with proper validation
 //  
-//  FIXES APPLIED:
-//  - Added comprehensive field validation (Issue 2.1)
-//  - All fields must be filled before submission is allowed
-//  - Proper error messaging for missing fields
-//  - File upload support with base64 conversion
-//  - NEW: Project dropdown shows only Ongoing projects
-//  - NEW: SOW dropdown dynamically loads based on selected project
-//  - NEW: Record Incoming Cash now requires approval
-//  - NEW: All fields required for Record Incoming Cash
+//  UPDATED: Works with new separate sheets structure
+//  - Cash Advance → CashAdvanceRequests sheet
+//  - Incoming Cash → IncomingCashRequests sheet
+//  - Release Cash → CashRelease sheet
 // ================================================================
+
+/**
+ * setDateNeededMin - I-set ang minimum date para sa Date Needed field
+ * PURPOSE: Ang pinakamaagang pwedeng piliin ay 3 days after today
+ */
+function setDateNeededMin() {
+    const dateInput = document.getElementById('req-date');
+    if (!dateInput) return;
+    
+    const today = new Date();
+    const minDate = new Date(today);
+    minDate.setDate(today.getDate() + 3);
+    
+    const year = minDate.getFullYear();
+    const month = String(minDate.getMonth() + 1).padStart(2, '0');
+    const day = String(minDate.getDate()).padStart(2, '0');
+    const minDateStr = `${year}-${month}-${day}`;
+    
+    dateInput.setAttribute('min', minDateStr);
+    
+    if (!dateInput.value) {
+        dateInput.value = minDateStr;
+    }
+}
 
 /**
  * loadProjectsDropdown - Punoan ang project dropdown ng ongoing projects lang
@@ -57,7 +76,9 @@ async function loadProjectsDropdown() {
             await loadSOWItemsForRequest();
         }
         
-        //console.log('✅ Ongoing projects loaded:', ongoingProjects.length);
+        setDateNeededMin();
+        
+        console.log('✅ Ongoing projects loaded:', ongoingProjects.length);
         
     } catch (err) {
         console.error('Error loading ongoing projects:', err);
@@ -107,7 +128,7 @@ async function loadIncomingProjectsDropdown() {
             });
         }
         
-        //console.log('✅ Incoming projects loaded:', ongoingProjects.length);
+        console.log('✅ Incoming projects loaded:', ongoingProjects.length);
         
     } catch (err) {
         console.error('Error loading incoming projects:', err);
@@ -222,12 +243,26 @@ async function submitRequestForm(e) {
         document.getElementById('req-amount-field').classList.remove('error');
     }
     
-    if (!dateNeeded) {
+    if (dateNeeded) {
+        const selectedDate = new Date(dateNeeded);
+        const today = new Date();
+        const minDate = new Date(today);
+        minDate.setDate(today.getDate() + 3);
+        
+        selectedDate.setHours(0, 0, 0, 0);
+        minDate.setHours(0, 0, 0, 0);
+        
+        if (selectedDate < minDate) {
+            document.getElementById('req-date-field').classList.add('error');
+            valid = false;
+            missingFields.push('Date must be at least 3 days from today');
+        } else {
+            document.getElementById('req-date-field').classList.remove('error');
+        }
+    } else {
         document.getElementById('req-date-field').classList.add('error');
         valid = false;
         missingFields.push('Date Needed');
-    } else {
-        document.getElementById('req-date-field').classList.remove('error');
     }
 
     const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
@@ -407,9 +442,6 @@ async function submitLiquidateForm(e) {
 /**
  * submitRecordCashForm - Handles Incoming Cash recording with approval
  * PURPOSE: Records incoming cash transactions with proof attachment
- * FIX: All fields are now required
- * FIX: Creates a request that requires approval
- * FIX: Project dropdown shows ongoing projects only
  */
 async function submitRecordCashForm(e) {
     e.preventDefault();
@@ -423,7 +455,6 @@ async function submitRecordCashForm(e) {
     const project = document.getElementById('rc-project').value;
     const fileInput = document.getElementById('rc-file');
     
-    // ─── VALIDATE ALL FIELDS ──────────────────────────────────
     let valid = true;
     let missingFields = [];
     
@@ -497,18 +528,15 @@ async function submitRecordCashForm(e) {
         return false;
     }
     
-    // ─── CONFIRMATION ──────────────────────────────────────────
     const confirmed = await Confirm.open('Record Incoming Cash?', 
         `Record ₱${amount.toFixed(2)} for ${project}?\n\nThis will be submitted for approval.`);
     if (!confirmed) return false;
     
-    // ─── LOADING STATE ─────────────────────────────────────────
     const submitBtn = document.querySelector('#recordCashForm .btn-primary');
     const originalText = submitBtn.textContent;
     submitBtn.textContent = 'Submitting...';
     submitBtn.disabled = true;
     
-    // ─── SUBMIT ──────────────────────────────────────────────────
     try {
         const payload = { 
             type,
@@ -551,73 +579,47 @@ async function submitRecordCashForm(e) {
 
 // ─── RELEASE CASH FORM ──────────────────────────────────────────────
 
-async function submitReleaseForm(e) {
-    e.preventDefault();
-    
-    const requestId = document.getElementById('rel-req-id').value;
-    const amount = parseFloat(document.getElementById('rel-amount').value);
-    
-    let valid = true;
-    
-    if (!requestId) { 
-        document.getElementById('rel-req-field').classList.add('error');
-        valid = false; 
-    } else { 
-        document.getElementById('rel-req-field').classList.remove('error'); 
-    }
-    
-    if (!amount || amount <= 0) { 
-        document.getElementById('rel-amount-field').classList.add('error');
-        valid = false; 
-    } else { 
-        document.getElementById('rel-amount-field').classList.remove('error'); 
-    }
-    
-    if (!valid) return false;
-    
-    const confirmed = await Confirm.open('Release Cash?', `Release ₱${amount.toFixed(2)}?`);
-    if (!confirmed) return false;
-    
-    try {
-        await DataService.submitRelease({ requestId, amount });
-        UI.toast('Cash released!', 'success');
-        document.getElementById('releaseForm').reset();
-        await loadReleaseDropdown();
-        App.navigate('home');
-    } catch (err) { 
-        UI.toast('' + err.message, 'error'); 
-    }
-    
-    return false;
-}
-
 /**
- * loadReleaseDropdown - I-load ang approved cash advances sa dropdown
+ * loadReleaseDropdown - I-load ang pending releases mula sa CashRelease sheet
+ * PURPOSE: Only shows releases with status 'Pending'
  */
 async function loadReleaseDropdown() {
     try {
         const select = document.getElementById('rel-req-id');
         if (!select) return;
     
-        const advances = await DataService.getApprovedCashAdvancesForRelease();
+        const releases = await DataService.getPendingCashReleases();
         
-        select.innerHTML = '<option value="">— Select approved request —</option>';
+        select.innerHTML = '<option value="">— Select pending release —</option>';
         
-        if (!advances || advances.length === 0) {
+        if (!releases || releases.length === 0) {
             const option = document.createElement('option');
             option.value = '';
-            option.textContent = '— No approved cash advances available —';
+            option.textContent = '— No pending releases available —';
             option.disabled = true;
             select.appendChild(option);
             return;
         }
         
-        advances.forEach(function(ca) {
+        releases.forEach(function(r) {
             const option = document.createElement('option');
-            option.value = ca.id;
-            const dateStr = ca.date ? new Date(ca.date).toLocaleDateString() : 'N/A';
-            option.textContent = `${ca.id} · ${ca.requestor} · ₱${ca.amount.toFixed(2)} · ${dateStr}`;
+            option.value = r.id;
+            option.dataset.amount = r.amount;
+            const dateStr = r.createdAt ? new Date(r.createdAt).toLocaleDateString() : 'N/A';
+            option.textContent = `${r.id} · ${r.requestor} · ₱${parseFloat(r.amount).toFixed(2)} · ${dateStr}`;
             select.appendChild(option);
+        });
+        
+        select.addEventListener('change', function() {
+            const selected = this.options[this.selectedIndex];
+            const amountInput = document.getElementById('rel-amount');
+            if (selected && selected.dataset.amount) {
+                amountInput.value = parseFloat(selected.dataset.amount).toFixed(2);
+                amountInput.dataset.approvedAmount = selected.dataset.amount;
+            } else {
+                amountInput.value = '';
+                amountInput.dataset.approvedAmount = '';
+            }
         });
         
     } catch (err) {
@@ -627,6 +629,61 @@ async function loadReleaseDropdown() {
             select.innerHTML = '<option value="">— Error loading requests —</option>';
         }
     }
+}
+
+/**
+ * submitReleaseForm - Super Admin submits release for review
+ * PURPOSE: Changes status from Pending to For Review
+ */
+async function submitReleaseForm(e) {
+    e.preventDefault();
+    
+    const releaseId = document.getElementById('rel-req-id').value;
+    const amount = parseFloat(document.getElementById('rel-amount').value);
+    const approvedAmount = parseFloat(document.getElementById('rel-amount').dataset.approvedAmount) || 0;
+    
+    let valid = true;
+    
+    if (!releaseId) { 
+        document.getElementById('rel-req-field').classList.add('error');
+        valid = false; 
+    } else { 
+        document.getElementById('rel-req-field').classList.remove('error'); 
+    }
+    
+    if (!amount || amount <= 0) { 
+        document.getElementById('rel-amount-field').classList.add('error');
+        valid = false; 
+    } else {
+        document.getElementById('rel-amount-field').classList.remove('error');
+    }
+    
+    if (amount > approvedAmount) {
+        document.getElementById('rel-amount-field').classList.add('error');
+        UI.toast(`Release amount (₱${amount.toFixed(2)}) exceeds approved amount (₱${approvedAmount.toFixed(2)}).`, 'error');
+        return false;
+    }
+    
+    if (!valid) return false;
+    
+    const confirmed = await Confirm.open('Release Cash?', `Release ₱${amount.toFixed(2)} for ${releaseId}?\n\nThis will be submitted for review by Administrators.`);
+    if (!confirmed) return false;
+    
+    try {
+        await DataService.submitRelease({ releaseId, amount });
+        UI.toast('Release submitted for review by Administrators.', 'success');
+        document.getElementById('releaseForm').reset();
+        await loadReleaseDropdown();
+        App.navigate('home');
+        
+        if (typeof HomePage !== 'undefined' && HomePage.load) {
+            HomePage.load();
+        }
+    } catch (err) { 
+        UI.toast('' + err.message, 'error'); 
+    }
+    
+    return false;
 }
 
 // ─── DOM EVENT LISTENERS ───────────────────────────────────────────

@@ -1,8 +1,7 @@
 // ================================================================
-//  APPROVALS PAGE - Complete with fixes for Issues 3.1-3.10
-//  FIX: Added daily records to pending approvals
-//  FIX: Super Admin shows Force Approve/Reject instead of normal buttons
-//  FIX: Added Incoming Cash to pending approvals
+//  APPROVALS PAGE - Complete with fixes
+//  UPDATED: Works with new separate sheets structure
+//  NEW: Cash Release "For Review" tab for Admins
 // ================================================================
 
 // ─── REQUEST DETAIL MODAL ──────────────────────────────────────
@@ -63,7 +62,7 @@ const RequestDetailModal = {
         const isApprover = App.isApprover() && !isSuperAdmin;
         const isRequestor = user && data.requestorEmail && 
             user.email.toLowerCase() === data.requestorEmail.toLowerCase();
-        const statusCls = data.status === 'Approved' ? 'approved' : data.status === 'Pending' ? 'pending' : 'rejected';
+        const statusCls = data.status === 'Approved' ? 'approved' : data.status === 'Pending' ? 'pending' : data.status === 'Reviewing' ? 'pending' : 'rejected';
         
         let attachmentsHtml = '';
         if (data.attachments && data.attachments.length > 0) {
@@ -84,13 +83,13 @@ const RequestDetailModal = {
         if (data.status === 'Pending') {
             if (isSuperAdmin) {
                 actionButtons = `
-                    <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${data.id}','request', true)">Force Approve</button>
-                    <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${data.id}','request', true)">Force Reject</button>
+                    <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${data.id}','${data.type}', true)">Force Approve</button>
+                    <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${data.id}','${data.type}', true)">Force Reject</button>
                 `;
             } else if (isApprover && !isRequestor) {
                 actionButtons = `
-                    <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${data.id}','request', true)">Approve</button>
-                    <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${data.id}','request', true)">Reject</button>
+                    <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${data.id}','${data.type}', true)">Approve</button>
+                    <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${data.id}','${data.type}', true)">Reject</button>
                 `;
             }
         }
@@ -98,7 +97,7 @@ const RequestDetailModal = {
         let html = `
         <div class="print-header">
             <h2>${data.id} — ${data.type}</h2>
-            <div class="print-meta">${data.date || new Date().toLocaleDateString()} · <span class="stamp ${statusCls}">${data.status}</span></div>
+            <div class="print-meta">${data.createdAt || new Date().toLocaleDateString()} · <span class="stamp ${statusCls}">${data.status}</span></div>
         </div>
         <div class="print-section"><div class="ps-title">Request Details</div>
             <div class="detail-grid">
@@ -126,6 +125,7 @@ const RequestDetailModal = {
 const ApprovalsPage = {
     _loaded: false,
     _currentTab: 'pending',
+    _myRequestsById: {},
 
     async load() {
         const container = document.getElementById('approvalsContent');
@@ -133,6 +133,7 @@ const ApprovalsPage = {
         try {
             const user = App.currentUser;
             const isSuperAdmin = user && user.role === 'superadmin';
+            const isAdmin = user && user.role === 'admin';
             const isApprover = App.isApprover() && !isSuperAdmin;
 
             const pendingData = await DataService.getPendingApprovals();
@@ -141,24 +142,39 @@ const ApprovalsPage = {
             const myRejected = await DataService.getMyRejectedRequests ? await DataService.getMyRejectedRequests() : [];
 
             const userEmail = user ? user.email.toLowerCase() : '';
-            const filteredRequests = pendingData.requests.filter(function(r) {
-                const notSelf = r.requestorEmail && r.requestorEmail.toLowerCase() !== userEmail;
-                const notActed = !r.userActed;
-                return notSelf && notActed; 
+            
+            // Get data from new structure
+            const cashAdvances = pendingData.cashAdvances || [];
+            const releases = pendingData.releases || [];
+            const materials = pendingData.materials || [];
+            const equipment = pendingData.equipment || [];
+            const estimates = pendingData.estimates || [];
+            const dailyRecords = pendingData.dailyRecords || [];
+
+            // Filter out self-requests
+            const filteredCashAdvances = cashAdvances.filter(function(r) {
+                return r.requestorEmail && r.requestorEmail.toLowerCase() !== userEmail;
             });
-            const filteredMaterials = pendingData.materials.filter(function(m) {
+
+            const filteredReleases = releases.filter(function(r) {
+                return r.releasedBy && r.releasedBy.toLowerCase() !== userEmail;
+            });
+
+            const filteredMaterials = materials.filter(function(m) {
                 return m.requestedBy && m.requestedBy.toLowerCase() !== userEmail;
             });
-            const filteredEquipment = pendingData.equipment.filter(function(e) {
+
+            const filteredEquipment = equipment.filter(function(e) {
                 return e.requestedBy && e.requestedBy.toLowerCase() !== userEmail;
             });
-            const filteredDailyRecords = pendingData.dailyRecords ? pendingData.dailyRecords.filter(function(d) {
-                return d.createdBy && d.createdBy.toLowerCase() !== userEmail;
-            }) : [];
 
-            const totalPending = filteredRequests.length + filteredMaterials.length +
-                filteredEquipment.length + (pendingData.estimates ? pendingData.estimates.length : 0) +
-                filteredDailyRecords.length;
+            const filteredDailyRecords = dailyRecords.filter(function(d) {
+                return d.createdBy && d.createdBy.toLowerCase() !== userEmail;
+            });
+
+            const totalPending = filteredCashAdvances.length + filteredReleases.length + 
+                                filteredMaterials.length + filteredEquipment.length + 
+                                estimates.length + filteredDailyRecords.length;
 
             let html = `
             <div class="section-head"><h2>Approval Dashboard</h2><div class="rule"></div>
@@ -166,13 +182,15 @@ const ApprovalsPage = {
             </div>
 
             <div class="approval-tab-bar">
-                ${(isApprover || isSuperAdmin) ? `<button class="active" data-tab="pending" onclick="ApprovalsPage.switchTab('pending')">${Icon.clipboardList({size:14})} ${isSuperAdmin ? 'Force Approval' : 'My Pending Approvals'} (${totalPending})</button>` : ''}
-                <button ${!(isApprover || isSuperAdmin) ? 'class="active"' : ''} data-tab="myrequests" onclick="ApprovalsPage.switchTab('myrequests')">${Icon.user({size:14})} My Pending Requests (${myRequests.length})</button>
-                <button data-tab="approved" onclick="ApprovalsPage.switchTab('approved')">${Icon.checkCircle({size:14})} My Approved Requests (${myApproved.length})</button>
-                <button data-tab="rejected" onclick="ApprovalsPage.switchTab('rejected')">${Icon.xCircle({size:14})} My Rejected Requests (${myRejected.length})</button>
+                ${(isApprover || isSuperAdmin) ? `<button class="active" data-tab="pending" onclick="ApprovalsPage.switchTab('pending')">${Icon.clipboardList({size:14})} Pending Approvals (${filteredCashAdvances.length + filteredMaterials.length + filteredEquipment.length + estimates.length + filteredDailyRecords.length})</button>` : ''}
+                ${(isAdmin && !isSuperAdmin) ? `<button data-tab="reviewing" onclick="ApprovalsPage.switchTab('reviewing')">${Icon.clipboardList({size:14})} For Review (${filteredReleases.length})</button>` : ''}
+                <button ${!(isApprover || isSuperAdmin) ? 'class="active"' : ''} data-tab="myrequests" onclick="ApprovalsPage.switchTab('myrequests')">${Icon.user({size:14})} My Requests (${myRequests.length})</button>
+                <button data-tab="approved" onclick="ApprovalsPage.switchTab('approved')">${Icon.checkCircle({size:14})} Approved (${myApproved.length})</button>
+                <button data-tab="rejected" onclick="ApprovalsPage.switchTab('rejected')">${Icon.xCircle({size:14})} Rejected (${myRejected.length})</button>
             </div>
 
-            ${(isApprover || isSuperAdmin) ? `<div id="approval-tab-pending" class="approval-tab-content active">${this._renderPendingTab({requests: filteredRequests, materials: filteredMaterials, equipment: filteredEquipment, estimates: pendingData.estimates || [], dailyRecords: filteredDailyRecords})}</div>` : ''}
+            ${(isApprover || isSuperAdmin) ? `<div id="approval-tab-pending" class="approval-tab-content active">${this._renderPendingTab({cashAdvances: filteredCashAdvances, materials: filteredMaterials, equipment: filteredEquipment, estimates: estimates, dailyRecords: filteredDailyRecords})}</div>` : ''}
+            ${(isAdmin && !isSuperAdmin) ? `<div id="approval-tab-reviewing" class="approval-tab-content">${this._renderReviewingTab(filteredReleases)}</div>` : ''}
             <div id="approval-tab-myrequests" class="approval-tab-content ${!(isApprover || isSuperAdmin) ? 'active' : ''}">${this._renderMyRequestsTab(myRequests, 'pending')}</div>
             <div id="approval-tab-approved" class="approval-tab-content">${this._renderMyRequestsTab(myApproved, 'approved')}</div>
             <div id="approval-tab-rejected" class="approval-tab-content">${this._renderMyRequestsTab(myRejected, 'rejected')}</div>`;
@@ -194,11 +212,6 @@ const ApprovalsPage = {
         if (target) target.classList.add('active');
     },
 
-    /**
-     * _renderPendingTab - Renders the pending approvals tab
-     * FIX: Added Incoming Cash section
-     * FIX: Super Admin shows Force Approve/Reject
-     */
     _renderPendingTab(data) {
         const user = App.currentUser;
         const isSuperAdmin = user && user.role === 'superadmin';
@@ -208,24 +221,21 @@ const ApprovalsPage = {
 
         // ─── Cash Advance Requests ──────────────────────────────
         html += `<div class="section-head"><h3>Cash Advance Requests</h3><div class="rule"></div></div>`;
-        const cashAdvanceRequests = data.requests.filter(function(r) {
-            return r.type === 'Cash Advance';
-        });
-        if (cashAdvanceRequests.length === 0) {
+        if (data.cashAdvances.length === 0) {
             html += `<div class="empty"><p>No pending cash advance requests.</p></div>`;
         } else {
             html += `<div class="panel"><div style="padding:4px 0;">`;
-            cashAdvanceRequests.forEach(r => {
+            data.cashAdvances.forEach(r => {
                 let actionsHtml = '';
                 if (isSuperAdmin) {
                     actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${r.id}','request')">Force Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${r.id}','request')">Force Reject</button>
+                        <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${r.id}','CashAdvance')">Force Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${r.id}','CashAdvance')">Force Reject</button>
                     `;
                 } else if (isApprover) {
                     actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${r.id}','request')">Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${r.id}','request')">Reject</button>
+                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${r.id}','CashAdvance')">Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${r.id}','CashAdvance')">Reject</button>
                     `;
                 }
                 html += `
@@ -236,48 +246,7 @@ const ApprovalsPage = {
                         <div class="ar-meta">
                             <span class="ar-id">${r.id}</span>
                             <span>₱${(r.amount || 0).toFixed(2)}</span>
-                            <span>${r.date || new Date().toLocaleDateString()}</span>
-                            <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${r.status}</span>
-                        </div>
-                    </div>
-                    <div class="ar-actions">${actionsHtml}</div>
-                </div>`;
-            });
-            html += `</div></div>`;
-        }
-
-        // ─── Incoming Cash Requests ──────────────────────────────
-        html += `<div class="section-head"><h3>Incoming Cash Requests</h3><div class="rule"></div></div>`;
-        const incomingRequests = data.requests.filter(function(r) {
-            return r.type === 'Incoming Cash';
-        });
-        if (incomingRequests.length === 0) {
-            html += `<div class="empty"><p>No pending incoming cash requests.</p></div>`;
-        } else {
-            html += `<div class="panel"><div style="padding:4px 0;">`;
-            incomingRequests.forEach(r => {
-                let actionsHtml = '';
-                if (isSuperAdmin) {
-                    actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${r.id}','Incoming Cash')">Force Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${r.id}','Incoming Cash')">Force Reject</button>
-                    `;
-                } else if (isApprover) {
-                    actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${r.id}','request')">Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${r.id}','request')">Reject</button>
-                    `;
-                }
-                html += `
-                <div class="approval-request-item" style="cursor:pointer;">
-                    <div class="ar-icon">${Icon.incoming({size:16})}</div>
-                    <div class="ar-body" onclick="RequestDetailModal.open('${r.id}','request')">
-                        <div class="ar-title">${r.requestor} — ${r.projectId || '—'}</div>
-                        <div class="ar-meta">
-                            <span class="ar-id">${r.id}</span>
-                            <span>${r.type}</span>
-                            <span>₱${(r.amount || 0).toFixed(2)}</span>
-                            <span>${r.description || '—'}</span>
+                            <span>${r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ''}</span>
                             <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${r.status}</span>
                         </div>
                     </div>
@@ -302,8 +271,8 @@ const ApprovalsPage = {
                     `;
                 } else if (isApprover) {
                     actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${m.id}','material')">Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${m.id}','material')">Reject</button>
+                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${m.id}','Material')">Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${m.id}','Material')">Reject</button>
                     `;
                 }
                 html += `
@@ -338,8 +307,8 @@ const ApprovalsPage = {
                     `;
                 } else if (isApprover) {
                     actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${e.id}','equipment')">Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${e.id}','equipment')">Reject</button>
+                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${e.id}','Equipment')">Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${e.id}','Equipment')">Reject</button>
                     `;
                 }
                 html += `
@@ -369,13 +338,13 @@ const ApprovalsPage = {
                 let actionsHtml = '';
                 if (isSuperAdmin) {
                     actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${e.id}','Estimate')">Force Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${e.id}','Estimate')">Force Reject</button>
+                        <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${e.sowId || e.id}','Estimate')">Force Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${e.sowId || e.id}','Estimate')">Force Reject</button>
                     `;
                 } else if (isApprover) {
                     actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${e.sowId || e.id}','estimate')">Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${e.sowId || e.id}','estimate')">Reject</button>
+                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${e.sowId || e.id}','Estimate')">Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${e.sowId || e.id}','Estimate')">Reject</button>
                     `;
                 }
                 html += `
@@ -397,7 +366,7 @@ const ApprovalsPage = {
 
         // ─── Daily Records Pending Approval ──────────────────────
         html += `<div class="section-head"><h3>Daily Records Pending Approval</h3><div class="rule"></div></div>`;
-        if (!data.dailyRecords || data.dailyRecords.length === 0) {
+        if (data.dailyRecords.length === 0) {
             html += `<div class="empty"><p>No pending daily records.</p></div>`;
         } else {
             html += `<div class="panel"><div style="padding:4px 0;">`;
@@ -410,8 +379,8 @@ const ApprovalsPage = {
                     `;
                 } else if (isApprover) {
                     actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.approveDailyRecord('${d.id}')">Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectDailyRecord('${d.id}')">Reject</button>
+                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${d.id}','DailyRecord')">Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${d.id}','DailyRecord')">Reject</button>
                     `;
                 }
                 html += `
@@ -434,9 +403,48 @@ const ApprovalsPage = {
         return html;
     },
 
-    /**
-     * _renderMyRequestsTab - Renders the user's own requests
-     */
+    _renderReviewingTab(reviews) {
+        const user = App.currentUser;
+        const userEmail = user ? user.email.toLowerCase() : '';
+        
+        let html = `<div class="section-head"><h3>Cash Release Requests for Review</h3><div class="rule"></div></div>`;
+        if (reviews.length === 0) {
+            html += `<div class="empty"><p>No release requests awaiting review.</p></div>`;
+            return html;
+        }
+        html += `<div class="panel"><div style="padding:4px 0;">`;
+        reviews.forEach(function(r) {
+            const isSelf = r.releasedBy && r.releasedBy.toLowerCase() === userEmail;
+            const isAdmin = user && user.role === 'admin';
+            const canReview = isAdmin && !isSelf;
+            let actionsHtml = '';
+            if (canReview) {
+                actionsHtml = `
+                    <button class="btn-sm success" onclick="ApprovalsPage.reviewRelease('${r.id}')">Reviewed</button>
+                `;
+            } else if (isSelf) {
+                actionsHtml = `<span style="font-size:10px;color:var(--ink-soft);">You cannot review your own request.</span>`;
+            } else {
+                actionsHtml = `<span style="font-size:10px;color:var(--ink-soft);">Waiting for Admin review</span>`;
+            }
+            html += `
+                <div class="approval-request-item">
+                    <div class="ar-icon">${Icon.outgoing({size:16})}</div>
+                    <div class="ar-body">
+                        <div class="ar-title">Release Cash — ${r.requestor} (${r.projectId || '—'})</div>
+                        <div class="ar-meta">
+                            <span class="ar-id">${r.id}</span>
+                            <span>₱${(r.amount || 0).toFixed(2)}</span>
+                            <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${r.status}</span>
+                        </div>
+                    </div>
+                    <div class="ar-actions">${actionsHtml}</div>
+                </div>`;
+        });
+        html += `</div></div>`;
+        return html;
+    },
+
     _renderMyRequestsTab(requests, statusType) {
         const statusLabel = statusType === 'pending' ? 'Pending' : statusType === 'approved' ? 'Approved' : 'Rejected';
         const statusCls = statusType === 'pending' ? 'pending' : statusType === 'approved' ? 'approved' : 'rejected';
@@ -468,7 +476,7 @@ const ApprovalsPage = {
                             <span class="mr-id">${r.id}</span>
                             ${r.amount ? `<span>₱${(r.amount || 0).toFixed(2)}</span>` : ''}
                             ${r.description ? `<span>${r.description}</span>` : ''}
-                            <span>${r.date || new Date().toLocaleDateString()}</span>
+                            <span>${r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ''}</span>
                             <span class="stamp ${statusCls}" style="transform:none;padding:1px 8px;font-size:9px;">${r.status}</span>
                         </div>
                     </div>
@@ -480,9 +488,6 @@ const ApprovalsPage = {
         return html;
     },
 
-    /**
-     * openMyRequestDetail - Routes a "My Requests" click to the correct detail view.
-     */
     async openMyRequestDetail(id) {
         const r = this._myRequestsById && this._myRequestsById[id];
         if (!r) { RequestDetailModal.open(id, 'request'); return; }
@@ -503,7 +508,7 @@ const ApprovalsPage = {
                     if (!projectData) { UI.toast('Project not found.', 'error'); return; }
                     const group = (projectData.estimates && projectData.estimates.groups || [])
                         .find(g => g.sowId === r.scope);
-                    if (!group) { UI.toast('Estimate details not found (it may have changed since this request).', 'error'); return; }
+                    if (!group) { UI.toast('Estimate details not found.', 'error'); return; }
                     SOWBreakdownModal.open(r.scope, {
                         materials: group.materials || [],
                         equipment: group.equipment || [],
@@ -523,11 +528,9 @@ const ApprovalsPage = {
                     break;
                 }
 
-                case 'Incoming Cash': {
-                    RequestDetailModal.open(r.id, 'request');
-                    break;
-                }
-
+                case 'Incoming Cash':
+                case 'Cash Advance':
+                case 'Cash Release':
                 default:
                     RequestDetailModal.open(r.id, 'request');
             }
@@ -537,40 +540,11 @@ const ApprovalsPage = {
         }
     },
 
-    /**
-     * approveItem - Handle normal approval action (for Approvers/Admins)
-     */
     async approveItem(id, type, closeModal = false) {
         const confirmed = await Confirm.open('Approve Item?', `Approve ${id}?`);
         if (!confirmed) return;
         try {
-            if (type === 'material') {
-                await DataService.approveMaterial(id);
-            } else if (type === 'equipment') {
-                await DataService.approveEquipment(id);
-            } else if (type === 'estimate') {
-                const projects = ['fctc-cs', 'ga-overhead'];
-                let found = false;
-                for (const projId of projects) {
-                    const p = await DataService.getProjectData(projId);
-                    if (p && p.estimates && p.estimates.groups) {
-                        const group = p.estimates.groups.find(g => g.sowId === id);
-                        if (group && group.status === 'pending') {
-                            await DataService.approveEstimates(projId, id);
-                            found = true;
-                            break;
-                        }
-                    }
-                }
-                if (!found) { UI.toast('Estimate not found or not pending.', 'error'); return; }
-            } else if (type === 'request') {
-                await DataService.approveItemGeneric(id, 'request');
-                UI.toast(`Request ${id} approved.`, 'success');
-                if (closeModal) RequestDetailModal.close();
-                this.load();
-                HomePage.load();
-                return;
-            }
+            await DataService.approveItemGeneric(id, type);
             UI.toast(`${id} approved!`, 'success');
             if (closeModal) RequestDetailModal.close();
             this.load();
@@ -580,22 +554,11 @@ const ApprovalsPage = {
         }
     },
 
-    /**
-     * rejectItem - Handle normal rejection action (for Approvers/Admins)
-     */
     async rejectItem(id, type, closeModal = false) {
         const confirmed = await Confirm.open('Reject Item?', `Reject ${id}?`);
         if (!confirmed) return;
         try {
-            if (type === 'material') {
-                await DataService.rejectItemGeneric(id, 'Material');
-            } else if (type === 'equipment') {
-                await DataService.rejectItemGeneric(id, 'Equipment');
-            } else if (type === 'estimate') {
-                await DataService.rejectItemGeneric(id, 'Estimate');
-            } else if (type === 'request') {
-                await DataService.rejectItemGeneric(id, 'request');
-            }
+            await DataService.rejectItemGeneric(id, type);
             UI.toast(`${id} rejected.`, 'error');
             if (closeModal) RequestDetailModal.close();
             this.load();
@@ -605,12 +568,8 @@ const ApprovalsPage = {
         }
     },
 
-    /**
-     * forceApproveItem - Super Admin force approve any item
-     */
     async forceApproveItem(id, type, closeModal = false) {
-        const confirmed = await Confirm.open('Force Approve?', 
-            `As Super Admin, you are about to FORCE APPROVE ${id}. This will bypass all other approvers. Continue?`);
+        const confirmed = await Confirm.open('Force Approve?', `Force approve ${id}?`);
         if (!confirmed) return;
         try {
             await DataService.forceApprove(id, type);
@@ -623,12 +582,8 @@ const ApprovalsPage = {
         }
     },
 
-    /**
-     * forceRejectItem - Super Admin force reject any item
-     */
     async forceRejectItem(id, type, closeModal = false) {
-        const confirmed = await Confirm.open('Force Reject?', 
-            `As Super Admin, you are about to FORCE REJECT ${id}. This will bypass all other approvers. Continue?`);
+        const confirmed = await Confirm.open('Force Reject?', `Force reject ${id}?`);
         if (!confirmed) return;
         try {
             await DataService.forceReject(id, type);
@@ -641,33 +596,18 @@ const ApprovalsPage = {
         }
     },
 
-    /**
-     * approveDailyRecord - Approve a daily record (for Approvers/Admins)
-     */
-    async approveDailyRecord(id) {
-        const confirmed = await Confirm.open('Approve Daily Record?', 'Approve this daily record?');
+    // ─── RELEASE CASH REVIEW ────────────────────────────────────
+    async reviewRelease(id) {
+        const confirmed = await Confirm.open('Mark as Reviewed?', 'Confirm that you have reviewed this release request?');
         if (!confirmed) return;
         try {
-            await DataService.approveDailyRecord(id);
-            UI.toast('Daily record approved.', 'success');
+            const user = App.currentUser;
+            await DataService.reviewRelease(id, user.email);
+            UI.toast('Release request reviewed!', 'success');
             this.load();
-            HomePage.load();
-        } catch (err) {
-            UI.toast('' + err.message, 'error');
-        }
-    },
-
-    /**
-     * rejectDailyRecord - Reject a daily record (for Approvers/Admins)
-     */
-    async rejectDailyRecord(id) {
-        const confirmed = await Confirm.open('Reject Daily Record?', 'Reject this daily record?');
-        if (!confirmed) return;
-        try {
-            await DataService.rejectDailyRecord(id);
-            UI.toast('Daily record rejected.', 'error');
-            this.load();
-            HomePage.load();
+            if (typeof HomePage !== 'undefined' && HomePage.load) {
+                HomePage.load();
+            }
         } catch (err) {
             UI.toast('' + err.message, 'error');
         }

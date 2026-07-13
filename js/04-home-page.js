@@ -2,6 +2,7 @@
 //  HOME PAGE - Complete with fixes for Issues 1.1, 3.5, 3.6, 3.10
 //  FIX: Added App.updateUserBadges() after rendering tickets
 //  NEW: Project filtering with tabs (Ongoing, Completed, All)
+//  UPDATED: Works with new separate sheets structure
 // ================================================================
 
 /**
@@ -72,7 +73,6 @@ const HomePage = {
             }
 
             // ─── ✅ RENDER PROJECTS (FILTERED) ────────────────────
-            // ✅ ITO LANG ANG GAGAMITIN PARA SA PROJECTS
             this.renderProjects();
 
             // ─── Gauges ──────────────────────────────────────────
@@ -94,8 +94,8 @@ const HomePage = {
             const tickets = [
                 { id: 'request', label: 'Request Cash Advance', sub: 'New requisition', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
                 { id: 'record-cash', label: 'Record Incoming Cash', sub: 'Capital / injections', roles: ['superadmin', 'admin', 'approver'] },
-                { id: 'release-cash', label: 'Release Cash Advance', sub: 'Approved advance', roles: ['superadmin', 'admin', 'approver'] },
-                { id: 'liquidate', label: 'Liquidate Cash Advance', sub: 'Receipts & balance', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
+                { id: 'release-cash', label: 'Release Cash', sub: 'Super Admin only', roles: ['superadmin'] },
+                { id: 'liquidate', label: 'Liquidate Advance', sub: 'Receipts & balance', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
                 { id: 'search', label: 'Search Records', sub: 'All transactions', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
                 { id: 'materials', label: 'Materials DB', sub: 'Master list & approval', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
                 { id: 'equipment', label: 'Tools & Equipment', sub: 'Equipment inventory', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
@@ -105,32 +105,34 @@ const HomePage = {
             const userRole = user ? user.role : 'request-only';
             const visibleTickets = tickets.filter(t => t.roles.includes(userRole));
 
-            const userEmail = user ? user.email.toLowerCase() : '';
             const pendingData = await DataService.getPendingApprovals();
+            const userEmail = user ? user.email.toLowerCase() : '';
 
-            const filteredRequests = pendingData.requests.filter(function(r) {
-                const notSelf = r.requestorEmail && r.requestorEmail.toLowerCase() !== userEmail;
-                const notActed = !r.userActed;
-                return notSelf && notActed;
+            // Count pending items using new structure
+            const pendingCashAdvances = (pendingData.cashAdvances || []).filter(function(r) {
+                return r.requestorEmail && r.requestorEmail.toLowerCase() !== userEmail;
             });
 
-            const filteredMaterials = pendingData.materials.filter(function(m) {
+            const pendingReleases = (pendingData.releases || []).filter(function(r) {
+                return r.releasedBy && r.releasedBy.toLowerCase() !== userEmail;
+            });
+
+            const pendingMaterials = (pendingData.materials || []).filter(function(m) {
                 return m.requestedBy && m.requestedBy.toLowerCase() !== userEmail;
             });
 
-            const filteredEquipment = pendingData.equipment.filter(function(e) {
+            const pendingEquipment = (pendingData.equipment || []).filter(function(e) {
                 return e.requestedBy && e.requestedBy.toLowerCase() !== userEmail;
             });
 
-            const filteredDailyRecords = pendingData.dailyRecords ? pendingData.dailyRecords.filter(function(d) {
+            const pendingEstimates = pendingData.estimates || [];
+            const pendingDailyRecords = (pendingData.dailyRecords || []).filter(function(d) {
                 return d.createdBy && d.createdBy.toLowerCase() !== userEmail;
-            }) : [];
+            });
 
-            const pendingCount = filteredRequests.length + 
-                    filteredMaterials.length +
-                    filteredEquipment.length + 
-                    (pendingData.estimates ? pendingData.estimates.length : 0) +
-                    filteredDailyRecords.length;
+            const pendingCount = pendingCashAdvances.length + pendingReleases.length + 
+                                pendingMaterials.length + pendingEquipment.length + 
+                                pendingEstimates.length + pendingDailyRecords.length;
             
             let ticketHtml = `<div class="tickets">`;
             visibleTickets.forEach(t => {
@@ -280,7 +282,6 @@ const HomePage = {
         });
         projHtml += `</div>`;
         
-        // ✅ Direct assignment para siguradong walang loading na matira
         container.innerHTML = projHtml;
     },
 
