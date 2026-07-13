@@ -416,7 +416,7 @@ const ApprovalsPage = {
         reviews.forEach(function(r) {
             const isSelf = r.releasedBy && r.releasedBy.toLowerCase() === userEmail;
             const isAdmin = user && user.role === 'admin';
-            const canReview = isAdmin && !isSelf;
+            const canReview = isAdmin && isSelf;
             let actionsHtml = '';
             if (canReview) {
                 actionsHtml = `

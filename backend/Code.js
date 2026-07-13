@@ -731,10 +731,6 @@ function reviewRelease(releaseId, reviewerEmail) {
   const release = readAll_('CashRelease').find(function (r) { return r.id === releaseId && r.status === 'For Review'; });
   if (!release) throw new Error('Release record not found or not in For Review status.');
 
-  if (release.releasedBy && release.releasedBy.toLowerCase() === reviewerEmail.toLowerCase()) {
-    throw new Error('Self-review is not allowed.');
-  }
-
   let reviewedBy = [];
   try {
     reviewedBy = JSON.parse(release.reviewedByJSON || '[]');
@@ -818,7 +814,7 @@ function approveIncomingCash(id) {
 
 function getPendingApprovals() {
   const userEmail = currentUserEmail_().toLowerCase();
-  const isAdmin = readAll_('Users').find(function (u) { return u.email.toLowerCase() === userEmail && (u.role === 'admin' || u.role === 'superadmin'); });
+  const isAdmin = readAll_('Users').find(function (u) { return u.email.toLowerCase() === userEmail && (u.role === 'admin'); });
 
   const cashAdvances = readAll_('CashAdvanceRequests').filter(function (r) {
     return r.status === 'Pending' && r.requestorEmail.toLowerCase() !== userEmail;
@@ -829,7 +825,7 @@ function getPendingApprovals() {
   let releases = [];
   if (isAdmin && isAdmin.role !== 'superadmin') {
     releases = readAll_('CashRelease').filter(function (r) {
-      return r.status === 'For Review' && r.releasedBy && r.releasedBy.toLowerCase() == userEmail;
+      return r.status === 'For Review' && r.releasedBy && r.releasedBy.toLowerCase() != userEmail;
     }).map(function (r) {
       return { id: r.id, type: 'CashRelease', projectId: r.projectId, requestor: r.requestor, requestorEmail: r.requestorEmail, amount: r.amount, description: r.description, status: r.status, createdAt: r.createdAt };
     });
@@ -924,6 +920,19 @@ function decideItem_(id, type, decision) {
       logActivity_('Cash advance ' + id + ' rejected', 'a', id);
       return { success: true, status: 'Rejected' };
     }
+  }
+
+    // ─── CASH RELEASE ────────────────────────────────
+  if (type === 'CashRelease') {
+    const release = readAll_('CashRelease').find(function (r) { return r.id === id; });
+    if (!release) throw new Error('Cash release record not found.');
+    if (release.releasedBy && release.releasedBy.toLowerCase() === approver) {
+      throw new Error('Self-review is not allowed.');
+    }
+    if (release.status !== 'For Review') throw new Error('Release is not in review status.');
+    
+    // Use the existing reviewRelease logic
+    return reviewRelease(id, approver);
   }
 
   if (type === 'IncomingCash') {

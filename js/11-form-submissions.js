@@ -658,9 +658,9 @@ async function submitReleaseForm(e) {
         document.getElementById('rel-amount-field').classList.remove('error');
     }
     
-    if (amount > approvedAmount) {
+    if (amount != approvedAmount) {
         document.getElementById('rel-amount-field').classList.add('error');
-        UI.toast(`Release amount (₱${amount.toFixed(2)}) exceeds approved amount (₱${approvedAmount.toFixed(2)}).`, 'error');
+        UI.toast(`Release amount (₱${amount.toFixed(2)}) is not equal from the approved amount (₱${approvedAmount.toFixed(2)}).`, 'error');
         return false;
     }
     
