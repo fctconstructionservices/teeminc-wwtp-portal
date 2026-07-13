@@ -180,13 +180,13 @@ const DataService = {
 
     // ─── APPROVALS ────────────────────────────────────────────
     async getPendingApprovals() {
-        const data = await gasCall('getPendingApprovals');
-        // Map to old format for compatibility with existing UI
-        const requests = [...(data.cashAdvances || []), ...(data.releases || [])];
+        const data = await gasCall('getPendingApprovals') || {};
+        const requests = [...(data.cashAdvances || []), ...(data.releases || []), ...(data.liquidations || [])];
         return {
             requests: requests,
             cashAdvances: data.cashAdvances || [],
             releases: data.releases || [],
+            liquidations: data.liquidations || [],
             materials: data.materials || [],
             equipment: data.equipment || [],
             estimates: data.estimates || [],
@@ -243,6 +243,17 @@ const DataService = {
     },
     async approveIncomingCash(id) {
         return await gasCall('approveIncomingCash', id);
+    },
+
+    // ─── LIQUIDATION ────────────────────────────────────────────
+    async submitLiquidation(payload) {
+        return await gasCall('submitLiquidation', payload);
+    },
+    async approveLiquidation(id) {
+        return await gasCall('approveLiquidation', id);
+    },
+    async rejectLiquidation(id) {
+        return await gasCall('rejectLiquidation', id);
     },
 
     // ─── SOW ITEMS FOR PROJECT ────────────────────────────────

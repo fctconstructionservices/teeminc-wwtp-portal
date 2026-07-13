@@ -2,6 +2,7 @@
 //  APPROVALS PAGE - Complete with fixes
 //  UPDATED: Works with new separate sheets structure
 //  NEW: Cash Release "For Review" tab for Admins
+//  NEW: Liquidation approval in Pending tab
 // ================================================================
 
 // ─── REQUEST DETAIL MODAL ──────────────────────────────────────
@@ -134,7 +135,7 @@ const ApprovalsPage = {
             const user = App.currentUser;
             const isSuperAdmin = user && user.role === 'superadmin';
             const isAdmin = user && user.role === 'admin';
-            const isApprover = App.isApprover() && !isSuperAdmin;
+            const isApprover = App.isApprover() && !isSuperAdmin && !isAdmin;
 
             const pendingData = await DataService.getPendingApprovals();
             const myRequests = await DataService.getMyPendingRequests();
@@ -143,21 +144,24 @@ const ApprovalsPage = {
 
             const userEmail = user ? user.email.toLowerCase() : '';
             
-            // Get data from new structure
             const cashAdvances = pendingData.cashAdvances || [];
             const releases = pendingData.releases || [];
+            const liquidations = pendingData.liquidations || [];
             const materials = pendingData.materials || [];
             const equipment = pendingData.equipment || [];
             const estimates = pendingData.estimates || [];
             const dailyRecords = pendingData.dailyRecords || [];
 
-            // Filter out self-requests
             const filteredCashAdvances = cashAdvances.filter(function(r) {
                 return r.requestorEmail && r.requestorEmail.toLowerCase() !== userEmail;
             });
 
             const filteredReleases = releases.filter(function(r) {
                 return r.releasedBy && r.releasedBy.toLowerCase() !== userEmail;
+            });
+
+            const filteredLiquidations = liquidations.filter(function(l) {
+                return l.requestorEmail && l.requestorEmail.toLowerCase() !== userEmail;
             });
 
             const filteredMaterials = materials.filter(function(m) {
@@ -173,25 +177,25 @@ const ApprovalsPage = {
             });
 
             const totalPending = filteredCashAdvances.length + filteredReleases.length + 
-                                filteredMaterials.length + filteredEquipment.length + 
-                                estimates.length + filteredDailyRecords.length;
+                                filteredLiquidations.length + filteredMaterials.length + 
+                                filteredEquipment.length + estimates.length + filteredDailyRecords.length;
 
             let html = `
             <div class="section-head"><h2>Approval Dashboard</h2><div class="rule"></div>
-                <span class="badge">${isApprover || isSuperAdmin ? totalPending + ' pending' : myRequests.length + ' my requests'}</span>
+                <span class="badge">${(isAdmin || isSuperAdmin) ? totalPending + ' pending' : myRequests.length + ' my requests'}</span>
             </div>
 
             <div class="approval-tab-bar">
-                ${(isApprover || isSuperAdmin) ? `<button class="active" data-tab="pending" onclick="ApprovalsPage.switchTab('pending')">${Icon.clipboardList({size:14})} Pending Approvals (${filteredCashAdvances.length + filteredMaterials.length + filteredEquipment.length + estimates.length + filteredDailyRecords.length})</button>` : ''}
+                ${(isAdmin || isSuperAdmin) ? `<button class="active" data-tab="pending" onclick="ApprovalsPage.switchTab('pending')">${Icon.clipboardList({size:14})} Pending Approvals (${filteredCashAdvances.length + filteredLiquidations.length + filteredMaterials.length + filteredEquipment.length + estimates.length + filteredDailyRecords.length})</button>` : ''}
                 ${(isAdmin && !isSuperAdmin) ? `<button data-tab="reviewing" onclick="ApprovalsPage.switchTab('reviewing')">${Icon.clipboardList({size:14})} For Review (${filteredReleases.length})</button>` : ''}
-                <button ${!(isApprover || isSuperAdmin) ? 'class="active"' : ''} data-tab="myrequests" onclick="ApprovalsPage.switchTab('myrequests')">${Icon.user({size:14})} My Requests (${myRequests.length})</button>
+                <button ${!(isAdmin || isSuperAdmin) ? 'class="active"' : ''} data-tab="myrequests" onclick="ApprovalsPage.switchTab('myrequests')">${Icon.user({size:14})} My Requests (${myRequests.length})</button>
                 <button data-tab="approved" onclick="ApprovalsPage.switchTab('approved')">${Icon.checkCircle({size:14})} Approved (${myApproved.length})</button>
                 <button data-tab="rejected" onclick="ApprovalsPage.switchTab('rejected')">${Icon.xCircle({size:14})} Rejected (${myRejected.length})</button>
             </div>
 
-            ${(isApprover || isSuperAdmin) ? `<div id="approval-tab-pending" class="approval-tab-content active">${this._renderPendingTab({cashAdvances: filteredCashAdvances, materials: filteredMaterials, equipment: filteredEquipment, estimates: estimates, dailyRecords: filteredDailyRecords})}</div>` : ''}
+            ${(isAdmin || isSuperAdmin) ? `<div id="approval-tab-pending" class="approval-tab-content active">${this._renderPendingTab({cashAdvances: filteredCashAdvances, liquidations: filteredLiquidations, materials: filteredMaterials, equipment: filteredEquipment, estimates: estimates, dailyRecords: filteredDailyRecords})}</div>` : ''}
             ${(isAdmin && !isSuperAdmin) ? `<div id="approval-tab-reviewing" class="approval-tab-content">${this._renderReviewingTab(filteredReleases)}</div>` : ''}
-            <div id="approval-tab-myrequests" class="approval-tab-content ${!(isApprover || isSuperAdmin) ? 'active' : ''}">${this._renderMyRequestsTab(myRequests, 'pending')}</div>
+            <div id="approval-tab-myrequests" class="approval-tab-content ${!(isAdmin || isSuperAdmin) ? 'active' : ''}">${this._renderMyRequestsTab(myRequests, 'pending')}</div>
             <div id="approval-tab-approved" class="approval-tab-content">${this._renderMyRequestsTab(myApproved, 'approved')}</div>
             <div id="approval-tab-rejected" class="approval-tab-content">${this._renderMyRequestsTab(myRejected, 'rejected')}</div>`;
 
@@ -241,6 +245,43 @@ const ApprovalsPage = {
                 html += `
                 <div class="approval-request-item" style="cursor:pointer;">
                     <div class="ar-icon">${Icon.wallet({size:16})}</div>
+                    <div class="ar-body" onclick="RequestDetailModal.open('${r.id}','request')">
+                        <div class="ar-title">${r.requestor} — ${r.projectId || '—'}</div>
+                        <div class="ar-meta">
+                            <span class="ar-id">${r.id}</span>
+                            <span>₱${(r.amount || 0).toFixed(2)}</span>
+                            <span>${r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ''}</span>
+                            <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${r.status}</span>
+                        </div>
+                    </div>
+                    <div class="ar-actions">${actionsHtml}</div>
+                </div>`;
+            });
+            html += `</div></div>`;
+        }
+
+        // ─── Liquidation Requests ──────────────────────────────
+        html += `<div class="section-head"><h3>Liquidation Requests</h3><div class="rule"></div></div>`;
+        if (data.liquidations.length === 0) {
+            html += `<div class="empty"><p>No pending liquidation requests.</p></div>`;
+        } else {
+            html += `<div class="panel"><div style="padding:4px 0;">`;
+            data.liquidations.forEach(r => {
+                let actionsHtml = '';
+                if (isSuperAdmin) {
+                    actionsHtml = `
+                        <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${r.id}','Liquidation')">Force Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${r.id}','Liquidation')">Force Reject</button>
+                    `;
+                } else if (isApprover) {
+                    actionsHtml = `
+                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${r.id}','Liquidation')">Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${r.id}','Liquidation')">Reject</button>
+                    `;
+                }
+                html += `
+                <div class="approval-request-item" style="cursor:pointer;">
+                    <div class="ar-icon">${Icon.receipt({size:16})}</div>
                     <div class="ar-body" onclick="RequestDetailModal.open('${r.id}','request')">
                         <div class="ar-title">${r.requestor} — ${r.projectId || '—'}</div>
                         <div class="ar-meta">
@@ -416,7 +457,7 @@ const ApprovalsPage = {
         reviews.forEach(function(r) {
             const isSelf = r.releasedBy && r.releasedBy.toLowerCase() === userEmail;
             const isAdmin = user && user.role === 'admin';
-            const canReview = isAdmin && isSelf;
+            const canReview = isAdmin && !isSelf;
             let actionsHtml = '';
             if (canReview) {
                 actionsHtml = `
@@ -458,13 +499,13 @@ const ApprovalsPage = {
         } else {
             html += `<div class="panel"><div style="padding:4px 0;">`;
             requests.forEach(r => {
-                const icon = r.type === 'Cash Advance' ? Icon.wallet({size:16}) : 
+                const icon = r.type === 'CashAdvance' ? Icon.wallet({size:16}) : 
                              r.type === 'Liquidation' ? Icon.receipt({size:16}) : 
                              r.type === 'Estimate' ? Icon.ruler({size:16}) : 
                              r.type === 'Material' ? Icon.package({size:16}) :
                              r.type === 'Equipment' ? Icon.wrench({size:16}) :
                              r.type === 'DailyRecord' ? Icon.clipboardList({size:16}) :
-                             r.type === 'Incoming Cash' ? Icon.incoming({size:16}) :
+                             r.type === 'IncomingCash' ? Icon.incoming({size:16}) :
                              Icon.fileText({size:16});
                 const clickHandler = `ApprovalsPage.openMyRequestDetail('${r.id}')`;
                 html += `
@@ -528,9 +569,10 @@ const ApprovalsPage = {
                     break;
                 }
 
-                case 'Incoming Cash':
-                case 'Cash Advance':
-                case 'Cash Release':
+                case 'IncomingCash':
+                case 'CashAdvance':
+                case 'CashRelease':
+                case 'Liquidation':
                 default:
                     RequestDetailModal.open(r.id, 'request');
             }

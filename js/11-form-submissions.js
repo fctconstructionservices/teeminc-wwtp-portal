@@ -6,6 +6,7 @@
 //  - Cash Advance → CashAdvanceRequests sheet
 //  - Incoming Cash → IncomingCashRequests sheet
 //  - Release Cash → CashRelease sheet
+//  - Liquidation → Liquidations sheet (NEW)
 // ================================================================
 
 /**
@@ -376,6 +377,10 @@ function fileToBase64_(file) {
 
 // ─── LIQUIDATE FORM ──────────────────────────────────────────────────
 
+/**
+ * submitLiquidateForm - Handles liquidation submission
+ * PURPOSE: Records liquidation with receipt and amount
+ */
 async function submitLiquidateForm(e) {
     e.preventDefault();
     
@@ -383,53 +388,86 @@ async function submitLiquidateForm(e) {
     const receiptNo = document.getElementById('liq-receipt').value.trim();
     const amount = parseFloat(document.getElementById('liq-amount').value);
     const description = document.getElementById('liq-desc').value.trim();
+    const vendor = document.getElementById('liq-vendor').value.trim();
+    const tin = document.getElementById('liq-tin').value.trim();
+    const date = document.getElementById('liq-date').value;
+    const fileInput = document.getElementById('liq-file');
     
     let valid = true;
+    let missingFields = [];
     
     if (!requestId) { 
         document.getElementById('liq-req-field').classList.add('error');
-        valid = false; 
+        valid = false;
+        missingFields.push('Cash Advance Request ID');
     } else { 
         document.getElementById('liq-req-field').classList.remove('error'); 
     }
     
     if (!receiptNo) { 
         document.getElementById('liq-receipt-field').classList.add('error');
-        valid = false; 
+        valid = false;
+        missingFields.push('Receipt No.');
     } else { 
         document.getElementById('liq-receipt-field').classList.remove('error'); 
     }
     
     if (!amount || amount <= 0) { 
         document.getElementById('liq-amount-field').classList.add('error');
-        valid = false; 
+        valid = false;
+        missingFields.push('Amount');
     } else { 
         document.getElementById('liq-amount-field').classList.remove('error'); 
     }
     
     if (!description) { 
         document.getElementById('liq-desc-field').classList.add('error');
-        valid = false; 
+        valid = false;
+        missingFields.push('Description');
     } else { 
         document.getElementById('liq-desc-field').classList.remove('error'); 
     }
     
-    if (!valid) return false;
+    // File is optional for liquidation
+    const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
     
-    const confirmed = await Confirm.open('Submit Liquidation?', `Liquidate ${requestId}?`);
+    if (!valid) {
+        UI.toast(`Please fill in all required fields: ${missingFields.join(', ')}`, 'error');
+        return false;
+    }
+    
+    const confirmed = await Confirm.open('Submit Liquidation?', `Liquidate ₱${amount.toFixed(2)} for request ${requestId}?`);
     if (!confirmed) return false;
     
     try {
-        await DataService.submitLiquidation({ 
-            requestId, 
-            receiptNo, 
-            amount, 
-            description 
-        });
+        const payload = { 
+            requestId,
+            receiptNo,
+            amount,
+            description,
+            vendor: vendor || '',
+            tin: tin || '',
+            date: date || new Date().toISOString().split('T')[0],
+            projectId: '' // will be derived from the cash advance
+        };
         
-        UI.toast('Liquidation submitted!', 'success');
+        if (hasFile) {
+            const file = fileInput.files[0];
+            payload.fileBase64 = await fileToBase64_(file);
+            payload.fileName = file.name;
+            payload.fileMimeType = file.type;
+        }
+        
+        await DataService.submitLiquidation(payload);
+        
+        UI.toast('Liquidation submitted for approval!', 'success');
         document.getElementById('liquidateForm').reset();
+        if (fileInput) fileInput.value = '';
         App.navigate('home');
+        
+        if (typeof HomePage !== 'undefined' && HomePage.load) {
+            HomePage.load();
+        }
     } catch (err) { 
         UI.toast('' + err.message, 'error'); 
     }
@@ -660,7 +698,7 @@ async function submitReleaseForm(e) {
     
     if (amount != approvedAmount) {
         document.getElementById('rel-amount-field').classList.add('error');
-        UI.toast(`Release amount (₱${amount.toFixed(2)}) is not equal from the approved amount (₱${approvedAmount.toFixed(2)}).`, 'error');
+        UI.toast(`Release amount (₱${amount.toFixed(2)}) is not equal to the approved amount (₱${approvedAmount.toFixed(2)}).`, 'error');
         return false;
     }
     

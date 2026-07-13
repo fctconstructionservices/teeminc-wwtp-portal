@@ -21,6 +21,7 @@ const TABS = {
   EQUIPMENT: 'Equipment',
   CASH_ADVANCE_REQUESTS: 'CashAdvanceRequests',
   CASH_RELEASE: 'CashRelease',
+  LIQUIDATIONS: 'Liquidations',
   INCOMING_CASH_REQUESTS: 'IncomingCashRequests',
   APPROVALS: 'Approvals',
   ACTIVITY_LOG: 'ActivityLog'
@@ -55,6 +56,9 @@ const SCHEMAS = {
   CashRelease: ['id', 'originalRequestId', 'projectId', 'requestor', 'requestorEmail', 'amount', 'description', 'scope',
     'status', 'createdAt', 'releasedBy', 'releasedAt', 'reviewedByJSON'],
   
+  Liquidations: ['id', 'cashAdvanceId', 'projectId', 'requestor', 'requestorEmail', 
+    'amount', 'description', 'receiptNo', 'attachmentsJSON', 'status', 'createdAt', 'reviewedBy'],  
+
   IncomingCashRequests: ['id', 'type', 'projectId', 'requestor', 'requestorEmail', 'amount', 'description',
     'paymentMethod', 'reference', 'transactionDate', 'attachmentsJSON', 'status', 'createdAt'],
   
