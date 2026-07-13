@@ -1,44 +1,22 @@
 /**
- * Code.gs — FCTC Operations Board backend
+ * Code.gs — FCTC Operations Board backend (v2 - Separate Sheets)
  * 
  * PURPOSE: This file serves as the backend API for the FCTC Operations Board.
- * It handles all data operations including authentication, project management,
- * cash advance requests, approvals, materials/equipment management, and more.
+ * It handles all data operations with separate sheets for each request type.
  * 
- * ARCHITECTURE: Standalone Google Apps Script that connects to a Google Sheet
- * for data storage. The frontend (hosted on GitHub Pages) communicates with
- * this backend via fetch() calls to the deployed web app URL.
+ * NEW STRUCTURE:
+ *   - CashAdvanceRequests (CA-***) - Cash advance requests
+ *   - CashRelease (REL-***) - Cash release records
+ *   - IncomingCashRequests (IC-***) - Incoming cash requests
+ *   - Materials (MAT-***) - Materials requests
+ *   - Equipment (EQ-***) - Equipment requests
+ *   - Other sheets remain (Projects, SOWItems, DailyRecords, Estimates, etc.)
  * 
- * FIXES APPLIED:
- * - Fixed self-approval prevention (Issue 3.1)
- * - Fixed approval logic to require all approvers (Issue 3.7)
- * - Added proper role-based approval (Issue 3.2, 3.4)
- * - Added getMyApprovedRequests and getMyRejectedRequests (Issue 3.6)
- * - Daily Records approval system (Draft → Pending → Approved/Rejected)
- * - Photo upload to Drive and display in Photos tab
- * - SOW management: add, update, delete with Gantt integration
- * - FIX: Duplicate approval entries for non-cash requests (Bug #2)
- * - FIX: getProjectData no longer calls .map() on a single project object
- * - FIX: Added qty and unit fields to SOWItems
- * - FIX: Typo in logActivity for daily records
- * - FIX: getPendingApprovals() no longer double-lists non-cash requests
- * - FIX: Super Admin is EXCLUDED from normal approval requirements.
- *   Super Admin ONLY has Force Approve/Force Reject capabilities.
- * - FIX: Added forceReject() function for Super Admin override.
- * - FIX: Added support for Incoming Cash approval workflow.
- * 
- * NEW: Revenue, Expenses, and Cash Position are now DYNAMICALLY computed
- * from the data, not stored statically.
- *   • Project Revenue = total approved Incoming Cash for that project
- *   • Project Expenses = total approved "Release Cash" for that project
- *   • Cash Position = Revenue - Expenses
- *   • Finance dashboard KPIs reflect these totals across all projects.
- * 
- * NEW: Release Cash workflow
- *   • Only Super Admin can submit release requests
- *   • Status = "Reviewing" after submission
- *   • All Admins (non-superadmin) must review via "Reviewed" action
- *   • After all Admins review, status becomes "Released"
+ * STATUS FLOWS:
+ *   - Cash Advance: Pending → Approved → (auto-copy to CashRelease as Pending)
+ *   - Cash Release: Pending → For Review → Reviewed
+ *   - Incoming Cash: Pending → Approved/Rejected
+ *   - Materials/Equipment: Pending → Approved/Rejected
  */
 
 const SHEET_ID = '1Z-1NtuiJ_BYfUD_9CGfccJmJT6hHmnunc5zbrHaMiDw';
@@ -49,21 +27,10 @@ const SHEET_ID = '1Z-1NtuiJ_BYfUD_9CGfccJmJT6hHmnunc5zbrHaMiDw';
 
 let CURRENT_REQUEST_USER_EMAIL = '';
 
-/**
- * doGet - Handles GET requests to the web app
- * PURPOSE: Provides a simple status response when accessed via browser
- */
 function doGet(e) {
   return jsonResponse_({ status: 'FCTC Operations Board API is running. Use POST requests.' });
 }
 
-/**
- * doPost - Main entry point for all API calls from frontend
- * PURPOSE: Routes incoming requests to the appropriate handler function
- * 
- * @param {Object} e - The request event containing post data
- * @returns {Object} JSON response with success flag and data or error
- */
 function doPost(e) {
   try {
     const body = JSON.parse(e.postData.contents);
@@ -81,17 +48,12 @@ function doPost(e) {
   }
 }
 
-/**
- * jsonResponse_ - Helper to create JSON responses
- * PURPOSE: Standardizes API response format
- */
 function jsonResponse_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
 /**
  * API_ACTIONS - Maps action names to handler functions
- * PURPOSE: Routes API calls to the correct backend function
  */
 const API_ACTIONS = {
   loginUser: loginUser,
@@ -122,24 +84,22 @@ const API_ACTIONS = {
   rejectItem: rejectItem,
   forceApprove: forceApprove,
   forceReject: forceReject,
+  // Cash Advance
   submitCashAdvance: submitCashAdvance,
-  submitLiquidation: submitLiquidation,
-  submitIncomingCash: submitIncomingCash,
+  approveCashAdvance: approveCashAdvance,
+  // Cash Release
   submitRelease: submitRelease,
   reviewRelease: reviewRelease,
-  getApprovedCashAdvancesForRelease: getApprovedCashAdvancesForRelease,
-  // Daily record approval
-  submitDailyRecordForApproval: submitDailyRecordForApproval,
-  approveDailyRecord: approveDailyRecord,
-  rejectDailyRecord: rejectDailyRecord,
-  getPendingDailyRecords: getPendingDailyRecords,
-  // SOW management
+  getPendingCashReleases: getPendingCashReleases,
+  // Incoming Cash
+  submitIncomingCash: submitIncomingCash,
+  approveIncomingCash: approveIncomingCash,
+  // SOW
   addSOWItem: addSOWItem,
   updateSOWItem: updateSOWItem,
   deleteSOWItem: deleteSOWItem,
   addProject: addProject,
   getSOWItemsForProject: getSOWItemsForProject,
-  // Photo upload
   uploadImage: uploadImage
 };
 
@@ -147,32 +107,14 @@ const API_ACTIONS = {
 //  GENERIC SHEET HELPERS
 // ============================================================
 
-/**
- * ss_ - Get the main spreadsheet
- * PURPOSE: Centralizes access to the Google Sheet
- */
 function ss_() { return SpreadsheetApp.openById(SHEET_ID); }
-
-/**
- * sheet_ - Get a specific sheet by name
- * PURPOSE: Gets a sheet and throws error if not found
- */
 function sheet_(name) {
   const sh = ss_().getSheetByName(name);
   if (!sh) throw new Error('Sheet not found: ' + name);
   return sh;
 }
-
-/**
- * headers_ - Get column headers for a sheet
- * PURPOSE: Returns the schema/headers for a given sheet
- */
 function headers_(name) { return SCHEMAS[name]; }
 
-/**
- * readAll_ - Read all rows from a sheet as objects
- * PURPOSE: Converts sheet data to array of objects with column names as keys
- */
 function readAll_(name) {
   const sh = sheet_(name);
   const lastRow = sh.getLastRow();
@@ -189,10 +131,6 @@ function readAll_(name) {
     });
 }
 
-/**
- * appendRow_ - Add a new row to a sheet
- * PURPOSE: Inserts a new record with proper column mapping
- */
 function appendRow_(name, obj) {
   const sh = sheet_(name);
   const heads = headers_(name);
@@ -201,10 +139,6 @@ function appendRow_(name, obj) {
   return obj;
 }
 
-/**
- * findRowNum_ - Find a row by ID field
- * PURPOSE: Locates a row based on a unique identifier
- */
 function findRowNum_(name, idField, idValue) {
   const sh = sheet_(name);
   const heads = headers_(name);
@@ -218,10 +152,6 @@ function findRowNum_(name, idField, idValue) {
   return -1;
 }
 
-/**
- * updateRow_ - Update a specific row
- * PURPOSE: Updates fields of an existing record
- */
 function updateRow_(name, idField, idValue, patch) {
   const rowNum = findRowNum_(name, idField, idValue);
   if (rowNum === -1) return false;
@@ -234,18 +164,10 @@ function updateRow_(name, idField, idValue, patch) {
   return true;
 }
 
-/**
- * nextId_ - Generate a unique ID
- * PURPOSE: Creates IDs with prefix and UUID for uniqueness
- */
 function nextId_(prefix) {
   return prefix + '-' + Utilities.getUuid().slice(0, 8).toUpperCase();
 }
 
-/**
- * logActivity_ - Log an activity entry
- * PURPOSE: Records user actions for audit trail
- */
 function logActivity_(text, type, refId) {
   appendRow_('ActivityLog', {
     timestamp: new Date(),
@@ -255,31 +177,54 @@ function logActivity_(text, type, refId) {
   });
 }
 
-/**
- * currentUserEmail_ - Get the current user's email
- * PURPOSE: Returns the email of the authenticated user from the request
- */
 function currentUserEmail_() {
   return CURRENT_REQUEST_USER_EMAIL || '';
+}
+
+function currentUserName_() {
+  const email = currentUserEmail_();
+  const u = readAll_('Users').find(function (row) { return String(row.email).toLowerCase() === String(email).toLowerCase(); });
+  return u ? u.name : (email || 'Unknown User');
+}
+
+function getAllAdminsExceptSuperAdmin_() {
+  return readAll_('Users')
+    .filter(function (u) { return u.role === 'admin'; })
+    .map(function (u) { return String(u.email).toLowerCase(); });
+}
+
+function getAdminEmails_() {
+  return readAll_('Users')
+    .filter(function (u) { return u.role === 'admin' || u.role === 'approver'; })
+    .map(function (u) { return String(u.email).toLowerCase(); });
+}
+
+// ============================================================
+//  FINANCIAL HELPERS
+// ============================================================
+
+function getTotalIncomingCashForProject(projectId) {
+  const allIncoming = readAll_('IncomingCashRequests');
+  return allIncoming
+    .filter(function (c) { return c.projectId === projectId && c.status === 'Approved'; })
+    .reduce(function (sum, c) { return sum + (parseFloat(c.amount) || 0); }, 0);
+}
+
+function getTotalReleasedCashForProject(projectId) {
+  const allReleased = readAll_('CashRelease');
+  return allReleased
+    .filter(function (r) { return r.projectId === projectId && r.status === 'Reviewed'; })
+    .reduce(function (sum, r) { return sum + (parseFloat(r.amount) || 0); }, 0);
 }
 
 // ============================================================
 //  AUTH
 // ============================================================
 
-/**
- * loginUser - Authenticate a user
- * PURPOSE: Validates email/password against the Users sheet
- * 
- * @param {string} email - User's email
- * @param {string} password - User's password
- * @returns {Object} User object with role information
- */
 function loginUser(email, password) {
   email = String(email || '').trim().toLowerCase();
   const users = readAll_('Users');
   const record = users.find(function (u) { return String(u.email).toLowerCase() === email; });
-
   if (!record) {
     throw new Error('This email is not registered. Please contact your administrator for access.');
   }
@@ -295,75 +240,10 @@ function loginUser(email, password) {
   };
 }
 
-/**
- * getAdminEmails_ - Get all admin/approver emails (EXCLUDING superadmin)
- * PURPOSE: Retrieves list of users who are REQUIRED to approve requests.
- * Super Admin is NOT required (they have Force Approve/Reject instead).
- */
-function getAdminEmails_() {
-  return readAll_('Users')
-    .filter(function (u) { 
-      return u.role === 'admin' || u.role === 'approver';
-    })
-    .map(function (u) { return String(u.email).toLowerCase(); });
-}
-
-/**
- * getAllAdminsExceptSuperAdmin_ - Get all admin emails (EXCLUDING superadmin)
- * PURPOSE: Used for Release Cash review workflow
- */
-function getAllAdminsExceptSuperAdmin_() {
-  return readAll_('Users')
-    .filter(function (u) {
-      return u.role === 'admin';
-    })
-    .map(function (u) {
-      return String(u.email).toLowerCase();
-    });
-}
-
-/**
- * getApproversOnly_ - Get only approver emails (excluding admins)
- * PURPOSE: Gets list of approver role users
- */
-function getApproversOnly_() {
-  return readAll_('Users')
-    .filter(function (u) { return u.role === 'approver'; })
-    .map(function (u) { return String(u.email).toLowerCase(); });
-}
-
-// ============================================================
-//  HELPER FUNCTIONS FOR COMPUTED FINANCIALS
-// ============================================================
-
-/**
- * getTotalIncomingCashForProject - Sum of all approved incoming cash for a project
- * PURPOSE: Computes project revenue from IncomingCash sheet
- */
-function getTotalIncomingCashForProject(projectId) {
-  return readAll_('IncomingCash')
-    .filter(function (c) { return c.projectId === projectId; })
-    .reduce(function (sum, c) { return sum + (parseFloat(c.amount) || 0); }, 0);
-}
-
-/**
- * getTotalReleasedCashForProject - Sum of all approved Release Cash requests for a project
- * PURPOSE: Computes project expenses from Requests sheet
- */
-function getTotalReleasedCashForProject(projectId) {
-  return readAll_('Requests')
-    .filter(function (r) { return r.projectId === projectId && r.type === 'Release Cash' && r.status === 'Released'; })
-    .reduce(function (sum, r) { return sum + (parseFloat(r.amount) || 0); }, 0);
-}
-
 // ============================================================
 //  HOME
 // ============================================================
 
-/**
- * getHomeData - Get data for the home page dashboard
- * PURPOSE: Returns projects (with computed revenue/expenses/cash), gauges, pending requests, and activity logs
- */
 function getHomeData() {
   const projects = readAll_('Projects').map(function (p) {
     const revenue = getTotalIncomingCashForProject(p.id);
@@ -378,35 +258,33 @@ function getHomeData() {
     };
   });
 
-  const requests = readAll_('Requests');
-  const pending = requests.filter(function (r) { return r.status === 'Pending'; });
+  const cashAdvances = readAll_('CashAdvanceRequests');
+  const pendingCA = cashAdvances.filter(function (r) { return r.status === 'Pending'; });
+  const pendingApprovals = pendingCA.length;
 
-  const pendingRequests = requests.slice(-5).reverse().map(function (r) {
-    return {
-      id: r.id, requestor: r.requestor, project: r.projectId,
-      amount: r.amount, status: r.status
-    };
-  });
+  const cashReleases = readAll_('CashRelease');
+  const pendingReleases = cashReleases.filter(function (r) { return r.status === 'Pending'; });
+  const reviewingReleases = cashReleases.filter(function (r) { return r.status === 'For Review'; });
 
-  const releasedThisMonth = requests
-    .filter(function (r) { return r.type === 'Release Cash' && r.status === 'Released'; })
-    .reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
+  const releasedThisMonth = cashReleases
+    .filter(function (r) { return r.status === 'Reviewed' && new Date(r.createdAt).getMonth() === new Date().getMonth(); })
+    .reduce(function (s, r) { return s + (parseFloat(r.amount) || 0); }, 0);
 
-  const allIncoming = readAll_('IncomingCash');
-  const totalIncoming = allIncoming.reduce(function(s, c) { 
-    return s + Number(c.amount || 0); 
-  }, 0);
+  const allIncoming = readAll_('IncomingCashRequests');
+  const totalIncoming = allIncoming
+    .filter(function (c) { return c.status === 'Approved'; })
+    .reduce(function (s, c) { return s + (parseFloat(c.amount) || 0); }, 0);
 
-  const totalReleased = requests
-    .filter(function (r) { return r.type === 'Release Cash' && r.status === 'Released'; })
-    .reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
+  const totalReleased = cashReleases
+    .filter(function (r) { return r.status === 'Reviewed'; })
+    .reduce(function (s, r) { return s + (parseFloat(r.amount) || 0); }, 0);
 
-  const availableBudget = totalIncoming - totalReleased;  
+  const availableBudget = totalIncoming - totalReleased;
 
   const gauges = [
-    { label: 'Pending Approval', value: String(pending.length), color: '#C2860F', dashOffset: 70 },
-    { label: 'Overdue Liquidation', value: String(requests.filter(function (r) { return r.type === 'Liquidation' && r.status === 'Pending'; }).length), color: '#B23A2E', dashOffset: 88 },
-    { label: 'Released, This Month', value: '₱' + releasedThisMonth.toLocaleString(), color: '#2F7A46', dashOffset: 55 },
+    { label: 'Pending Approval', value: String(pendingCA.length), color: '#C2860F', dashOffset: 70 },
+    { label: 'Pending Release', value: String(pendingReleases.length), color: '#24455A', dashOffset: 55 },
+    { label: 'Released, This Month', value: '₱' + releasedThisMonth.toLocaleString(), color: '#2F7A46', dashOffset: 60 },
     { label: 'Total Liquid Cash', value: '₱' + availableBudget.toLocaleString(), color: '#24455A', dashOffset: 30 }
   ];
 
@@ -414,65 +292,40 @@ function getHomeData() {
     return { text: l.text, time: Utilities.formatDate(new Date(l.timestamp), Session.getScriptTimeZone(), 'MMM d'), type: l.type };
   });
 
-  return { projects: projects, gauges: gauges, pendingRequests: pendingRequests, logs: logs };
+  return { projects: projects, gauges: gauges, pendingRequests: pendingCA, logs: logs };
 }
 
 // ============================================================
 //  PROJECT
 // ============================================================
 
-/**
- * addProject - Add a new project to the database
- */
 function addProject(id, name, status, revenue, expenses, cashPosition) {
-    var userEmail = currentUserEmail_();
-    var users = readAll_('Users');
-    var user = users.find(function(u) { 
-        return u.email.toLowerCase() === userEmail.toLowerCase(); 
-    });
-    
-    if (!user || user.role !== 'superadmin') {
-        throw new Error('Only Super Admin can add new projects.');
-    }
-
-    var projects = readAll_('Projects');
-    var existing = projects.find(function(p) { 
-        return p.id === id; 
-    });
-    if (existing) {
-        throw new Error('Project ID "' + id + '" already exists. Please use a different ID.');
-    }
-
-    appendRow_('Projects', {
-        id: id,
-        name: name || id,
-        status: status || 'Ongoing',
-        revenue: 0,
-        expenses: 0,
-        cashPosition: 0
-    });
-
-    logActivity_(
-        'New project "' + name + '" (' + id + ') created by ' + currentUserName_(),
-        'blue'
-    );
-
-    return { 
-        success: true, 
-        id: id, 
-        name: name,
-        message: 'Project "' + name + '" created successfully.'
-    };
+  var userEmail = currentUserEmail_();
+  var users = readAll_('Users');
+  var user = users.find(function(u) { return u.email.toLowerCase() === userEmail.toLowerCase(); });
+  if (!user || user.role !== 'superadmin') {
+    throw new Error('Only Super Admin can add new projects.');
+  }
+  var projects = readAll_('Projects');
+  var existing = projects.find(function(p) { return p.id === id; });
+  if (existing) {
+    throw new Error('Project ID "' + id + '" already exists. Please use a different ID.');
+  }
+  appendRow_('Projects', {
+    id: id,
+    name: name || id,
+    status: status || 'Ongoing',
+    revenue: 0,
+    expenses: 0,
+    cashPosition: 0
+  });
+  logActivity_('New project "' + name + '" (' + id + ') created by ' + currentUserName_(), 'blue');
+  return { success: true, id: id, name: name, message: 'Project "' + name + '" created successfully.' };
 }
 
-/**
- * getProjectData - Get detailed data for a specific project
- * PURPOSE: Returns all project details with computed financials
- */
 function getProjectData(projectId) {
   const projects = readAll_('Projects');
   const proj = projects.find(function (p) { return p.id === projectId; });
-  
   if (!proj) return null;
 
   const revenue = getTotalIncomingCashForProject(projectId);
@@ -495,8 +348,7 @@ function getProjectData(projectId) {
       };
     });
 
-  const incomingCash = readAll_('IncomingCash').filter(function (c) { return c.projectId === projectId; });
-
+  const incomingCash = readAll_('IncomingCashRequests').filter(function (c) { return c.projectId === projectId && c.status === 'Approved'; });
   const dailyRecords = readAll_('DailyRecords')
     .filter(function (d) { return d.projectId === projectId; })
     .map(function (d) {
@@ -517,12 +369,12 @@ function getProjectData(projectId) {
       };
     });
 
+  // Estimates (unchanged)
   const groups = readAll_('EstimateGroups').filter(function (g) { return g.projectId === projectId; });
   const allMat = readAll_('EstimateMaterials');
   const allLabor = readAll_('EstimateLabor');
   const allEq = readAll_('EstimateEquipment');
   const allInd = readAll_('EstimateIndirect');
-
   const estimateGroups = groups.map(function (g) {
     return {
       sowId: g.sowId,
@@ -534,6 +386,9 @@ function getProjectData(projectId) {
       indirect: allInd.filter(function (i) { return i.groupId === g.id; })
     };
   });
+
+  const cashAdvanceRequests = readAll_('CashAdvanceRequests').filter(function (r) { return r.projectId === projectId; });
+  const cashReleases = readAll_('CashRelease').filter(function (r) { return r.projectId === projectId; });
 
   const allPhotos = [];
   dailyRecords.forEach(function (d) {
@@ -554,7 +409,8 @@ function getProjectData(projectId) {
     revenue: revenue,
     expenses: expenses,
     cashPosition: cashPosition,
-    requests: readAll_('Requests').filter(function (r) { return r.projectId === projectId; }),
+    cashAdvanceRequests: cashAdvanceRequests,
+    cashReleases: cashReleases,
     incomingCash: incomingCash,
     sowItems: sowItems,
     dailyRecords: dailyRecords,
@@ -563,16 +419,14 @@ function getProjectData(projectId) {
   };
 }
 
-/**
- * safeParse_ - Safely parse JSON string
- */
 function safeParse_(str, fallback) {
   try { return str ? JSON.parse(str) : fallback; } catch (e) { return fallback; }
 }
 
-/**
- * addDailyRecord - Add a new daily record (saves as draft by default)
- */
+// ============================================================
+//  DAILY RECORDS (unchanged)
+// ============================================================
+
 function addDailyRecord(projectId, data) {
   const photoUrls = [];
   if (data.photos && data.photos.length) {
@@ -586,23 +440,16 @@ function addDailyRecord(projectId, data) {
         const folder = getOrCreateAttachmentsFolder_();
         const file = folder.createFile(blob);
         photoUrls.push(file.getUrl());
-      } catch (e) {
-        // ignore
-      }
+      } catch (e) {}
     });
   }
 
   const workAccomplishedWithUrls = (data.workAccomplished || []).map(function (w) {
-    if (w.image && w.image.startsWith && !w.image.startsWith('data:')) {
-      return w;
-    }
+    if (w.image && w.image.startsWith && !w.image.startsWith('data:')) return w;
     return w;
   });
-
   const issuesWithUrls = (data.issues || []).map(function (iss) {
-    if (iss.image && iss.image.startsWith && !iss.image.startsWith('data:')) {
-      return iss;
-    }
+    if (iss.image && iss.image.startsWith && !iss.image.startsWith('data:')) return iss;
     return iss;
   });
 
@@ -624,44 +471,29 @@ function addDailyRecord(projectId, data) {
     createdBy: currentUserEmail_(),
     createdAt: new Date()
   });
-  
   logActivity_('Daily record added for ' + projectId + ' (' + data.date + ') by ' + currentUserName_(), 'blue', recordId);
   return { success: true, id: recordId };
 }
 
-/**
- * submitDailyRecordForApproval - Submit a daily record for approval
- */
 function submitDailyRecordForApproval(recordId) {
   updateRow_('DailyRecords', 'id', recordId, { status: 'pending' });
-  logActivity_('Daily record ' + recordId + ' submitted by ' + currentUserName_() + ' for approval', 'g', recordId);
-  
-  const record = readAll_('DailyRecords').find(function (r) { return r.id === recordId; });
-  appendRow_('Requests', {
-    id: nextId_('REQ'),
-    type: 'DailyRecord',
-    projectId: record ? record.projectId : '',
-    requestor: currentUserName_(),
-    requestorEmail: currentUserEmail_(),
-    amount: '',
-    description: 'Daily record ' + recordId + ' (' + (record ? record.date : '') + ')',
-    scope: '',
-    attachmentsJSON: '[]',
-    payloadJSON: JSON.stringify({ recordId: recordId }),
-    status: 'Pending',
-    createdAt: new Date(),
-    refId: recordId,
-    dateNeeded: ''
-  });
+  // We'll keep a generic request entry for daily records in the old Requests sheet for backward compatibility?
+  // Actually we can just use the DailyRecords sheet directly.
+  // For approvals, we'll handle in getPendingApprovals.
+  logActivity_('Daily record ' + recordId + ' submitted for approval', 'g', recordId);
   return { success: true };
 }
 
 function approveDailyRecord(recordId) {
-  return approveItem(recordId, 'DailyRecord');
+  updateRow_('DailyRecords', 'id', recordId, { status: 'approved' });
+  logActivity_('Daily record ' + recordId + ' approved', 'g', recordId);
+  return { success: true };
 }
 
 function rejectDailyRecord(recordId) {
-  return rejectItem(recordId, 'DailyRecord');
+  updateRow_('DailyRecords', 'id', recordId, { status: 'rejected' });
+  logActivity_('Daily record ' + recordId + ' rejected', 'a', recordId);
+  return { success: true };
 }
 
 function getPendingDailyRecords() {
@@ -669,7 +501,7 @@ function getPendingDailyRecords() {
 }
 
 // ============================================================
-//  ESTIMATES
+//  ESTIMATES (unchanged)
 // ============================================================
 
 function saveEstimates(projectId, groups) {
@@ -718,14 +550,6 @@ function submitEstimatesForApproval(projectId, sowId) {
   const g = readAll_('EstimateGroups').find(function (row) { return row.projectId === projectId && row.sowId === sowId; });
   if (!g) throw new Error('Estimate group not found');
   updateRow_('EstimateGroups', 'id', g.id, { status: 'pending' });
-
-  appendRow_('Requests', {
-    id: nextId_('REQ'), type: 'Estimate', projectId: projectId,
-    requestor: currentUserName_(), requestorEmail: currentUserEmail_(),
-    amount: '', description: g.sowDescription, scope: sowId,
-    attachmentsJSON: '[]', payloadJSON: '', status: 'Pending',
-    createdAt: new Date(), refId: g.id
-  });
   logActivity_('Estimate for ' + sowId + ' submitted for approval', 'g');
   return { success: true };
 }
@@ -754,23 +578,12 @@ function computeEstimateGroupTotal_(groupId) {
   return matSum + laborSum + eqSum + indSum;
 }
 
-function currentUserName_() {
-  const email = currentUserEmail_();
-  const u = readAll_('Users').find(function (row) { return String(row.email).toLowerCase() === String(email).toLowerCase(); });
-  return u ? u.name : (email || 'Unknown User');
-}
-
 // ============================================================
-//  MATERIALS DATABASE
+//  MATERIALS & EQUIPMENT (unchanged)
 // ============================================================
 
 function getAllMaterials() { return readAll_('Materials'); }
-
-function getMaterials(status) {
-  status = status || 'approved';
-  return readAll_('Materials').filter(function (m) { return m.status === status; });
-}
-
+function getMaterials(status) { return readAll_('Materials').filter(function (m) { return m.status === status; }); }
 function requestMaterial(data) {
   const id = nextId_('MAT');
   appendRow_('Materials', {
@@ -779,17 +592,10 @@ function requestMaterial(data) {
     image: data.image || '', docsJSON: JSON.stringify(data.docs || []), notes: data.notes || '',
     status: 'Pending', requestedBy: currentUserEmail_(), createdAt: new Date()
   });
-  appendRow_('Requests', {
-    id: nextId_('REQ'), type: 'Material', projectId: '', requestor: currentUserName_(),
-    requestorEmail: currentUserEmail_(), amount: '', description: data.name, scope: '',
-    attachmentsJSON: '[]', payloadJSON: '', status: 'Pending', createdAt: new Date(), refId: id
-  });
   logActivity_('Material Database Update Request: "' + data.name + '" requested by ' + currentUserName_(), 'blue');
   return { success: true, id: id };
 }
-
-function approveMaterial(id) { return approveGenericItem_('Materials', id, 'Material'); }
-
+function approveMaterial(id) { updateRow_('Materials', 'id', id, { status: 'approved' }); logActivity_('Material ' + id + ' approved', 'g'); return { success: true }; }
 function searchMaterials(query) {
   query = String(query || '').toLowerCase();
   return readAll_('Materials').filter(function (m) {
@@ -798,17 +604,8 @@ function searchMaterials(query) {
   });
 }
 
-// ============================================================
-//  EQUIPMENT DATABASE
-// ============================================================
-
 function getAllEquipment() { return readAll_('Equipment'); }
-
-function getEquipment(status) {
-  status = status || 'approved';
-  return readAll_('Equipment').filter(function (e) { return e.status === status; });
-}
-
+function getEquipment(status) { return readAll_('Equipment').filter(function (e) { return e.status === status; }); }
 function requestEquipment(data) {
   const id = nextId_('EQ');
   appendRow_('Equipment', {
@@ -817,17 +614,10 @@ function requestEquipment(data) {
     image: data.image || '', docsJSON: JSON.stringify(data.docs || []), notes: data.notes || '',
     status: 'Pending', requestedBy: currentUserEmail_(), createdAt: new Date()
   });
-  appendRow_('Requests', {
-    id: nextId_('REQ'), type: 'Equipment', projectId: '', requestor: currentUserName_(),
-    requestorEmail: currentUserEmail_(), amount: '', description: data.name, scope: '',
-    attachmentsJSON: '[]', payloadJSON: '', status: 'Pending', createdAt: new Date(), refId: id
-  });
   logActivity_('Equipment "' + data.name + '" requested by ' + currentUserName_(), 'blue');
   return { success: true, id: id };
 }
-
-function approveEquipment(id) { return approveGenericItem_('Equipment', id, 'Equipment'); }
-
+function approveEquipment(id) { updateRow_('Equipment', 'id', id, { status: 'approved' }); logActivity_('Equipment ' + id + ' approved', 'g'); return { success: true }; }
 function searchEquipment(query) {
   query = String(query || '').toLowerCase();
   return readAll_('Equipment').filter(function (e) {
@@ -836,23 +626,416 @@ function searchEquipment(query) {
   });
 }
 
-function approveGenericItem_(sheetName, id, typeLabel) {
-  updateRow_(sheetName, 'id', id, { status: 'approved' });
-  logActivity_(typeLabel + ' ' + id + ' approved', 'g');
+// ============================================================
+//  CASH ADVANCE
+// ============================================================
+
+function submitCashAdvance(payload) {
+  const uploaded = uploadAttachmentIfAny_(payload);
+  const fileUrl = uploaded.fileUrl;
+  const fileName = uploaded.fileName;
+
+  const id = nextId_('CA');
+  var projectName = '';
+  if (payload.project) {
+    var projects = readAll_('Projects');
+    var proj = projects.find(function(p) { return p.id === payload.project || p.name === payload.project; });
+    projectName = proj ? ' for ' + proj.name : ' for ' + payload.project;
+  }
+
+  appendRow_('CashAdvanceRequests', {
+    id: id,
+    type: 'Cash Advance',
+    projectId: payload.project || '',
+    requestor: currentUserName_(),
+    requestorEmail: currentUserEmail_(),
+    amount: payload.amount,
+    description: payload.description || '',
+    scope: payload.scopeOfWork || '',
+    attachmentsJSON: JSON.stringify(fileUrl ? [{ url: fileUrl, name: fileName }] : []),
+    payloadJSON: JSON.stringify({
+      requestType: payload.requestType || '',
+      dateNeeded: payload.dateNeeded || ''
+    }),
+    status: 'Pending',
+    createdAt: new Date(),
+    dateNeeded: payload.dateNeeded || ""
+  });
+
+  logActivity_('Cash advance ₱' + payload.amount + ' requested by ' + currentUserName_() + projectName, 'blue', id);
+  return { success: true, requestId: id, fileUrl: fileUrl, fileName: fileName };
+}
+
+function approveCashAdvance(id) {
+  const ca = readAll_('CashAdvanceRequests').find(function (r) { return r.id === id; });
+  if (!ca) throw new Error('Cash advance request not found.');
+  if (ca.status !== 'Pending') throw new Error('Request is not pending.');
+
+  // Update status to Approved
+  updateRow_('CashAdvanceRequests', 'id', id, { status: 'Approved' });
+
+  // AUTO-COPY to CashRelease sheet with status 'Pending'
+  const releaseId = nextId_('REL');
+  appendRow_('CashRelease', {
+    id: releaseId,
+    originalRequestId: id,
+    projectId: ca.projectId || '',
+    requestor: ca.requestor,
+    requestorEmail: ca.requestorEmail,
+    amount: ca.amount,
+    description: ca.description,
+    scope: ca.scope,
+    status: 'Pending',
+    createdAt: new Date(),
+    releasedBy: '',
+    releasedAt: '',
+    reviewedByJSON: '[]'
+  });
+
+  logActivity_('Cash advance ' + id + ' approved and copied to CashRelease as ' + releaseId + ' (Pending)', 'g', id);
+  return { success: true, releaseId: releaseId };
+}
+
+// ============================================================
+//  CASH RELEASE
+// ============================================================
+
+function getPendingCashReleases() {
+  return readAll_('CashRelease').filter(function (r) { return r.status === 'Pending'; });
+}
+
+function submitRelease(payload) {
+  const releaseId = payload.releaseId; // from dropdown
+  const releaseAmount = parseFloat(payload.amount) || 0;
+
+  const allReleases = readAll_('CashRelease');
+  const release = allReleases.find(function (r) { return r.id === releaseId && r.status === 'Pending'; });
+  if (!release) throw new Error('Pending release record not found.');
+
+  const approvedAmount = parseFloat(release.amount) || 0;
+  if (releaseAmount > approvedAmount) {
+    throw new Error('Release amount (₱' + releaseAmount.toFixed(2) + ') exceeds approved amount (₱' + approvedAmount.toFixed(2) + ').');
+  }
+
+  // Update the release record
+  updateRow_('CashRelease', 'id', releaseId, {
+    status: 'For Review',
+    releasedBy: currentUserEmail_(),
+    releasedAt: new Date(),
+    amount: releaseAmount // store the actual released amount (could be partial)
+  });
+
+  // Update the original Cash Advance status to 'Released'
+  const caId = release.originalRequestId;
+  if (caId) {
+    updateRow_('CashAdvanceRequests', 'id', caId, { status: 'Released' });
+  }
+
+  logActivity_('Release of ₱' + releaseAmount + ' for ' + releaseId + ' submitted by ' + currentUserName_() + ' (For Review)', 'blue', releaseId);
+  return { success: true, releaseId: releaseId };
+}
+
+function reviewRelease(releaseId, reviewerEmail) {
+  const release = readAll_('CashRelease').find(function (r) { return r.id === releaseId && r.status === 'For Review'; });
+  if (!release) throw new Error('Release record not found or not in For Review status.');
+
+  if (release.releasedBy && release.releasedBy.toLowerCase() === reviewerEmail.toLowerCase()) {
+    throw new Error('Self-review is not allowed.');
+  }
+
+  // Get existing reviewers
+  let reviewedBy = [];
+  try {
+    reviewedBy = JSON.parse(release.reviewedByJSON || '[]');
+  } catch (e) { reviewedBy = []; }
+
+  if (reviewedBy.indexOf(reviewerEmail.toLowerCase()) === -1) {
+    reviewedBy.push(reviewerEmail.toLowerCase());
+  }
+
+  // Update reviewedByJSON
+  updateRow_('CashRelease', 'id', releaseId, { reviewedByJSON: JSON.stringify(reviewedBy) });
+
+  // Get all admins except superadmin
+  const admins = getAllAdminsExceptSuperAdmin_();
+  const requiredReviewers = admins.filter(function (admin) {
+    return admin !== release.releasedBy.toLowerCase();
+  });
+
+  // Check if all required reviewers have reviewed
+  const allReviewed = requiredReviewers.every(function (admin) {
+    return reviewedBy.indexOf(admin) !== -1;
+  });
+
+  if (allReviewed) {
+    updateRow_('CashRelease', 'id', releaseId, { status: 'Reviewed' });
+    logActivity_('Release ' + releaseId + ' fully reviewed and released', 'g', releaseId);
+    return { success: true, status: 'Reviewed' };
+  } else {
+    logActivity_('Release ' + releaseId + ' reviewed by ' + reviewerEmail, 'blue', releaseId);
+    return { success: true, status: 'For Review' };
+  }
+}
+
+// ============================================================
+//  INCOMING CASH
+// ============================================================
+
+function submitIncomingCash(payload) {
+  const uploaded = uploadAttachmentIfAny_(payload);
+  const fileUrl = uploaded.fileUrl;
+  const fileName = uploaded.fileName;
+
+  const id = nextId_('IC');
+  var projectName = '';
+  if (payload.project) {
+    var projects = readAll_('Projects');
+    var proj = projects.find(function(p) { return p.id === payload.project || p.name === payload.project; });
+    projectName = proj ? ' for ' + proj.name : ' for ' + payload.project;
+  }
+
+  appendRow_('IncomingCashRequests', {
+    id: id,
+    type: payload.type || 'Cash Injection',
+    projectId: payload.project || '',
+    requestor: currentUserName_(),
+    requestorEmail: currentUserEmail_(),
+    amount: payload.amount,
+    description: payload.description || '',
+    paymentMethod: payload.method || '',
+    reference: payload.reference || '',
+    transactionDate: payload.date || '',
+    attachmentsJSON: JSON.stringify(fileUrl ? [{ url: fileUrl, name: fileName }] : []),
+    status: 'Pending',
+    createdAt: new Date()
+  });
+
+  logActivity_('Incoming cash ₱' + payload.amount + ' recorded by ' + currentUserName_() + projectName + ' (pending approval)', 'blue', id);
+  return { success: true, requestId: id, fileUrl: fileUrl, fileName: fileName };
+}
+
+function approveIncomingCash(id) {
+  const req = readAll_('IncomingCashRequests').find(function (r) { return r.id === id; });
+  if (!req) throw new Error('Request not found.');
+  if (req.status !== 'Pending') throw new Error('Request is not pending.');
+
+  updateRow_('IncomingCashRequests', 'id', id, { status: 'Approved' });
+  logActivity_('Incoming cash ₱' + req.amount + ' approved', 'g', id);
   return { success: true };
+}
+
+// ============================================================
+//  APPROVALS
+// ============================================================
+
+function getPendingApprovals() {
+  const userEmail = currentUserEmail_().toLowerCase();
+  const isAdmin = readAll_('Users').find(function (u) { return u.email.toLowerCase() === userEmail && (u.role === 'admin' || u.role === 'superadmin'); });
+
+  // Cash Advance Pending
+  const cashAdvances = readAll_('CashAdvanceRequests').filter(function (r) {
+    return r.status === 'Pending' && r.requestorEmail.toLowerCase() !== userEmail;
+  }).map(function (r) {
+    return { id: r.id, type: 'Cash Advance', projectId: r.projectId, requestor: r.requestor, requestorEmail: r.requestorEmail, amount: r.amount, description: r.description, status: r.status, createdAt: r.createdAt };
+  });
+
+  // Cash Release For Review (only for admins, exclude superadmin)
+  let releases = [];
+  if (isAdmin && isAdmin.role !== 'superadmin') {
+    releases = readAll_('CashRelease').filter(function (r) {
+      return r.status === 'For Review' && r.releasedBy && r.releasedBy.toLowerCase() !== userEmail;
+    }).map(function (r) {
+      return { id: r.id, type: 'Cash Release', projectId: r.projectId, requestor: r.requestor, requestorEmail: r.requestorEmail, amount: r.amount, description: r.description, status: r.status, createdAt: r.createdAt };
+    });
+  }
+
+  // Materials, Equipment, DailyRecords (kept in their own sheets)
+  const materials = readAll_('Materials').filter(function (m) { return m.status === 'Pending' && m.requestedBy && m.requestedBy.toLowerCase() !== userEmail; });
+  const equipment = readAll_('Equipment').filter(function (e) { return e.status === 'Pending' && e.requestedBy && e.requestedBy.toLowerCase() !== userEmail; });
+  const dailyRecords = readAll_('DailyRecords').filter(function (d) { return d.status === 'pending' && d.createdBy && d.createdBy.toLowerCase() !== userEmail; });
+
+  // Estimates
+  const estimates = readAll_('EstimateGroups').filter(function (g) { return g.status === 'pending'; });
+
+  return {
+    cashAdvances: cashAdvances,
+    releases: releases,
+    materials: materials,
+    equipment: equipment,
+    dailyRecords: dailyRecords,
+    estimates: estimates
+  };
+}
+
+function getMyPendingRequests() {
+  const email = currentUserEmail_().toLowerCase();
+  const cashAdvances = readAll_('CashAdvanceRequests').filter(function (r) { return r.requestorEmail && r.requestorEmail.toLowerCase() === email && r.status === 'Pending'; });
+  const releases = readAll_('CashRelease').filter(function (r) { return r.requestorEmail && r.requestorEmail.toLowerCase() === email && r.status === 'Pending'; });
+  const incoming = readAll_('IncomingCashRequests').filter(function (r) { return r.requestorEmail && r.requestorEmail.toLowerCase() === email && r.status === 'Pending'; });
+  const materials = readAll_('Materials').filter(function (m) { return m.requestedBy && m.requestedBy.toLowerCase() === email && m.status === 'Pending'; });
+  const equipment = readAll_('Equipment').filter(function (e) { return e.requestedBy && e.requestedBy.toLowerCase() === email && e.status === 'Pending'; });
+  const dailyRecords = readAll_('DailyRecords').filter(function (d) { return d.createdBy && d.createdBy.toLowerCase() === email && d.status === 'pending'; });
+  const estimates = readAll_('EstimateGroups').filter(function (g) { return g.status === 'pending'; });
+
+  return [...cashAdvances, ...releases, ...incoming, ...materials, ...equipment, ...dailyRecords, ...estimates];
+}
+
+function getMyApprovedRequests() {
+  const email = currentUserEmail_().toLowerCase();
+  const cashAdvances = readAll_('CashAdvanceRequests').filter(function (r) { return r.requestorEmail && r.requestorEmail.toLowerCase() === email && r.status === 'Approved'; });
+  const incoming = readAll_('IncomingCashRequests').filter(function (r) { return r.requestorEmail && r.requestorEmail.toLowerCase() === email && r.status === 'Approved'; });
+  const materials = readAll_('Materials').filter(function (m) { return m.requestedBy && m.requestedBy.toLowerCase() === email && m.status === 'approved'; });
+  const equipment = readAll_('Equipment').filter(function (e) { return e.requestedBy && e.requestedBy.toLowerCase() === email && e.status === 'approved'; });
+  const dailyRecords = readAll_('DailyRecords').filter(function (d) { return d.createdBy && d.createdBy.toLowerCase() === email && d.status === 'approved'; });
+  return [...cashAdvances, ...incoming, ...materials, ...equipment, ...dailyRecords];
+}
+
+function getMyRejectedRequests() {
+  const email = currentUserEmail_().toLowerCase();
+  const cashAdvances = readAll_('CashAdvanceRequests').filter(function (r) { return r.requestorEmail && r.requestorEmail.toLowerCase() === email && r.status === 'Rejected'; });
+  const incoming = readAll_('IncomingCashRequests').filter(function (r) { return r.requestorEmail && r.requestorEmail.toLowerCase() === email && r.status === 'Rejected'; });
+  const materials = readAll_('Materials').filter(function (m) { return m.requestedBy && m.requestedBy.toLowerCase() === email && m.status === 'rejected'; });
+  const equipment = readAll_('Equipment').filter(function (e) { return e.requestedBy && e.requestedBy.toLowerCase() === email && e.status === 'rejected'; });
+  const dailyRecords = readAll_('DailyRecords').filter(function (d) { return d.createdBy && d.createdBy.toLowerCase() === email && d.status === 'rejected'; });
+  return [...cashAdvances, ...incoming, ...materials, ...equipment, ...dailyRecords];
+}
+
+function getRequestById(id) {
+  // Check all sheets
+  let req = readAll_('CashAdvanceRequests').find(function (r) { return r.id === id; });
+  if (req) return req;
+  req = readAll_('CashRelease').find(function (r) { return r.id === id; });
+  if (req) return req;
+  req = readAll_('IncomingCashRequests').find(function (r) { return r.id === id; });
+  if (req) return req;
+  req = readAll_('Materials').find(function (m) { return m.id === id; });
+  if (req) return req;
+  req = readAll_('Equipment').find(function (e) { return e.id === id; });
+  if (req) return req;
+  req = readAll_('DailyRecords').find(function (d) { return d.id === id; });
+  if (req) return req;
+  return null;
+}
+
+// For approveItem and rejectItem, we need to handle different types
+function approveItem(id, type) {
+  return decideItem_(id, type, 'Approved');
+}
+
+function rejectItem(id, type) {
+  return decideItem_(id, type, 'Rejected');
+}
+
+function decideItem_(id, type, decision) {
+  const approver = currentUserEmail_().toLowerCase();
+
+  if (type === 'CashAdvance') {
+    const ca = readAll_('CashAdvanceRequests').find(function (r) { return r.id === id; });
+    if (!ca) throw new Error('Request not found.');
+    if (ca.requestorEmail && ca.requestorEmail.toLowerCase() === approver) {
+      throw new Error('Self-approval is not allowed.');
+    }
+    if (ca.status !== 'Pending') throw new Error('Request is not pending.');
+    if (decision === 'Approved') {
+      return approveCashAdvance(id);
+    } else {
+      updateRow_('CashAdvanceRequests', 'id', id, { status: 'Rejected' });
+      logActivity_('Cash advance ' + id + ' rejected', 'a', id);
+      return { success: true, status: 'Rejected' };
+    }
+  }
+
+  if (type === 'IncomingCash') {
+    const inc = readAll_('IncomingCashRequests').find(function (r) { return r.id === id; });
+    if (!inc) throw new Error('Request not found.');
+    if (inc.requestorEmail && inc.requestorEmail.toLowerCase() === approver) {
+      throw new Error('Self-approval is not allowed.');
+    }
+    if (inc.status !== 'Pending') throw new Error('Request is not pending.');
+    if (decision === 'Approved') {
+      return approveIncomingCash(id);
+    } else {
+      updateRow_('IncomingCashRequests', 'id', id, { status: 'Rejected' });
+      logActivity_('Incoming cash ' + id + ' rejected', 'a', id);
+      return { success: true, status: 'Rejected' };
+    }
+  }
+
+  if (type === 'Material') {
+    const mat = readAll_('Materials').find(function (m) { return m.id === id; });
+    if (!mat) throw new Error('Material not found.');
+    if (mat.requestedBy && mat.requestedBy.toLowerCase() === approver) {
+      throw new Error('Self-approval is not allowed.');
+    }
+    if (mat.status !== 'Pending') throw new Error('Material is not pending.');
+    updateRow_('Materials', 'id', id, { status: decision === 'Approved' ? 'approved' : 'rejected' });
+    logActivity_('Material ' + id + ' ' + (decision === 'Approved' ? 'approved' : 'rejected'), decision === 'Approved' ? 'g' : 'a', id);
+    return { success: true };
+  }
+
+  if (type === 'Equipment') {
+    const eq = readAll_('Equipment').find(function (e) { return e.id === id; });
+    if (!eq) throw new Error('Equipment not found.');
+    if (eq.requestedBy && eq.requestedBy.toLowerCase() === approver) {
+      throw new Error('Self-approval is not allowed.');
+    }
+    if (eq.status !== 'Pending') throw new Error('Equipment is not pending.');
+    updateRow_('Equipment', 'id', id, { status: decision === 'Approved' ? 'approved' : 'rejected' });
+    logActivity_('Equipment ' + id + ' ' + (decision === 'Approved' ? 'approved' : 'rejected'), decision === 'Approved' ? 'g' : 'a', id);
+    return { success: true };
+  }
+
+  if (type === 'DailyRecord') {
+    const dr = readAll_('DailyRecords').find(function (d) { return d.id === id; });
+    if (!dr) throw new Error('Daily record not found.');
+    if (dr.createdBy && dr.createdBy.toLowerCase() === approver) {
+      throw new Error('Self-approval is not allowed.');
+    }
+    if (dr.status !== 'pending') throw new Error('Daily record is not pending.');
+    updateRow_('DailyRecords', 'id', id, { status: decision === 'Approved' ? 'approved' : 'rejected' });
+    logActivity_('Daily record ' + id + ' ' + (decision === 'Approved' ? 'approved' : 'rejected'), decision === 'Approved' ? 'g' : 'a', id);
+    return { success: true };
+  }
+
+  if (type === 'Estimate') {
+    // Estimates are handled via approveEstimates
+    return approveEstimates(id);
+  }
+
+  throw new Error('Invalid type for approval: ' + type);
+}
+
+// ─── SUPER ADMIN FORCE APPROVE/REJECT ─────────────────────────
+
+function forceApprove(id, type) {
+  const user = readAll_('Users').find(function (u) { 
+    return String(u.email).toLowerCase() === currentUserEmail_().toLowerCase(); 
+  });
+  if (!user || user.role !== 'superadmin') {
+    throw new Error('Only the Super Admin can force-approve.');
+  }
+  // Just call approveItem with superadmin override
+  return decideItem_(id, type, 'Approved');
+}
+
+function forceReject(id, type) {
+  const user = readAll_('Users').find(function (u) { 
+    return String(u.email).toLowerCase() === currentUserEmail_().toLowerCase(); 
+  });
+  if (!user || user.role !== 'superadmin') {
+    throw new Error('Only the Super Admin can force-reject.');
+  }
+  return decideItem_(id, type, 'Rejected');
 }
 
 // ============================================================
 //  FINANCE
 // ============================================================
 
-/**
- * getFinanceData - Get finance dashboard data
- */
 function getFinanceData() {
   const projects = readAll_('Projects');
-  const requests = readAll_('Requests');
-  const incoming = readAll_('IncomingCash');
+  const allIncoming = readAll_('IncomingCashRequests');
+  const allReleases = readAll_('CashRelease');
   const sowItems = readAll_('SOWItems');
   const now = new Date();
 
@@ -864,30 +1047,32 @@ function getFinanceData() {
   });
   const cashPosition = totalRevenue - totalExpenses;
 
-  const pendingReqs = requests.filter(function (r) { return r.status === 'Pending'; });
-  const pendingAmount = pendingReqs.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
+  const pendingCA = readAll_('CashAdvanceRequests').filter(function (r) { return r.status === 'Pending'; });
+  const pendingAmount = pendingCA.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
 
   const kpis = [
     { label: 'Total Revenue', value: '₱' + totalRevenue.toFixed(2), sub: 'All projects', cls: 'good' },
     { label: 'Total Expenses', value: '₱' + totalExpenses.toFixed(2), sub: 'All projects', cls: '' },
     { label: 'Cash Position', value: '₱' + cashPosition.toFixed(2), sub: 'Revenue - Expenses', cls: 'good' },
-    { label: 'Pending Requests', value: String(pendingReqs.length), sub: '₱' + pendingAmount.toFixed(2) + ' total', cls: 'warn' }
+    { label: 'Pending Requests', value: String(pendingCA.length), sub: '₱' + pendingAmount.toFixed(2) + ' total', cls: 'warn' }
   ];
 
+  // Monthly cashflow (based on incoming approved and release reviewed)
   const months = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     months.push({ label: Utilities.formatDate(d, Session.getScriptTimeZone(), 'MMM'), year: d.getFullYear(), month: d.getMonth() });
   }
   const inflow = months.map(function (m) {
-    return incoming.filter(function (c) { const cd = new Date(c.date); return cd.getFullYear() === m.year && cd.getMonth() === m.month; })
-      .reduce(function (s, c) { return s + Number(c.amount || 0); }, 0);
+    return allIncoming.filter(function (c) {
+      const cd = new Date(c.transactionDate || c.createdAt);
+      return cd.getFullYear() === m.year && cd.getMonth() === m.month && c.status === 'Approved';
+    }).reduce(function (s, c) { return s + Number(c.amount || 0); }, 0);
   });
   const outflow = months.map(function (m) {
-    return requests.filter(function (r) {
-      if (r.type !== 'Release Cash' || r.status !== 'Released') return false;
-      const rd = new Date(r.createdAt);
-      return rd.getFullYear() === m.year && rd.getMonth() === m.month;
+    return allReleases.filter(function (r) {
+      const rd = new Date(r.releasedAt || r.createdAt);
+      return rd.getFullYear() === m.year && rd.getMonth() === m.month && r.status === 'Reviewed';
     }).reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
   });
   const cashflow = { labels: months.map(function (m) { return m.label; }), inflow: inflow, outflow: outflow, projectedFrom: months.length };
@@ -896,19 +1081,20 @@ function getFinanceData() {
     labels: projects.map(function (p) { return p.name; }),
     budget: projects.map(function (p) {
       const items = sowItems.filter(function (s) { return s.projectId === p.id; });
-      const sum = items.reduce(function (s, i) { return s + Number(i.budget || 0); }, 0);
-      return sum || Number(p.revenue || 0);
+      return items.reduce(function (s, i) { return s + Number(i.budget || 0); }, 0);
     }),
     actual: projects.map(function (p) {
       const items = sowItems.filter(function (s) { return s.projectId === p.id; });
-      const sum = items.reduce(function (s, i) { return s + Number(i.actual || 0); }, 0);
-      return sum || Number(p.expenses || 0);
+      return items.reduce(function (s, i) { return s + Number(i.actual || 0); }, 0);
     })
   };
 
   const typeGroups = {};
-  requests.filter(function (r) { return r.status === 'Approved' || r.status === 'Released'; }).forEach(function (r) {
-    typeGroups[r.type] = (typeGroups[r.type] || 0) + Number(r.amount || 0);
+  allIncoming.filter(function (c) { return c.status === 'Approved'; }).forEach(function (c) {
+    typeGroups['Incoming'] = (typeGroups['Incoming'] || 0) + Number(c.amount || 0);
+  });
+  allReleases.filter(function (r) { return r.status === 'Reviewed'; }).forEach(function (r) {
+    typeGroups['Release'] = (typeGroups['Release'] || 0) + Number(r.amount || 0);
   });
   const breakdownKeys = Object.keys(typeGroups);
   const breakdownTotal = Object.values(typeGroups).reduce(function (s, v) { return s + v; }, 0) || 1;
@@ -917,9 +1103,10 @@ function getFinanceData() {
     values: breakdownKeys.length ? breakdownKeys.map(function (k) { return Math.round((typeGroups[k] / breakdownTotal) * 100); }) : [100]
   };
 
-  const cashAdv = requests.filter(function (r) { return r.type === 'Cash Advance' && r.status === 'Pending'; });
+  // Aging for pending cash advances
+  const pendingCAForAging = readAll_('CashAdvanceRequests').filter(function (r) { return r.status === 'Pending'; });
   const buckets = { '0-30 days': 0, '31-60 days': 0, '61-90 days': 0, '90+ days': 0 };
-  cashAdv.forEach(function (r) {
+  pendingCAForAging.forEach(function (r) {
     const days = Math.floor((now - new Date(r.createdAt)) / (1000 * 60 * 60 * 24));
     const amt = Number(r.amount || 0);
     if (days <= 30) buckets['0-30 days'] += amt;
@@ -931,8 +1118,8 @@ function getFinanceData() {
 
   const costStatus = projects.map(function (p) {
     const items = sowItems.filter(function (s) { return s.projectId === p.id; });
-    const budget = items.reduce(function (s, i) { return s + Number(i.budget || 0); }, 0) || Number(p.revenue || 0);
-    const actual = items.reduce(function (s, i) { return s + Number(i.actual || 0); }, 0) || Number(p.expenses || 0);
+    const budget = items.reduce(function (s, i) { return s + Number(i.budget || 0); }, 0);
+    const actual = items.reduce(function (s, i) { return s + Number(i.actual || 0); }, 0);
     const pct = budget > 0 ? (actual / budget) * 100 : 0;
     const status = pct >= 100 ? 'Over Budget' : pct >= 85 ? 'At Risk' : 'On Track';
     const cls = pct >= 100 ? 'danger' : pct >= 85 ? 'warn' : 'good';
@@ -940,6 +1127,115 @@ function getFinanceData() {
   });
 
   return { kpis: kpis, cashflow: cashflow, budgetVsActual: budgetVsActual, breakdown: breakdown, aging: aging, costStatus: costStatus };
+}
+
+// ============================================================
+//  SEARCH
+// ============================================================
+
+function search(query) {
+  query = String(query || '').toLowerCase();
+  const results = [];
+  readAll_('Projects').forEach(function (p) {
+    if (p.name.toLowerCase().indexOf(query) > -1) results.push({ type: 'Project', id: p.id, label: p.name });
+  });
+  readAll_('CashAdvanceRequests').forEach(function (r) {
+    if (r.id.toLowerCase().indexOf(query) > -1 || (r.description && r.description.toLowerCase().indexOf(query) > -1)) {
+      results.push({ type: 'Cash Advance', id: r.id, label: r.description });
+    }
+  });
+  readAll_('CashRelease').forEach(function (r) {
+    if (r.id.toLowerCase().indexOf(query) > -1) results.push({ type: 'Cash Release', id: r.id, label: r.description });
+  });
+  readAll_('IncomingCashRequests').forEach(function (r) {
+    if (r.id.toLowerCase().indexOf(query) > -1 || (r.description && r.description.toLowerCase().indexOf(query) > -1)) {
+      results.push({ type: 'Incoming Cash', id: r.id, label: r.description });
+    }
+  });
+  readAll_('Materials').forEach(function (m) {
+    if (m.name && m.name.toLowerCase().indexOf(query) > -1) results.push({ type: 'Material', id: m.id, label: m.name });
+  });
+  readAll_('Equipment').forEach(function (e) {
+    if (e.name && e.name.toLowerCase().indexOf(query) > -1) results.push({ type: 'Equipment', id: e.id, label: e.name });
+  });
+  return results;
+}
+
+// ============================================================
+//  SOW MANAGEMENT
+// ============================================================
+
+function addSOWItem(projectId, data) {
+  const id = data.id || 'SOW-' + Utilities.getUuid().slice(0, 6).toUpperCase();
+  const description = data.description || '';
+  const qty = parseFloat(data.qty) || 0;
+  const unit = data.unit || '';
+  const budget = 0;
+  const actual = 0;
+  const startDate = '';
+  const endDate = '';
+  const status = 'On Track';
+
+  const existing = readAll_('SOWItems').find(function (s) { return s.id === id && s.projectId === projectId; });
+  if (existing) throw new Error('SOW ID already exists for this project.');
+
+  appendRow_('SOWItems', {
+    id: id, projectId: projectId, description: description,
+    budget: budget, actual: actual, startDate: startDate, endDate: endDate,
+    status: status, qty: qty, unit: unit
+  });
+
+  appendRow_('EstimateGroups', {
+    id: nextId_('EG'), projectId: projectId, sowId: id,
+    sowDescription: description, status: 'draft'
+  });
+
+  logActivity_('SOW ' + id + ' added to project ' + projectId, 'blue', id);
+  return { success: true, id: id };
+}
+
+function updateSOWItem(projectId, sowId, data) {
+  const patch = {};
+  if (data.description !== undefined) patch.description = data.description;
+  if (data.budget !== undefined) patch.budget = parseFloat(data.budget) || 0;
+  if (data.actual !== undefined) patch.actual = parseFloat(data.actual) || 0;
+  if (data.startDate !== undefined) patch.startDate = data.startDate;
+  if (data.endDate !== undefined) patch.endDate = data.endDate;
+  if (data.status !== undefined) patch.status = data.status;
+  const found = findRowNum_('SOWItems', 'id', sowId);
+  if (found === -1) throw new Error('SOW item not found.');
+  updateRow_('SOWItems', 'id', sowId, patch);
+  logActivity_('SOW ' + sowId + ' updated', 'blue', sowId);
+  return { success: true };
+}
+
+function deleteSOWItem(projectId, sowId) {
+  const rowNum = findRowNum_('SOWItems', 'id', sowId);
+  if (rowNum > -1) sheet_('SOWItems').deleteRow(rowNum);
+  const group = readAll_('EstimateGroups').find(function (g) { return g.projectId === projectId && g.sowId === sowId; });
+  if (group) {
+    const groupRow = findRowNum_('EstimateGroups', 'id', group.id);
+    if (groupRow > -1) sheet_('EstimateGroups').deleteRow(groupRow);
+  }
+  logActivity_('SOW ' + sowId + ' deleted from project ' + projectId, 'a', sowId);
+  return { success: true };
+}
+
+function getSOWItemsForProject(projectId) {
+  return readAll_('SOWItems').filter(function (s) { return s.projectId === projectId; })
+    .map(function(s) {
+      return { id: s.id, description: s.description, qty: parseFloat(s.qty || 0), unit: s.unit || '' };
+    });
+}
+
+// ============================================================
+//  ATTACHMENTS & PHOTO UPLOAD
+// ============================================================
+
+function getOrCreateAttachmentsFolder_() {
+  const name = 'FCTC Ops Board Attachments';
+  const folders = DriveApp.getFoldersByName(name);
+  return folders.hasNext() ? folders.next() : DriveApp.createFolder(name);
 }
 
 function uploadAttachmentIfAny_(payload) {
@@ -959,761 +1255,6 @@ function uploadAttachmentIfAny_(payload) {
   }
 }
 
-// ============================================================
-//  CASH REQUESTS
-// ============================================================
-
-function submitCashAdvance(payload) {
-  const uploaded = uploadAttachmentIfAny_(payload);
-  const fileUrl = uploaded.fileUrl;
-  const fileName = uploaded.fileName;
-
-  const id = nextId_('REQ');
-  
-  var projectName = '';
-  if (payload.project) {
-    var projects = readAll_('Projects');
-    var proj = projects.find(function(p) { 
-      return p.id === payload.project || p.name === payload.project;
-    });
-    if (proj) {
-      projectName = ' for ' + proj.name;
-    } else {
-      projectName = ' for ' + payload.project;
-    }
-  }
-
-  appendRow_('Requests', {
-    id: id, 
-    type: 'Cash Advance', 
-    projectId: payload.project || '',
-    requestor: currentUserName_(), 
-    requestorEmail: currentUserEmail_(),
-    amount: payload.amount, 
-    description: payload.description || '',
-    scope: payload.scopeOfWork || '',
-    attachmentsJSON: JSON.stringify(fileUrl ? [{ url: fileUrl, name: fileName }] : []),
-    payloadJSON: JSON.stringify({ 
-      requestType: payload.requestType || '', 
-      dateNeeded: payload.dateNeeded || '' 
-    }),
-    status: 'Pending', 
-    createdAt: new Date(), 
-    refId: '',
-    dateNeeded: payload.dateNeeded || ""
-  });
-  
-  logActivity_(
-    'Cash advance ₱' + payload.amount + ' requested by ' + currentUserName_() + projectName,
-    'blue'
-  );
-  
-  return { success: true, requestId: id, fileUrl: fileUrl, fileName: fileName };
-}
-
-function getOrCreateAttachmentsFolder_() {
-  const name = 'FCTC Ops Board Attachments';
-  const folders = DriveApp.getFoldersByName(name);
-  return folders.hasNext() ? folders.next() : DriveApp.createFolder(name);
-}
-
-// ============================================================
-//  INCOMING CASH (with approval workflow)
-// ============================================================
-
-function submitIncomingCash(payload) {
-    const uploaded = uploadAttachmentIfAny_(payload);
-    const fileUrl = uploaded.fileUrl;
-    const fileName = uploaded.fileName;
-    const id = nextId_('REQ');
-    
-    var projectName = '';
-    if (payload.project) {
-        var projects = readAll_('Projects');
-        var proj = projects.find(function(p) { 
-            return p.id === payload.project || p.name === payload.project;
-        });
-        if (proj) {
-            projectName = ' for ' + proj.name;
-        } else {
-            projectName = ' for ' + payload.project;
-        }
-    }
-
-    appendRow_('Requests', {
-        id: id,
-        type: 'Incoming Cash',
-        projectId: payload.project || '',
-        requestor: currentUserName_(),
-        requestorEmail: currentUserEmail_(),
-        amount: payload.amount,
-        description: payload.description || '',
-        scope: payload.type || '',
-        attachmentsJSON: JSON.stringify(fileUrl ? [{ url: fileUrl, name: fileName }] : []),
-        payloadJSON: JSON.stringify({
-            method: payload.method || '',
-            reference: payload.reference || '',
-            date: payload.date || ''
-        }),
-        status: 'Pending',
-        createdAt: new Date(),
-        refId: '',
-        dateNeeded: ''
-    });
-    
-    logActivity_(
-        'Incoming cash ₱' + payload.amount + ' recorded by ' + currentUserName_() + projectName + ' (pending approval)',
-        'blue'
-    );
-    
-    return { success: true, requestId: id, fileUrl: fileUrl, fileName: fileName };
-}
-
-function approveIncomingCash(id) {
-    const req = readAll_('Requests').find(function(r) { return r.id === id; });
-    if (!req) throw new Error('Request not found: ' + id);
-    
-    var payload = {};
-    try {
-        payload = JSON.parse(req.payloadJSON || '{}');
-    } catch(e) { /* ignore */ }
-    
-    var attachments = [];
-    try {
-        attachments = JSON.parse(req.attachmentsJSON || '[]');
-    } catch(e) { /* ignore */ }
-    
-    const incomingId = nextId_('IC');
-    appendRow_('IncomingCash', {
-        id: incomingId,
-        projectId: req.projectId || '',
-        date: payload.date || new Date(),
-        name: req.requestor,
-        desc: req.description,
-        amount: parseFloat(req.amount || 0),
-        attachmentUrl: attachments.length > 0 ? attachments[0].url : '',
-        attachmentName: attachments.length > 0 ? attachments[0].name : ''
-    });
-    
-    updateRow_('Requests', 'id', id, { 
-        status: 'Approved',
-        refId: incomingId
-    });
-    
-    logActivity_('Incoming cash ₱' + req.amount + ' approved and recorded', 'g', incomingId);
-    return { success: true, incomingId: incomingId };
-}
-
-// ============================================================
-//  LIQUIDATION
-// ============================================================
-
-function submitLiquidation(payload) {
-  appendRow_('Requests', {
-    id: nextId_('REQ'), type: 'Liquidation', projectId: payload.projectId || '',
-    requestor: currentUserName_(), requestorEmail: currentUserEmail_(),
-    amount: payload.amount, description: payload.description || '', scope: payload.requestId || '',
-    attachmentsJSON: JSON.stringify(payload.receiptNo ? [payload.receiptNo] : []),
-    payloadJSON: JSON.stringify(payload), status: 'Pending', createdAt: new Date(), refId: ''
-  });
-  logActivity_('Liquidation submitted (₱' + payload.amount + ' by ' + currentUserName_() + ')', 'blue');
-  return { success: true };
-}
-
-// ============================================================
-//  RELEASE CASH (NEW WORKFLOW)
-// ============================================================
-
-/**
- * submitRelease - Super Admin submits a release request
- * PURPOSE: Creates a "Reviewing" request that requires all Admins to review
- * 
- * NEW: Status is "Reviewing" (not "Approved")
- * NEW: Validates that no existing release exists (Reviewing or Released)
- */
-function submitRelease(payload) {
-  const requestId = payload.requestId;
-  const releaseAmount = parseFloat(payload.amount) || 0;
-  
-  // Kunin ang original Cash Advance request
-  const allRequests = readAll_('Requests');
-  const cashAdvance = allRequests.find(function(r) {
-    return r.id === requestId && r.type === 'Cash Advance' && r.status === 'Approved';
-  });
-  
-  if (!cashAdvance) {
-    throw new Error('Approved cash advance request not found: ' + requestId);
-  }
-  
-  const approvedAmount = parseFloat(cashAdvance.amount) || 0;
-  
-  // Validate: hindi dapat lumampas sa approved amount
-  if (releaseAmount > approvedAmount) {
-    throw new Error('Release amount (₱' + releaseAmount.toFixed(2) + ') exceeds approved amount (₱' + approvedAmount.toFixed(2) + ').');
-  }
-  
-  // Validate: hindi pa dapat na-release o under review
-  const existingRelease = allRequests.find(function(r) {
-    return r.refId === requestId && r.type === 'Release Cash' && (r.status === 'Reviewing' || r.status === 'Released');
-  });
-  if (existingRelease) {
-    throw new Error('This request is already under review or has been released.');
-  }
-  
-  // ✅ Status = 'Reviewing' (hindi 'Approved')
-  const releaseId = nextId_('REQ');
-  appendRow_('Requests', {
-    id: releaseId,
-    type: 'Release Cash',
-    projectId: cashAdvance.projectId || '',
-    requestor: currentUserName_(),
-    requestorEmail: currentUserEmail_(),
-    amount: releaseAmount,
-    description: 'Cash release for ' + requestId,
-    scope: requestId,
-    attachmentsJSON: '[]',
-    payloadJSON: JSON.stringify(payload),
-    status: 'Reviewing',
-    createdAt: new Date(),
-    refId: requestId,
-    dateNeeded: ''
-  });
-  
-  // ✅ I-update ang original Cash Advance request status
-  updateRow_('Requests', 'id', requestId, { status: 'Released' });
-  
-  logActivity_('Release of ₱' + releaseAmount + ' for request ' + requestId + ' submitted by ' + currentUserName_() + ' (reviewing)', 'blue', releaseId);
-  return { success: true, releaseId: releaseId };
-}
-
-/**
- * reviewRelease - Admin reviews a release request
- * PURPOSE: Records a review and checks if all admins have reviewed
- * 
- * @param {string} requestId - The ID of the release request (not the cash advance)
- * @param {string} reviewerEmail - The email of the Admin reviewing
- * @returns {Object} { success, status: 'Reviewing' | 'Released' }
- */
-function reviewRelease(requestId, reviewerEmail) {
-  // Hanapin ang release request
-  const req = readAll_('Requests').find(function(r) {
-    return r.id === requestId && r.type === 'Release Cash' && r.status === 'Reviewing';
-  });
-  if (!req) {
-    throw new Error('Request not found or not in reviewing status.');
-  }
-  
-  // I-check kung self-review (hindi pwedeng i-review ng Super Admin ang sarili niyang request)
-  if (req.requestorEmail.toLowerCase() === reviewerEmail.toLowerCase()) {
-    throw new Error('Self-review is not allowed.');
-  }
-  
-  // Kunin ang lahat ng admins (except superadmin)
-  const admins = getAllAdminsExceptSuperAdmin_();
-  
-  // Kunin ang mga existing reviews
-  const allApprovals = readAll_('Approvals');
-  const reviews = allApprovals.filter(function(a) {
-    return a.requestId === requestId && a.decision === 'Reviewed';
-  });
-  const distinctReviewers = reviews.map(function(r) { return r.approver.toLowerCase(); });
-  
-  // I-record ang review na ito
-  appendRow_('Approvals', {
-    requestId: requestId,
-    approver: reviewerEmail.toLowerCase(),
-    decision: 'Reviewed',
-    timestamp: new Date(),
-    remarks: ''
-  });
-  
-  // I-check kung lahat ng admins (except superadmin) ay nag-review na
-  // Exclude ang Super Admin (requestor) kasi hindi sila required
-  const requiredReviewers = admins.filter(function(admin) {
-    return admin !== req.requestorEmail.toLowerCase();
-  });
-  
-  const allReviewed = requiredReviewers.every(function(admin) {
-    return distinctReviewers.includes(admin) || admin === reviewerEmail.toLowerCase();
-  });
-  
-  if (allReviewed) {
-    // ✅ Released na!
-    updateRow_('Requests', 'id', requestId, { status: 'Released' });
-    logActivity_('Release request ' + requestId + ' fully reviewed and released', 'g', requestId);
-    return { success: true, status: 'Released' };
-  } else {
-    logActivity_('Release request ' + requestId + ' reviewed by ' + reviewerEmail, 'blue', requestId);
-    return { success: true, status: 'Reviewing' };
-  }
-}
-
-/**
- * getApprovedCashAdvancesForRelease - Get approved cash advances without existing release
- * PURPOSE: Populates dropdown in Release Cash form
- * 
- * NEW: Excludes requests that already have a release (Reviewing or Released)
- */
-function getApprovedCashAdvancesForRelease() {
-  const allRequests = readAll_('Requests');
-  
-  // Kunin ang lahat ng Approved Cash Advances
-  const cashAdvances = allRequests.filter(function(r) {
-    return r.type === 'Cash Advance' && r.status === 'Approved';
-  });
-  
-  // Kunin ang mga request ID na may existing release (Reviewing o Released)
-  const releaseRefIds = {};
-  allRequests.filter(function(r) {
-    return r.type === 'Release Cash' && (r.status === 'Reviewing' || r.status === 'Released');
-  }).forEach(function(r) {
-    if (r.refId) {
-      releaseRefIds[r.refId] = true;
-    }
-  });
-  
-  // I-filter ang mga walang existing release
-  const available = cashAdvances.filter(function(ca) {
-    return !releaseRefIds[ca.id];
-  });
-  
-  return available.map(function(ca) {
-    return {
-      id: ca.id,
-      requestor: ca.requestor,
-      amount: parseFloat(ca.amount) || 0,
-      date: ca.createdAt || new Date().toISOString()
-    };
-  });
-}
-
-// ============================================================
-//  APPROVALS
-// ============================================================
-
-function _isNonCashRequest(type) {
-  const nonCashTypes = ['Material', 'Equipment', 'Estimate', 'DailyRecord'];
-  return nonCashTypes.indexOf(type) !== -1;
-}
-
-function getPendingApprovals() {
-  const userEmail = currentUserEmail_().toLowerCase();
-  const allRequests = readAll_('Requests').filter(function (r) {
-    return r.status === 'Pending' && !_isNonCashRequest(r.type);
-  });
-  const allApprovals = readAll_('Approvals');
-  
-  const requests = allRequests.map(function (r) {
-    const userAction = allApprovals.find(function (a) {
-      const approvalId = _isNonCashRequest(r.type) ? r.refId : r.id;
-      return a.requestId === approvalId && a.approver.toLowerCase() === userEmail;
-    });
-    return {
-      id: r.id,
-      type: r.type,
-      projectId: r.projectId,
-      requestor: r.requestor,
-      requestorEmail: r.requestorEmail,
-      amount: r.amount,
-      description: r.description,
-      scope: r.scope,
-      status: r.status,
-      createdAt: r.createdAt,
-      refId: r.refId,
-      userActed: !!userAction
-    };
-  });
-  
-  // ✅ Add Reviewing requests for Admin review
-  const reviewingRequests = readAll_('Requests').filter(function (r) {
-    return r.type === 'Release Cash' && r.status === 'Reviewing';
-  }).map(function (r) {
-    return {
-      id: r.id,
-      type: r.type,
-      projectId: r.projectId,
-      requestor: r.requestor,
-      requestorEmail: r.requestorEmail,
-      amount: r.amount,
-      description: r.description,
-      scope: r.scope,
-      status: r.status,
-      createdAt: r.createdAt,
-      refId: r.refId,
-      userActed: false
-    };
-  });
-  
-  const materials = readAll_('Materials').filter(function (m) { return m.status === 'Pending'; });
-  const equipment = readAll_('Equipment').filter(function (e) { return e.status === 'Pending'; });
-  const estimates = readAll_('EstimateGroups').filter(function (g) { return g.status === 'pending'; });
-  const dailyRecords = readAll_('DailyRecords').filter(function (d) { return d.status === 'pending'; });
-  
-  return { 
-    requests: requests, 
-    reviewingRequests: reviewingRequests,
-    materials: materials, 
-    equipment: equipment, 
-    estimates: estimates, 
-    dailyRecords: dailyRecords 
-  };
-}
-
-function getMyPendingRequests() {
-  const email = currentUserEmail_().toLowerCase();
-  return readAll_('Requests').filter(function (r) {
-    return String(r.requestorEmail).toLowerCase() === email && r.status === 'Pending';
-  });
-}
-
-function getMyApprovedRequests() {
-  const email = currentUserEmail_().toLowerCase();
-  return readAll_('Requests').filter(function (r) {
-    return String(r.requestorEmail).toLowerCase() === email && r.status === 'Approved';
-  });
-}
-
-function getMyRejectedRequests() {
-  const email = currentUserEmail_().toLowerCase();
-  return readAll_('Requests').filter(function (r) {
-    return String(r.requestorEmail).toLowerCase() === email && r.status === 'Rejected';
-  });
-}
-
-function getRequestById(id) {
-  const req = readAll_('Requests').find(function (r) { return r.id === id || r.refId === id; });
-  if (req) {
-    try {
-      req.attachments = req.attachmentsJSON ? JSON.parse(req.attachmentsJSON) : [];
-    } catch (e) {
-      req.attachments = [];
-    }
-  }
-  return req || null;
-}
-
-function approveItem(id, type) {
-  return decideItem_(id, type, 'Approved');
-}
-
-function rejectItem(id, type) {
-  return decideItem_(id, type, 'Rejected');
-}
-
-function decideItem_(id, type, decision) {
-  const approver = currentUserEmail_().toLowerCase();
-  const allApprovers = getAdminEmails_();
-  
-  const requests = readAll_('Requests');
-  let req = requests.find(function (r) { return r.id === id || r.refId === id; });
-
-  if (req && String(req.requestorEmail).toLowerCase() === approver) {
-    throw new Error('Self-approval is not allowed. You cannot approve your own request.');
-  }
-
-  if (req) {
-    if (req.type === 'Incoming Cash') {
-      if (decision === 'Approved') {
-        return approveIncomingCash(id);
-      } else {
-        updateRow_('Requests', 'id', req.id, { status: 'Rejected' });
-        logActivity_('Incoming cash request ' + req.id + ' rejected', 'a', req.id);
-        return { success: true, status: 'Rejected' };
-      }
-    }
-
-    const isNonCash = _isNonCashRequest(req.type);
-    const approvalRequestId = isNonCash ? req.refId : req.id;
-    
-    const existingApprovals = readAll_('Approvals').filter(function (a) { 
-      return a.requestId === approvalRequestId && a.approver === approver;
-    });
-    
-    if (existingApprovals.length > 0) {
-      throw new Error('You have already approved/rejected this request.');
-    }
-
-    appendRow_('Approvals', {
-      requestId: approvalRequestId,
-      approver: approver,
-      decision: decision,
-      timestamp: new Date(),
-      remarks: ''
-    });
-
-    let finalStatus = 'Pending';
-    
-    if (decision === 'Rejected') {
-      finalStatus = 'Rejected';
-    } else {
-      const approvals = readAll_('Approvals').filter(function (a) { 
-        return a.requestId === approvalRequestId && a.decision === 'Approved'; 
-      });
-      const distinctApprovers = Array.from(new Set(approvals.map(function (a) { return a.approver; })));
-      
-      const requiredForApproval = allApprovers.filter(function (a) { 
-        return a !== String(req.requestorEmail).toLowerCase(); 
-      });
-      
-      const allApproved = requiredForApproval.every(function (approverEmail) {
-        return distinctApprovers.includes(approverEmail);
-      });
-      
-      finalStatus = allApproved ? 'Approved' : 'Pending';
-    }
-
-    updateRow_('Requests', 'id', req.id, { status: finalStatus });
-    mirrorStatusToMaster_(req, finalStatus);
-    logActivity_(req.type + ' ' + req.id + ' ' + finalStatus.toLowerCase(), finalStatus === 'Rejected' ? 'a' : 'g');
-    return { success: true, status: finalStatus };
-  }
-
-  const sheetName = type === 'Material' ? 'Materials' : (type === 'Equipment' ? 'Equipment' : (type === 'DailyRecord' ? 'DailyRecords' : null));
-  if (sheetName) {
-    const statusMap = { 'Approved': 'approved', 'Rejected': 'rejected' };
-    updateRow_(sheetName, 'id', id, { status: statusMap[decision] || decision.toLowerCase() });
-    return { success: true, status: decision };
-  }
-  throw new Error('Request not found: ' + id);
-}
-
-function mirrorStatusToMaster_(req, finalStatus) {
-  if (!req.refId) return;
-  if (req.type === 'Material') {
-    updateRow_('Materials', 'id', req.refId, { status: finalStatus === 'Approved' ? 'approved' : finalStatus.toLowerCase() });
-  } else if (req.type === 'Equipment') {
-    updateRow_('Equipment', 'id', req.refId, { status: finalStatus === 'Approved' ? 'approved' : finalStatus.toLowerCase() });
-  } else if (req.type === 'Estimate') {
-    updateRow_('EstimateGroups', 'id', req.refId, { status: finalStatus === 'Approved' ? 'approved' : finalStatus.toLowerCase() });
-  } else if (req.type === 'DailyRecord') {
-    updateRow_('DailyRecords', 'id', req.refId, { status: finalStatus === 'Approved' ? 'approved' : finalStatus.toLowerCase() });
-  }
-}
-
-// ============================================================
-//  SUPER ADMIN OVERRIDES
-// ============================================================
-
-function forceApprove(id, type) {
-  const user = readAll_('Users').find(function (u) { 
-    return String(u.email).toLowerCase() === currentUserEmail_().toLowerCase(); 
-  });
-  if (!user || user.role !== 'superadmin') {
-    throw new Error('Only the Super Admin can force-approve.');
-  }
-
-  if (type === 'Incoming Cash') {
-    return approveIncomingCash(id);
-  }
-
-  if (type === 'Material') {
-    updateRow_('Materials', 'id', id, { status: 'approved' });
-    const req = readAll_('Requests').find(function (r) { return r.refId === id && r.type === 'Material'; });
-    if (req) updateRow_('Requests', 'id', req.id, { status: 'Approved' });
-    logActivity_('Material ' + id + ' force-approved by Super Admin', 'g', id);
-    return { success: true, status: 'Approved' };
-  }
-
-  if (type === 'Equipment') {
-    updateRow_('Equipment', 'id', id, { status: 'approved' });
-    const req = readAll_('Requests').find(function (r) { return r.refId === id && r.type === 'Equipment'; });
-    if (req) updateRow_('Requests', 'id', req.id, { status: 'Approved' });
-    logActivity_('Equipment ' + id + ' force-approved by Super Admin', 'g', id);
-    return { success: true, status: 'Approved' };
-  }
-
-  if (type === 'Estimate') {
-    updateRow_('EstimateGroups', 'id', id, { status: 'approved' });
-    const req = readAll_('Requests').find(function (r) { return r.refId === id && r.type === 'Estimate'; });
-    if (req) updateRow_('Requests', 'id', req.id, { status: 'Approved' });
-    const group = readAll_('EstimateGroups').find(function (g) { return g.id === id; });
-    if (group) {
-      const total = computeEstimateGroupTotal_(id);
-      updateRow_('SOWItems', 'id', group.sowId, { budget: total });
-    }
-    logActivity_('Estimate ' + id + ' force-approved by Super Admin', 'g', id);
-    return { success: true, status: 'Approved' };
-  }
-
-  if (type === 'DailyRecord') {
-    updateRow_('DailyRecords', 'id', id, { status: 'approved' });
-    const req = readAll_('Requests').find(function (r) { return r.refId === id && r.type === 'DailyRecord'; });
-    if (req) updateRow_('Requests', 'id', req.id, { status: 'Approved' });
-    logActivity_('DailyRecord ' + id + ' force-approved by Super Admin', 'g', id);
-    return { success: true, status: 'Approved' };
-  }
-
-  const req = readAll_('Requests').find(function (r) { return r.id === id || r.refId === id; });
-  if (!req) throw new Error('Request not found: ' + id);
-  
-  updateRow_('Requests', 'id', req.id, { status: 'Approved' });
-  mirrorStatusToMaster_(req, 'Approved');
-  logActivity_(req.type + ' ' + req.id + ' force-approved by Super Admin', 'g', req.id);
-  return { success: true, status: 'Approved' };
-}
-
-function forceReject(id, type) {
-  const user = readAll_('Users').find(function (u) { 
-    return String(u.email).toLowerCase() === currentUserEmail_().toLowerCase(); 
-  });
-  if (!user || user.role !== 'superadmin') {
-    throw new Error('Only the Super Admin can force-reject.');
-  }
-
-  if (type === 'Incoming Cash') {
-    updateRow_('Requests', 'id', id, { status: 'Rejected' });
-    logActivity_('Incoming cash request ' + id + ' force-rejected by Super Admin', 'a', id);
-    return { success: true, status: 'Rejected' };
-  }
-
-  if (type === 'Material') {
-    updateRow_('Materials', 'id', id, { status: 'rejected' });
-    const req = readAll_('Requests').find(function (r) { return r.refId === id && r.type === 'Material'; });
-    if (req) updateRow_('Requests', 'id', req.id, { status: 'Rejected' });
-    logActivity_('Material ' + id + ' force-rejected by Super Admin', 'a', id);
-    return { success: true, status: 'Rejected' };
-  }
-
-  if (type === 'Equipment') {
-    updateRow_('Equipment', 'id', id, { status: 'rejected' });
-    const req = readAll_('Requests').find(function (r) { return r.refId === id && r.type === 'Equipment'; });
-    if (req) updateRow_('Requests', 'id', req.id, { status: 'Rejected' });
-    logActivity_('Equipment ' + id + ' force-rejected by Super Admin', 'a', id);
-    return { success: true, status: 'Rejected' };
-  }
-
-  if (type === 'Estimate') {
-    updateRow_('EstimateGroups', 'id', id, { status: 'rejected' });
-    const req = readAll_('Requests').find(function (r) { return r.refId === id && r.type === 'Estimate'; });
-    if (req) updateRow_('Requests', 'id', req.id, { status: 'Rejected' });
-    logActivity_('Estimate ' + id + ' force-rejected by Super Admin', 'a', id);
-    return { success: true, status: 'Rejected' };
-  }
-
-  if (type === 'DailyRecord') {
-    updateRow_('DailyRecords', 'id', id, { status: 'rejected' });
-    const req = readAll_('Requests').find(function (r) { return r.refId === id && r.type === 'DailyRecord'; });
-    if (req) updateRow_('Requests', 'id', req.id, { status: 'Rejected' });
-    logActivity_('DailyRecord ' + id + ' force-rejected by Super Admin', 'a', id);
-    return { success: true, status: 'Rejected' };
-  }
-
-  const req = readAll_('Requests').find(function (r) { return r.id === id || r.refId === id; });
-  if (!req) throw new Error('Request not found: ' + id);
-  
-  updateRow_('Requests', 'id', req.id, { status: 'Rejected' });
-  mirrorStatusToMaster_(req, 'Rejected');
-  logActivity_(req.type + ' ' + req.id + ' force-rejected by Super Admin', 'a', req.id);
-  return { success: true, status: 'Rejected' };
-}
-
-// ============================================================
-//  SEARCH
-// ============================================================
-
-function search(query) {
-  query = String(query || '').toLowerCase();
-  const results = [];
-  readAll_('Projects').forEach(function (p) {
-    if (p.name.toLowerCase().indexOf(query) > -1) results.push({ type: 'Project', id: p.id, label: p.name });
-  });
-  readAll_('Materials').forEach(function (m) {
-    if (m.name && m.name.toLowerCase().indexOf(query) > -1) results.push({ type: 'Material', id: m.id, label: m.name });
-  });
-  readAll_('Equipment').forEach(function (e) {
-    if (e.name && e.name.toLowerCase().indexOf(query) > -1) results.push({ type: 'Equipment', id: e.id, label: e.name });
-  });
-  readAll_('Requests').forEach(function (r) {
-    if (r.id.toLowerCase().indexOf(query) > -1) results.push({ type: r.type, id: r.id, label: r.description });
-  });
-  return results;
-}
-
-// ============================================================
-//  SOW MANAGEMENT
-// ============================================================
-
-function addSOWItem(projectId, data) {
-  const id = data.id || 'SOW-' + Utilities.getUuid().slice(0, 6).toUpperCase();
-  const description = data.description || '';
-  const qty = parseFloat(data.qty) || 0;
-  const unit = data.unit || '';
-  
-  const budget = 0;
-  const actual = 0;
-  const startDate = '';
-  const endDate = '';
-  const status = 'On Track';
-
-  const existing = readAll_('SOWItems').find(function (s) { return s.id === id && s.projectId === projectId; });
-  if (existing) {
-    throw new Error('SOW ID already exists for this project.');
-  }
-
-  appendRow_('SOWItems', {
-    id: id,
-    projectId: projectId,
-    description: description,
-    budget: budget,
-    actual: actual,
-    startDate: startDate,
-    endDate: endDate,
-    status: status,
-    qty: qty,
-    unit: unit
-  });
-
-  appendRow_('EstimateGroups', {
-    id: nextId_('EG'),
-    projectId: projectId,
-    sowId: id,
-    sowDescription: description,
-    status: 'draft'
-  });
-
-  logActivity_('SOW ' + id + ' added to project ' + projectId, 'blue', id);
-  return { success: true, id: id };
-}
-
-function updateSOWItem(projectId, sowId, data) {
-  const patch = {};
-  if (data.description !== undefined) patch.description = data.description;
-  if (data.budget !== undefined) patch.budget = parseFloat(data.budget) || 0;
-  if (data.actual !== undefined) patch.actual = parseFloat(data.actual) || 0;
-  if (data.startDate !== undefined) patch.startDate = data.startDate;
-  if (data.endDate !== undefined) patch.endDate = data.endDate;
-  if (data.status !== undefined) patch.status = data.status;
-  
-  const found = findRowNum_('SOWItems', 'id', sowId);
-  if (found === -1) throw new Error('SOW item not found.');
-  
-  updateRow_('SOWItems', 'id', sowId, patch);
-  logActivity_('SOW ' + sowId + ' updated', 'blue', sowId);
-  return { success: true };
-}
-
-function deleteSOWItem(projectId, sowId) {
-  const rowNum = findRowNum_('SOWItems', 'id', sowId);
-  if (rowNum > -1) {
-    sheet_('SOWItems').deleteRow(rowNum);
-  }
-  
-  const group = readAll_('EstimateGroups').find(function (g) { return g.projectId === projectId && g.sowId === sowId; });
-  if (group) {
-    const groupRow = findRowNum_('EstimateGroups', 'id', group.id);
-    if (groupRow > -1) {
-      sheet_('EstimateGroups').deleteRow(groupRow);
-    }
-  }
-  
-  logActivity_('SOW ' + sowId + ' deleted from project ' + projectId, 'a', sowId);
-  return { success: true };
-}
-
-// ============================================================
-//  PHOTO UPLOAD
-// ============================================================
-
 function uploadImage(base64Data, fileName, mimeType) {
   try {
     const blob = Utilities.newBlob(
@@ -1727,17 +1268,4 @@ function uploadImage(base64Data, fileName, mimeType) {
   } catch (e) {
     throw new Error('Image upload failed: ' + e.message);
   }
-}
-
-function getSOWItemsForProject(projectId) {
-  return readAll_('SOWItems').filter(function (s) {
-    return s.projectId === projectId;
-  }).map(function(s) {
-    return {
-      id: s.id,
-      description: s.description,
-      qty: parseFloat(s.qty || 0),
-      unit: s.unit || ''
-    };
-  });
 }
