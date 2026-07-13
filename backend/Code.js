@@ -260,7 +260,6 @@ function getHomeData() {
 
   const cashAdvances = readAll_('CashAdvanceRequests');
   const pendingCA = cashAdvances.filter(function (r) { return r.status === 'Pending'; });
-  const pendingApprovals = pendingCA.length;
 
   const cashReleases = readAll_('CashRelease');
   const pendingReleases = cashReleases.filter(function (r) { return r.status === 'Pending'; });
@@ -477,9 +476,6 @@ function addDailyRecord(projectId, data) {
 
 function submitDailyRecordForApproval(recordId) {
   updateRow_('DailyRecords', 'id', recordId, { status: 'pending' });
-  // We'll keep a generic request entry for daily records in the old Requests sheet for backward compatibility?
-  // Actually we can just use the DailyRecords sheet directly.
-  // For approvals, we'll handle in getPendingApprovals.
   logActivity_('Daily record ' + recordId + ' submitted for approval', 'g', recordId);
   return { success: true };
 }
@@ -671,10 +667,8 @@ function approveCashAdvance(id) {
   if (!ca) throw new Error('Cash advance request not found.');
   if (ca.status !== 'Pending') throw new Error('Request is not pending.');
 
-  // Update status to Approved
   updateRow_('CashAdvanceRequests', 'id', id, { status: 'Approved' });
 
-  // AUTO-COPY to CashRelease sheet with status 'Pending'
   const releaseId = nextId_('REL');
   appendRow_('CashRelease', {
     id: releaseId,
@@ -705,7 +699,7 @@ function getPendingCashReleases() {
 }
 
 function submitRelease(payload) {
-  const releaseId = payload.releaseId; // from dropdown
+  const releaseId = payload.releaseId;
   const releaseAmount = parseFloat(payload.amount) || 0;
 
   const allReleases = readAll_('CashRelease');
@@ -717,15 +711,13 @@ function submitRelease(payload) {
     throw new Error('Release amount (₱' + releaseAmount.toFixed(2) + ') exceeds approved amount (₱' + approvedAmount.toFixed(2) + ').');
   }
 
-  // Update the release record
   updateRow_('CashRelease', 'id', releaseId, {
     status: 'For Review',
     releasedBy: currentUserEmail_(),
     releasedAt: new Date(),
-    amount: releaseAmount // store the actual released amount (could be partial)
+    amount: releaseAmount
   });
 
-  // Update the original Cash Advance status to 'Released'
   const caId = release.originalRequestId;
   if (caId) {
     updateRow_('CashAdvanceRequests', 'id', caId, { status: 'Released' });
@@ -743,7 +735,6 @@ function reviewRelease(releaseId, reviewerEmail) {
     throw new Error('Self-review is not allowed.');
   }
 
-  // Get existing reviewers
   let reviewedBy = [];
   try {
     reviewedBy = JSON.parse(release.reviewedByJSON || '[]');
@@ -753,16 +744,13 @@ function reviewRelease(releaseId, reviewerEmail) {
     reviewedBy.push(reviewerEmail.toLowerCase());
   }
 
-  // Update reviewedByJSON
   updateRow_('CashRelease', 'id', releaseId, { reviewedByJSON: JSON.stringify(reviewedBy) });
 
-  // Get all admins except superadmin
   const admins = getAllAdminsExceptSuperAdmin_();
   const requiredReviewers = admins.filter(function (admin) {
     return admin !== release.releasedBy.toLowerCase();
   });
 
-  // Check if all required reviewers have reviewed
   const allReviewed = requiredReviewers.every(function (admin) {
     return reviewedBy.indexOf(admin) !== -1;
   });
@@ -832,14 +820,12 @@ function getPendingApprovals() {
   const userEmail = currentUserEmail_().toLowerCase();
   const isAdmin = readAll_('Users').find(function (u) { return u.email.toLowerCase() === userEmail && (u.role === 'admin' || u.role === 'superadmin'); });
 
-  // Cash Advance Pending
   const cashAdvances = readAll_('CashAdvanceRequests').filter(function (r) {
     return r.status === 'Pending' && r.requestorEmail.toLowerCase() !== userEmail;
   }).map(function (r) {
     return { id: r.id, type: 'Cash Advance', projectId: r.projectId, requestor: r.requestor, requestorEmail: r.requestorEmail, amount: r.amount, description: r.description, status: r.status, createdAt: r.createdAt };
   });
 
-  // Cash Release For Review (only for admins, exclude superadmin)
   let releases = [];
   if (isAdmin && isAdmin.role !== 'superadmin') {
     releases = readAll_('CashRelease').filter(function (r) {
@@ -849,12 +835,9 @@ function getPendingApprovals() {
     });
   }
 
-  // Materials, Equipment, DailyRecords (kept in their own sheets)
   const materials = readAll_('Materials').filter(function (m) { return m.status === 'Pending' && m.requestedBy && m.requestedBy.toLowerCase() !== userEmail; });
   const equipment = readAll_('Equipment').filter(function (e) { return e.status === 'Pending' && e.requestedBy && e.requestedBy.toLowerCase() !== userEmail; });
   const dailyRecords = readAll_('DailyRecords').filter(function (d) { return d.status === 'pending' && d.createdBy && d.createdBy.toLowerCase() !== userEmail; });
-
-  // Estimates
   const estimates = readAll_('EstimateGroups').filter(function (g) { return g.status === 'pending'; });
 
   return {
@@ -901,7 +884,6 @@ function getMyRejectedRequests() {
 }
 
 function getRequestById(id) {
-  // Check all sheets
   let req = readAll_('CashAdvanceRequests').find(function (r) { return r.id === id; });
   if (req) return req;
   req = readAll_('CashRelease').find(function (r) { return r.id === id; });
@@ -917,7 +899,6 @@ function getRequestById(id) {
   return null;
 }
 
-// For approveItem and rejectItem, we need to handle different types
 function approveItem(id, type) {
   return decideItem_(id, type, 'Approved');
 }
@@ -998,14 +979,11 @@ function decideItem_(id, type, decision) {
   }
 
   if (type === 'Estimate') {
-    // Estimates are handled via approveEstimates
     return approveEstimates(id);
   }
 
   throw new Error('Invalid type for approval: ' + type);
 }
-
-// ─── SUPER ADMIN FORCE APPROVE/REJECT ─────────────────────────
 
 function forceApprove(id, type) {
   const user = readAll_('Users').find(function (u) { 
@@ -1014,7 +992,6 @@ function forceApprove(id, type) {
   if (!user || user.role !== 'superadmin') {
     throw new Error('Only the Super Admin can force-approve.');
   }
-  // Just call approveItem with superadmin override
   return decideItem_(id, type, 'Approved');
 }
 
@@ -1057,7 +1034,6 @@ function getFinanceData() {
     { label: 'Pending Requests', value: String(pendingCA.length), sub: '₱' + pendingAmount.toFixed(2) + ' total', cls: 'warn' }
   ];
 
-  // Monthly cashflow (based on incoming approved and release reviewed)
   const months = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
@@ -1103,7 +1079,6 @@ function getFinanceData() {
     values: breakdownKeys.length ? breakdownKeys.map(function (k) { return Math.round((typeGroups[k] / breakdownTotal) * 100); }) : [100]
   };
 
-  // Aging for pending cash advances
   const pendingCAForAging = readAll_('CashAdvanceRequests').filter(function (r) { return r.status === 'Pending'; });
   const buckets = { '0-30 days': 0, '31-60 days': 0, '61-90 days': 0, '90+ days': 0 };
   pendingCAForAging.forEach(function (r) {
@@ -1127,6 +1102,23 @@ function getFinanceData() {
   });
 
   return { kpis: kpis, cashflow: cashflow, budgetVsActual: budgetVsActual, breakdown: breakdown, aging: aging, costStatus: costStatus };
+}
+
+function uploadAttachmentIfAny_(payload) {
+  if (!payload.fileBase64 || !payload.fileName) return { fileUrl: '', fileName: '' };
+  try {
+    const blob = Utilities.newBlob(
+      Utilities.base64Decode(payload.fileBase64),
+      payload.fileMimeType || 'application/octet-stream',
+      payload.fileName
+    );
+    const folder = getOrCreateAttachmentsFolder_();
+    const file = folder.createFile(blob);
+    return { fileUrl: file.getUrl(), fileName: payload.fileName };
+  } catch (e) {
+    logActivity_('File upload failed: ' + e.message, 'a');
+    return { fileUrl: '', fileName: '' };
+  }
 }
 
 // ============================================================
@@ -1236,23 +1228,6 @@ function getOrCreateAttachmentsFolder_() {
   const name = 'FCTC Ops Board Attachments';
   const folders = DriveApp.getFoldersByName(name);
   return folders.hasNext() ? folders.next() : DriveApp.createFolder(name);
-}
-
-function uploadAttachmentIfAny_(payload) {
-  if (!payload.fileBase64 || !payload.fileName) return { fileUrl: '', fileName: '' };
-  try {
-    const blob = Utilities.newBlob(
-      Utilities.base64Decode(payload.fileBase64),
-      payload.fileMimeType || 'application/octet-stream',
-      payload.fileName
-    );
-    const folder = getOrCreateAttachmentsFolder_();
-    const file = folder.createFile(blob);
-    return { fileUrl: file.getUrl(), fileName: payload.fileName };
-  } catch (e) {
-    logActivity_('File upload failed: ' + e.message, 'a');
-    return { fileUrl: '', fileName: '' };
-  }
 }
 
 function uploadImage(base64Data, fileName, mimeType) {
