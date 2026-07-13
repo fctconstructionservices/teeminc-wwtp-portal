@@ -641,7 +641,7 @@ function submitCashAdvance(payload) {
 
   appendRow_('CashAdvanceRequests', {
     id: id,
-    type: 'Cash Advance',
+    type: 'CashAdvance',
     projectId: payload.project || '',
     requestor: currentUserName_(),
     requestorEmail: currentUserEmail_(),
@@ -707,8 +707,8 @@ function submitRelease(payload) {
   if (!release) throw new Error('Pending release record not found.');
 
   const approvedAmount = parseFloat(release.amount) || 0;
-  if (releaseAmount > approvedAmount) {
-    throw new Error('Release amount (₱' + releaseAmount.toFixed(2) + ') exceeds approved amount (₱' + approvedAmount.toFixed(2) + ').');
+  if (releaseAmount != approvedAmount) {
+    throw new Error('Release amount (₱' + releaseAmount.toFixed(2) + ') is not equal from the approved amount (₱' + approvedAmount.toFixed(2) + ').');
   }
 
   updateRow_('CashRelease', 'id', releaseId, {
@@ -823,15 +823,15 @@ function getPendingApprovals() {
   const cashAdvances = readAll_('CashAdvanceRequests').filter(function (r) {
     return r.status === 'Pending' && r.requestorEmail.toLowerCase() !== userEmail;
   }).map(function (r) {
-    return { id: r.id, type: 'Cash Advance', projectId: r.projectId, requestor: r.requestor, requestorEmail: r.requestorEmail, amount: r.amount, description: r.description, status: r.status, createdAt: r.createdAt };
+    return { id: r.id, type: 'CashAdvance', projectId: r.projectId, requestor: r.requestor, requestorEmail: r.requestorEmail, amount: r.amount, description: r.description, status: r.status, createdAt: r.createdAt };
   });
 
   let releases = [];
   if (isAdmin && isAdmin.role !== 'superadmin') {
     releases = readAll_('CashRelease').filter(function (r) {
-      return r.status === 'For Review' && r.releasedBy && r.releasedBy.toLowerCase() !== userEmail;
+      return r.status === 'For Review' && r.releasedBy && r.releasedBy.toLowerCase() == userEmail;
     }).map(function (r) {
-      return { id: r.id, type: 'Cash Release', projectId: r.projectId, requestor: r.requestor, requestorEmail: r.requestorEmail, amount: r.amount, description: r.description, status: r.status, createdAt: r.createdAt };
+      return { id: r.id, type: 'CashRelease', projectId: r.projectId, requestor: r.requestor, requestorEmail: r.requestorEmail, amount: r.amount, description: r.description, status: r.status, createdAt: r.createdAt };
     });
   }
 
@@ -1133,11 +1133,11 @@ function search(query) {
   });
   readAll_('CashAdvanceRequests').forEach(function (r) {
     if (r.id.toLowerCase().indexOf(query) > -1 || (r.description && r.description.toLowerCase().indexOf(query) > -1)) {
-      results.push({ type: 'Cash Advance', id: r.id, label: r.description });
+      results.push({ type: 'CashAdvance', id: r.id, label: r.description });
     }
   });
   readAll_('CashRelease').forEach(function (r) {
-    if (r.id.toLowerCase().indexOf(query) > -1) results.push({ type: 'Cash Release', id: r.id, label: r.description });
+    if (r.id.toLowerCase().indexOf(query) > -1) results.push({ type: 'CashRelease', id: r.id, label: r.description });
   });
   readAll_('IncomingCashRequests').forEach(function (r) {
     if (r.id.toLowerCase().indexOf(query) > -1 || (r.description && r.description.toLowerCase().indexOf(query) > -1)) {
