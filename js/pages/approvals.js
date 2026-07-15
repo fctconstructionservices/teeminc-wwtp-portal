@@ -147,9 +147,11 @@ const ApprovalsPage = {
             
             const cashAdvances = pendingData.cashAdvances || [];
             const releases = pendingData.releases || [];
+            const incomingCash = pendingData.incomingCash || [];   // v3
             const liquidations = pendingData.liquidations || [];
             const materials = pendingData.materials || [];
             const equipment = pendingData.equipment || [];
+            const manpower = pendingData.manpower || [];           // v3
             const estimates = pendingData.estimates || [];
             const dailyRecords = pendingData.dailyRecords || [];
 
@@ -177,9 +179,18 @@ const ApprovalsPage = {
                 return d.createdBy && d.createdBy.toLowerCase() !== userEmail;
             });
 
+            // v3: incoming cash + manpower join the inbox
+            const filteredIncomingCash = incomingCash.filter(function(r) {
+                return r.requestorEmail && r.requestorEmail.toLowerCase() !== userEmail;
+            });
+            const filteredManpower = manpower.filter(function(m) {
+                return m.requestedBy && m.requestedBy.toLowerCase() !== userEmail;
+            });
+
             const totalPending = filteredCashAdvances.length + filteredReleases.length + 
-                                filteredLiquidations.length + filteredMaterials.length + 
-                                filteredEquipment.length + estimates.length + filteredDailyRecords.length;
+                                filteredIncomingCash.length + filteredLiquidations.length +
+                                filteredMaterials.length + filteredEquipment.length +
+                                filteredManpower.length + estimates.length + filteredDailyRecords.length;
 
             let html = `
             <div class="section-head"><h2>Approval Dashboard</h2><div class="rule"></div>
@@ -187,14 +198,14 @@ const ApprovalsPage = {
             </div>
 
             <div class="approval-tab-bar">
-                ${(isAdmin || isSuperAdmin) ? `<button class="active" data-tab="pending" onclick="ApprovalsPage.switchTab('pending')">${Icon.clipboardList({size:14})} Pending Approvals (${filteredCashAdvances.length + filteredLiquidations.length + filteredMaterials.length + filteredEquipment.length + estimates.length + filteredDailyRecords.length})</button>` : ''}
+                ${(isAdmin || isSuperAdmin) ? `<button class="active" data-tab="pending" onclick="ApprovalsPage.switchTab('pending')">${Icon.clipboardList({size:14})} Pending Approvals (${filteredCashAdvances.length + filteredIncomingCash.length + filteredLiquidations.length + filteredMaterials.length + filteredEquipment.length + filteredManpower.length + estimates.length + filteredDailyRecords.length})</button>` : ''}
                 ${(isAdmin && !isSuperAdmin) ? `<button data-tab="reviewing" onclick="ApprovalsPage.switchTab('reviewing')">${Icon.clipboardList({size:14})} For Review (${filteredReleases.length})</button>` : ''}
                 <button ${!(isAdmin || isSuperAdmin) ? 'class="active"' : ''} data-tab="myrequests" onclick="ApprovalsPage.switchTab('myrequests')">${Icon.user({size:14})} My Requests (${myRequests.length})</button>
                 <button data-tab="approved" onclick="ApprovalsPage.switchTab('approved')">${Icon.checkCircle({size:14})} Approved (${myApproved.length})</button>
                 <button data-tab="rejected" onclick="ApprovalsPage.switchTab('rejected')">${Icon.xCircle({size:14})} Rejected (${myRejected.length})</button>
             </div>
 
-            ${(isAdmin || isSuperAdmin) ? `<div id="approval-tab-pending" class="approval-tab-content active">${this._renderPendingTab({cashAdvances: filteredCashAdvances, liquidations: filteredLiquidations, materials: filteredMaterials, equipment: filteredEquipment, estimates: estimates, dailyRecords: filteredDailyRecords})}</div>` : ''}
+            ${(isAdmin || isSuperAdmin) ? `<div id="approval-tab-pending" class="approval-tab-content active">${this._renderPendingTab({cashAdvances: filteredCashAdvances, incomingCash: filteredIncomingCash, liquidations: filteredLiquidations, materials: filteredMaterials, equipment: filteredEquipment, manpower: filteredManpower, estimates: estimates, dailyRecords: filteredDailyRecords})}</div>` : ''}
             ${(isAdmin && !isSuperAdmin) ? `<div id="approval-tab-reviewing" class="approval-tab-content">${this._renderReviewingTab(filteredReleases)}</div>` : ''}
             <div id="approval-tab-myrequests" class="approval-tab-content ${!(isAdmin || isSuperAdmin) ? 'active' : ''}">${this._renderMyRequestsTab(myRequests, 'pending')}</div>
             <div id="approval-tab-approved" class="approval-tab-content">${this._renderMyRequestsTab(myApproved, 'approved')}</div>
@@ -251,6 +262,44 @@ const ApprovalsPage = {
                         <div class="ar-meta">
                             <span class="ar-id">${r.id}</span>
                             <span>₱${(r.amount || 0).toFixed(2)}</span>
+                            <span>${r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ''}</span>
+                            <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${r.status}</span>
+                        </div>
+                    </div>
+                    <div class="ar-actions">${actionsHtml}</div>
+                </div>`;
+            });
+            html += `</div></div>`;
+        }
+
+        // ─── Incoming Cash Requests (v3) ────────────────────────
+        html += `<div class="section-head"><h3>Incoming Cash Requests</h3><div class="rule"></div></div>`;
+        if (!data.incomingCash || data.incomingCash.length === 0) {
+            html += `<div class="empty"><p>No pending incoming cash requests.</p></div>`;
+        } else {
+            html += `<div class="panel"><div style="padding:4px 0;">`;
+            data.incomingCash.forEach(r => {
+                let actionsHtml = '';
+                if (isSuperAdmin) {
+                    actionsHtml = `
+                        <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${r.id}','IncomingCash')">Force Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${r.id}','IncomingCash')">Force Reject</button>
+                    `;
+                } else if (isApprover) {
+                    actionsHtml = `
+                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${r.id}','IncomingCash')">Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${r.id}','IncomingCash')">Reject</button>
+                    `;
+                }
+                html += `
+                <div class="approval-request-item" style="cursor:pointer;">
+                    <div class="ar-icon">${Icon.incoming ? Icon.incoming({size:16}) : Icon.wallet({size:16})}</div>
+                    <div class="ar-body" onclick="RequestDetailModal.open('${r.id}','request')">
+                        <div class="ar-title">${r.requestor} — ${r.projectId || '—'}</div>
+                        <div class="ar-meta">
+                            <span class="ar-id">${r.id}</span>
+                            <span>₱${(parseFloat(r.amount) || 0).toFixed(2)}</span>
+                            <span>${r.paymentMethod || ''}${r.reference ? ' · ' + r.reference : ''}</span>
                             <span>${r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ''}</span>
                             <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${r.status}</span>
                         </div>
@@ -362,6 +411,43 @@ const ApprovalsPage = {
                             <span class="ar-id">${e.id}</span>
                             <span>${e.category}</span>
                             <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${e.status}</span>
+                        </div>
+                    </div>
+                    <div class="ar-actions">${actionsHtml}</div>
+                </div>`;
+            });
+            html += `</div></div>`;
+        }
+
+        // ─── Manpower Roles Pending Approval (v3) ───────────────
+        html += `<div class="section-head"><h3>Manpower Roles Pending Approval</h3><div class="rule"></div></div>`;
+        if (!data.manpower || data.manpower.length === 0) {
+            html += `<div class="empty"><p>No pending manpower roles.</p></div>`;
+        } else {
+            html += `<div class="panel"><div style="padding:4px 0;">`;
+            data.manpower.forEach(m => {
+                let actionsHtml = '';
+                if (isSuperAdmin) {
+                    actionsHtml = `
+                        <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${m.id}','Manpower')">Force Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${m.id}','Manpower')">Force Reject</button>
+                    `;
+                } else if (isApprover) {
+                    actionsHtml = `
+                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${m.id}','Manpower')">Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${m.id}','Manpower')">Reject</button>
+                    `;
+                }
+                html += `
+                <div class="approval-request-item">
+                    <div class="ar-icon">${Icon.users({size:16})}</div>
+                    <div class="ar-body">
+                        <div class="ar-title">${m.role}${m.classification ? ' (' + m.classification + ')' : ''}</div>
+                        <div class="ar-meta">
+                            <span class="ar-id">${m.id}</span>
+                            <span>Requested by ${m.requestedBy || '—'}</span>
+                            <span>${m.createdAt ? new Date(m.createdAt).toLocaleDateString() : ''}</span>
+                            <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${m.status}</span>
                         </div>
                     </div>
                     <div class="ar-actions">${actionsHtml}</div>

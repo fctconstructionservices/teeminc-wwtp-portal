@@ -70,6 +70,7 @@ const App = {
         if (page === 'finance') await FinancePage.load();
         if (page === 'materials') await MaterialsPage.load();
         if (page === 'equipment') await EquipmentPage.load();
+        if (page === 'manpower') await ManpowerPage.load();
         if (page === 'approvals') await ApprovalsPage.load();
         if (page === 'release-cash') {
             setTimeout(loadReleaseDropdown, 100);
@@ -191,8 +192,17 @@ const App = {
             const pendingDailyRecords = (pendingData.dailyRecords || []).filter(function(d) {
                 return d.createdBy && d.createdBy.toLowerCase() !== userEmail;
             });
-            
+
+            // v3: incoming cash + manpower now count toward the badge
+            const pendingIncoming = (pendingData.incomingCash || []).filter(function(r) {
+                return r.requestorEmail && r.requestorEmail.toLowerCase() !== userEmail;
+            });
+            const pendingManpower = (pendingData.manpower || []).filter(function(m) {
+                return m.requestedBy && m.requestedBy.toLowerCase() !== userEmail;
+            });
+
             this._pendingCount = pendingCashAdvances.length + pendingReleases.length + 
+                                 pendingIncoming.length + pendingManpower.length +
                                  pendingMaterials.length + pendingEquipment.length + 
                                  pendingEstimates.length + pendingDailyRecords.length;
             

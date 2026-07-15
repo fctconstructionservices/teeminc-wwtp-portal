@@ -16,12 +16,35 @@
 // ============================================================
 
 function addDailyRecord(projectId, data) {
+  // ─── v3 SERVER-SIDE GUARD: one non-rejected record per date ───
+  // The frontend also checks this, but the sheet is the source of
+  // truth — two users submitting the same date simultaneously (or a
+  // stale browser tab) must not be able to create duplicates.
+  const dup = readAll_('DailyRecords').find(function (d) {
+    return d.projectId === projectId &&
+      String(d.date) === String(data.date) &&
+      d.status !== 'rejected';
+  });
+  if (dup) {
+    throw new Error('A daily record for ' + data.date + ' already exists (' + (dup.status || 'draft') + '). Only one record per date is allowed unless the existing one was rejected.');
+  }
+
+  // ─── v3 PHOTO FIX ───
+  // The frontend uploads photos through uploadImage() and sends Drive
+  // URLs here, but this function used to base64-decode everything —
+  // silently failing on URLs, which is why photosJSON was always
+  // empty. URLs are now stored directly; raw base64 (legacy path) is
+  // still decoded and uploaded.
   const photoUrls = [];
   if (data.photos && data.photos.length) {
-    data.photos.forEach(function (photoBase64, index) {
+    data.photos.forEach(function (photo, index) {
+      if (typeof photo === 'string' && photo.indexOf('http') === 0) {
+        photoUrls.push(photo);              // already a Drive URL
+        return;
+      }
       try {
         const blob = Utilities.newBlob(
-          Utilities.base64Decode(photoBase64),
+          Utilities.base64Decode(photo),
           'image/jpeg',
           'daily_photo_' + Date.now() + '_' + index + '.jpg'
         );

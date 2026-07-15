@@ -51,11 +51,13 @@ Object.assign(ProjectPage, {
                 const readonlyCls = isLocked ? 'readonly' : '';
 
                 const currentEmail = ((App.getUser() && App.getUser().email) || '').toLowerCase();
-                const relatedEstimateReq = isPending
-                    ? (p.requests || []).find(r => r.type === 'Estimate' && r.scope === group.sowId && r.status === 'Pending')
-                    : null;
-                const isSubmitter = !!(relatedEstimateReq && relatedEstimateReq.requestorEmail &&
-                    relatedEstimateReq.requestorEmail.toLowerCase() === currentEmail);
+                // v3 FIX: submitter detection used p.requests, which the
+                // backend never returned — so the submitter kept seeing the
+                // Approve button after submitting. EstimateGroups now
+                // carries submittedBy, which is authoritative.
+                const currentUser = App.getUser();
+                const isSubmitter = !!(isPending && group.submittedBy && currentUser &&
+                    String(group.submittedBy).toLowerCase() === String(currentUser.email).toLowerCase());
                 const canApproveThis = isPending && !isSubmitter && App.isApprover();
                 const hideStatusForSubmitter = isPending && isSubmitter;
 

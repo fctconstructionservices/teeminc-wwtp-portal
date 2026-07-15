@@ -64,7 +64,8 @@ function submitCashAdvance(payload) {
     }),
     status: 'Pending',
     createdAt: new Date(),
-    dateNeeded: payload.dateNeeded || ""
+    dateNeeded: payload.dateNeeded || "",
+    sowId: payload.sowId || ''   // v3: links this CA to a SOW item so its release feeds the SOW "actual"
   });
 
   logActivity_('Cash advance ₱' + payload.amount + ' requested by ' + currentUserName_() + projectName, 'blue', id);
@@ -92,7 +93,8 @@ function approveCashAdvance(id) {
     createdAt: new Date(),
     releasedBy: '',
     releasedAt: '',
-    reviewedByJSON: '[]'
+    reviewedByJSON: '[]',
+    sowId: ca.sowId || ''   // v3: inherited so Reviewed releases roll up into the SOW actual
   });
 
   logActivity_('Cash advance ' + id + ' approved and copied to CashRelease as ' + releaseId + ' (Pending)', 'g', id);

@@ -60,6 +60,13 @@ function getPendingApprovals() {
     return { id: l.id, type: 'Liquidation', projectId: l.projectId, requestor: l.requestor, requestorEmail: l.requestorEmail, amount: l.amount, description: l.description, status: l.status, createdAt: l.createdAt };
   });
 
+  // v3: Incoming Cash requests now appear in the approvals inbox
+  const incomingCash = readAll_('IncomingCashRequests').filter(function (r) {
+    return r.status === 'Pending' && r.requestorEmail && r.requestorEmail.toLowerCase() !== userEmail;
+  }).map(function (r) {
+    return { id: r.id, type: 'IncomingCash', projectId: r.projectId, requestor: r.requestor, requestorEmail: r.requestorEmail, amount: r.amount, description: r.description, paymentMethod: r.paymentMethod, reference: r.reference, status: r.status, createdAt: r.createdAt };
+  });
+
   // Materials, Equipment, DailyRecords, Estimates
   const materials = readAll_('Materials').filter(function (m) { 
     return m.status === 'Pending' && m.requestedBy && m.requestedBy.toLowerCase() !== userEmail; 
@@ -74,12 +81,19 @@ function getPendingApprovals() {
     return g.status === 'pending'; 
   });
 
+  // v3: pending manpower role requests (same flow as materials)
+  const manpower = readAll_('Manpower').filter(function (m) {
+    return m.status === 'Pending' && m.requestedBy && m.requestedBy.toLowerCase() !== userEmail;
+  });
+
   return {
     cashAdvances: cashAdvances,
     releases: releases,
+    incomingCash: incomingCash,
     liquidations: liquidations,
     materials: materials,
     equipment: equipment,
+    manpower: manpower,
     dailyRecords: dailyRecords,
     estimates: estimates
   };
@@ -119,7 +133,11 @@ function getMyPendingRequests() {
     return g.status === 'pending'; 
   }).map(function(g) { g.type = 'Estimate'; return g; });
 
-  return [].concat(cashAdvances, releases, incoming, liquidations, materials, equipment, dailyRecords, estimates);
+  const manpower = readAll_('Manpower').filter(function (m) {
+    return m.requestedBy && m.requestedBy.toLowerCase() === email && m.status === 'Pending';
+  }).map(function(m) { m.type = 'Manpower'; return m; });
+
+  return [].concat(cashAdvances, releases, incoming, liquidations, materials, equipment, manpower, dailyRecords, estimates);
 }
 
 function getMyApprovedRequests() {
@@ -147,8 +165,12 @@ function getMyApprovedRequests() {
   const dailyRecords = readAll_('DailyRecords').filter(function (d) { 
     return d.createdBy && d.createdBy.toLowerCase() === email && d.status === 'approved'; 
   }).map(function(d) { d.type = 'DailyRecord'; return d; });
+
+  const manpower = readAll_('Manpower').filter(function (m) {
+    return m.requestedBy && m.requestedBy.toLowerCase() === email && m.status === 'approved';
+  }).map(function(m) { m.type = 'Manpower'; return m; });
   
-  return [].concat(cashAdvances, incoming, liquidations, materials, equipment, dailyRecords);
+  return [].concat(cashAdvances, incoming, liquidations, materials, equipment, manpower, dailyRecords);
 }
 
 function getMyRejectedRequests() {
@@ -176,8 +198,12 @@ function getMyRejectedRequests() {
   const dailyRecords = readAll_('DailyRecords').filter(function (d) { 
     return d.createdBy && d.createdBy.toLowerCase() === email && d.status === 'rejected'; 
   }).map(function(d) { d.type = 'DailyRecord'; return d; });
+
+  const manpower = readAll_('Manpower').filter(function (m) {
+    return m.requestedBy && m.requestedBy.toLowerCase() === email && m.status === 'rejected';
+  }).map(function(m) { m.type = 'Manpower'; return m; });
   
-  return [].concat(cashAdvances, incoming, liquidations, materials, equipment, dailyRecords);
+  return [].concat(cashAdvances, incoming, liquidations, materials, equipment, manpower, dailyRecords);
 }
 
 function getRequestById(id) {
@@ -194,6 +220,8 @@ function getRequestById(id) {
   req = readAll_('Equipment').find(function (e) { return e.id === id; });
   if (req) return req;
   req = readAll_('DailyRecords').find(function (d) { return d.id === id; });
+  if (req) return req;
+  req = readAll_('Manpower').find(function (m) { return m.id === id; });
   if (req) return req;
   return null;
 }
@@ -344,9 +372,39 @@ function decideItem_(id, type, decision) {
     return { success: true };
   }
 
+  // ─── MANPOWER (v3) ─────────────────────────────────
+  if (type === 'Manpower') {
+    const mp = readAll_('Manpower').find(function (m) { return m.id === id; });
+    if (!mp) throw new Error('Manpower role not found.');
+    if (mp.requestedBy && mp.requestedBy.toLowerCase() === approver) {
+      throw new Error('Self-approval is not allowed.');
+    }
+    if (mp.status !== 'Pending') throw new Error('Manpower role is not pending.');
+    updateRow_('Manpower', 'id', id, { status: decision === 'Approved' ? 'approved' : 'rejected' });
+    logActivity_('Manpower role ' + id + ' ' + (decision === 'Approved' ? 'approved' : 'rejected'), decision === 'Approved' ? 'g' : 'a', id);
+    return { success: true };
+  }
+
   // ─── ESTIMATE ──────────────────────────────────────
+  // v3 FIX: this used to call approveEstimates(id) with one argument
+  // (the group id where projectId+sowId were expected), so approving
+  // an estimate from the inbox never found the group. The id received
+  // here is the EstimateGroups row id; we resolve it first.
   if (type === 'Estimate') {
-    return approveEstimates(id);
+    const eg = readAll_('EstimateGroups').find(function (g) { return g.id === id; });
+    if (!eg) throw new Error('Estimate group not found.');
+    if (eg.submittedBy && String(eg.submittedBy).toLowerCase() === approver) {
+      throw new Error('Self-approval is not allowed.');
+    }
+    if (eg.status !== 'pending') throw new Error('Estimate is not pending.');
+    if (decision === 'Approved') {
+      return approveEstimates(eg.projectId, eg.sowId);
+    }
+    // Rejection returns the estimate to draft so the creator can edit
+    // and resubmit (editing is only allowed in draft status).
+    updateRow_('EstimateGroups', 'id', id, { status: 'draft' });
+    logActivity_('Estimate for ' + eg.sowId + ' rejected — returned to draft', 'a', id);
+    return { success: true, status: 'draft' };
   }
 
   throw new Error('Invalid type for approval: ' + type);

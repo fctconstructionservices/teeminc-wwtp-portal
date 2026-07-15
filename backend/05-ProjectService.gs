@@ -71,7 +71,15 @@ function getHomeData() {
 //  PROJECT
 // ============================================================
 
-function addProject(id, name, status, revenue, expenses, cashPosition) {
+/**
+ * addProject (v3) - Creates a project. Status is ALWAYS 'Ongoing' on
+ * creation (the status dropdown was removed from the form); revenue,
+ * expenses and cashPosition always start at 0 and are computed live
+ * from cash sheets anyway.
+ *
+ * clientId must exist in ClientLists (use addClient first).
+ */
+function addProject(id, name, clientId, location, startDate, endDate) {
   var userEmail = currentUserEmail_();
   var users = readAll_('Users');
   var user = users.find(function(u) { return u.email.toLowerCase() === userEmail.toLowerCase(); });
@@ -83,13 +91,24 @@ function addProject(id, name, status, revenue, expenses, cashPosition) {
   if (existing) {
     throw new Error('Project ID "' + id + '" already exists. Please use a different ID.');
   }
+  if (clientId) {
+    var client = readAll_('ClientLists').find(function(c) { return c.id === clientId; });
+    if (!client) throw new Error('Selected client not found. Please refresh the client list.');
+  }
+  if (startDate && endDate && new Date(endDate) < new Date(startDate)) {
+    throw new Error('End date cannot be earlier than start date.');
+  }
   appendRow_('Projects', {
     id: id,
     name: name || id,
-    status: status || 'Ongoing',
+    status: 'Ongoing',            // fixed on creation by design (v3)
     revenue: 0,
     expenses: 0,
-    cashPosition: 0
+    cashPosition: 0,
+    clientId: clientId || '',
+    location: location || '',
+    startDate: startDate || '',
+    endDate: endDate || ''
   });
   logActivity_('New project "' + name + '" (' + id + ') created by ' + currentUserName_(), 'blue');
   return { success: true, id: id, name: name, message: 'Project "' + name + '" created successfully.' };
@@ -116,7 +135,13 @@ function getProjectData(projectId) {
         endDate: s.endDate || '',
         status: s.status || 'On Track',
         qty: parseFloat(s.qty || 0),
-        unit: s.unit || ''
+        unit: s.unit || '',
+        // v3 Gantt/budget fields
+        budgetMode: s.budgetMode || 'auto',
+        predecessors: String(s.predecessors || ''),
+        isMilestone: String(s.isMilestone).toUpperCase() === 'TRUE',
+        baselineStart: s.baselineStart || '',
+        baselineEnd: s.baselineEnd || ''
       };
     });
 
@@ -148,9 +173,11 @@ function getProjectData(projectId) {
   const allInd = readAll_('EstimateIndirect');
   const estimateGroups = groups.map(function (g) {
     return {
+      id: g.id,
       sowId: g.sowId,
       sowDescription: g.sowDescription,
       status: g.status,
+      submittedBy: g.submittedBy || '',
       materials: allMat.filter(function (m) { return m.groupId === g.id; }),
       labor: allLabor.filter(function (l) { return l.groupId === g.id; }),
       equipment: allEq.filter(function (e) { return e.groupId === g.id; }),
@@ -161,6 +188,45 @@ function getProjectData(projectId) {
   const cashAdvanceRequests = readAll_('CashAdvanceRequests').filter(function (r) { return r.projectId === projectId; });
   const cashReleases = readAll_('CashRelease').filter(function (r) { return r.projectId === projectId; });
   const liquidations = readAll_('Liquidations').filter(function (l) { return l.projectId === projectId; });
+
+  // ─── v3: per-SOW effective budget, actual, and progress ───────
+  const groupsById = {};
+  groups.forEach(function (g) { groupsById[g.sowId] = g; });
+
+  sowItems.forEach(function (s) {
+    // Effective budget by budgetMode:
+    //   'auto'     -> materials + labor + equipment from the estimate group
+    //   'indirect' -> indirect costs only
+    //   'manual'   -> the stored budget value (edited by hand)
+    const g = groupsById[s.id];
+    if (g && s.budgetMode !== 'manual') {
+      s.budget = computeEstimateGroupTotalByMode_(g.id, s.budgetMode);
+    }
+
+    // Actual = sum of Reviewed cash releases tagged with this SOW item.
+    // (A release inherits its sowId from the originating cash advance.)
+    s.actual = cashReleases
+      .filter(function (r) { return r.status === 'Reviewed' && String(r.sowId) === String(s.id); })
+      .reduce(function (sum, r) { return sum + (parseFloat(r.amount) || 0); }, 0);
+
+    // Progress from Daily Site Reports (non-rejected): among work
+    // accomplished rows whose scope === this SOW id, the LATEST report
+    // date wins; within that date the highest % is taken. Mirrors how
+    // MS Project treats the most recent status update as truth.
+    s.progress = computeSOWProgress_(s.id, dailyRecords);
+  });
+
+  // Budget-weighted total project completion (user-selected weighting).
+  // Milestones (zero-duration, zero-budget) are excluded from the weights.
+  const weighted = sowItems.filter(function (s) { return !s.isMilestone; });
+  const totalBudget = weighted.reduce(function (sum, s) { return sum + (s.budget || 0); }, 0);
+  const totalProgress = totalBudget > 0
+    ? weighted.reduce(function (sum, s) { return sum + (s.budget || 0) * (s.progress || 0); }, 0) / totalBudget
+    : (weighted.length ? weighted.reduce(function (sum, s) { return sum + (s.progress || 0); }, 0) / weighted.length : 0);
+
+  const client = proj.clientId
+    ? readAll_('ClientLists').find(function (c) { return c.id === proj.clientId; })
+    : null;
 
   const allPhotos = [];
   dailyRecords.forEach(function (d) {
@@ -178,6 +244,12 @@ function getProjectData(projectId) {
   return {
     name: proj.name,
     status: proj.status,
+    clientId: proj.clientId || '',
+    clientName: client ? client.name : '',
+    location: proj.location || '',
+    startDate: proj.startDate || '',
+    endDate: proj.endDate || '',
+    totalProgress: Math.round(totalProgress * 10) / 10,
     revenue: revenue,
     expenses: expenses,
     cashPosition: cashPosition,
@@ -203,8 +275,14 @@ function addSOWItem(projectId, data) {
   const unit = data.unit || '';
   const budget = 0;
   const actual = 0;
-  const startDate = '';
-  const endDate = '';
+
+  // v3: new items default to starting TODAY and ending TOMORROW so
+  // they immediately appear on the Gantt with a real 1-day bar.
+  const tz = Session.getScriptTimeZone();
+  const today = new Date();
+  const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+  const startDate = data.startDate || Utilities.formatDate(today, tz, 'yyyy-MM-dd');
+  const endDate = data.endDate || Utilities.formatDate(tomorrow, tz, 'yyyy-MM-dd');
   const status = 'On Track';
 
   const existing = readAll_('SOWItems').find(function (s) { return s.id === id && s.projectId === projectId; });
@@ -213,7 +291,11 @@ function addSOWItem(projectId, data) {
   appendRow_('SOWItems', {
     id: id, projectId: projectId, description: description,
     budget: budget, actual: actual, startDate: startDate, endDate: endDate,
-    status: status, qty: qty, unit: unit
+    status: status, qty: qty, unit: unit,
+    budgetMode: data.budgetMode || 'auto',
+    predecessors: data.predecessors || '',
+    isMilestone: data.isMilestone ? 'TRUE' : '',
+    baselineStart: '', baselineEnd: ''
   });
 
   appendRow_('EstimateGroups', {
@@ -233,6 +315,12 @@ function updateSOWItem(projectId, sowId, data) {
   if (data.startDate !== undefined) patch.startDate = data.startDate;
   if (data.endDate !== undefined) patch.endDate = data.endDate;
   if (data.status !== undefined) patch.status = data.status;
+  // v3 fields
+  if (data.qty !== undefined) patch.qty = parseFloat(data.qty) || 0;
+  if (data.unit !== undefined) patch.unit = data.unit;
+  if (data.budgetMode !== undefined) patch.budgetMode = data.budgetMode;
+  if (data.predecessors !== undefined) patch.predecessors = String(data.predecessors || '');
+  if (data.isMilestone !== undefined) patch.isMilestone = data.isMilestone ? 'TRUE' : '';
   const found = findRowNum_('SOWItems', 'id', sowId);
   if (found === -1) throw new Error('SOW item not found.');
   updateRow_('SOWItems', 'id', sowId, patch);
@@ -257,4 +345,86 @@ function getSOWItemsForProject(projectId) {
     .map(function(s) {
       return { id: s.id, description: s.description, qty: parseFloat(s.qty || 0), unit: s.unit || '' };
     });
+}
+
+
+// ============================================================
+//  v3 — PROGRESS, BUDGET MODE, BASELINE
+// ============================================================
+
+/**
+ * computeSOWProgress_ - % complete of one SOW item from Daily Site
+ * Reports. Rejected reports are ignored. The report with the LATEST
+ * date containing a work-accomplished row scoped to this SOW wins;
+ * if that date has several rows for the same SOW, the highest % is
+ * used. Returns 0-100.
+ */
+function computeSOWProgress_(sowId, dailyRecords) {
+  let bestDate = null;
+  let best = 0;
+  (dailyRecords || []).forEach(function (d) {
+    if (d.status === 'rejected') return;
+    const rows = (d.workAccomplished || []).filter(function (w) {
+      return String(w.scope) === String(sowId);
+    });
+    if (!rows.length) return;
+    const pct = rows.reduce(function (mx, w) {
+      return Math.max(mx, parseFloat(w.percentComplete) || 0);
+    }, 0);
+    const dt = new Date(d.date);
+    if (bestDate === null || dt > bestDate || (dt.getTime() === bestDate.getTime() && pct > best)) {
+      bestDate = dt;
+      best = pct;
+    }
+  });
+  return Math.min(100, Math.max(0, best));
+}
+
+/**
+ * updateSOWBudget (v3) - Sets how a SOW item's budget is derived.
+ *   mode 'auto'     -> live mat+labor+equipment total of its estimate
+ *   mode 'indirect' -> live indirect-cost total of its estimate
+ *   mode 'manual'   -> the given manualAmount, stored as-is
+ * For auto/indirect the current computed value is also persisted so
+ * the sheet itself stays readable.
+ */
+function updateSOWBudget(projectId, sowId, mode, manualAmount) {
+  const valid = ['auto', 'indirect', 'manual'];
+  if (valid.indexOf(mode) === -1) throw new Error('Invalid budget mode: ' + mode);
+
+  const found = findRowNum_('SOWItems', 'id', sowId);
+  if (found === -1) throw new Error('SOW item not found.');
+
+  let budget;
+  if (mode === 'manual') {
+    budget = parseFloat(manualAmount) || 0;
+  } else {
+    const g = readAll_('EstimateGroups').find(function (row) {
+      return row.projectId === projectId && row.sowId === sowId;
+    });
+    budget = g ? computeEstimateGroupTotalByMode_(g.id, mode) : 0;
+  }
+
+  updateRow_('SOWItems', 'id', sowId, { budgetMode: mode, budget: budget });
+  logActivity_('SOW ' + sowId + ' budget set to ₱' + budget.toFixed(2) + ' (' + mode + ')', 'blue', sowId);
+  return { success: true, budget: budget, mode: mode };
+}
+
+/**
+ * saveBaseline (v3) - MS Project-style baseline snapshot: copies the
+ * CURRENT start/end of every SOW item in the project into
+ * baselineStart/baselineEnd. The Gantt then draws the baseline as a
+ * thin ghost bar under each task so slippage is visible.
+ */
+function saveBaseline(projectId) {
+  const items = readAll_('SOWItems').filter(function (s) { return s.projectId === projectId; });
+  if (!items.length) throw new Error('No SOW items to baseline.');
+  items.forEach(function (s) {
+    updateRow_('SOWItems', 'id', s.id, {
+      baselineStart: s.startDate || '',
+      baselineEnd: s.endDate || ''
+    });
+  });
+  logActivity_('Baseline saved for project ' + projectId + ' (' + items.length + ' tasks) by ' + currentUserName_(), 'blue');
+  return { success: true, count: items.length };
 }

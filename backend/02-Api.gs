@@ -10,12 +10,9 @@
  * in the appropriate service file, then register ONE line in
  * API_ACTIONS below. Nothing else needs to change.
  *
- * NOTE (pre-existing behavior, intentionally preserved): the daily
- * record actions submitDailyRecordForApproval / approveDailyRecord /
- * rejectDailyRecord / getPendingDailyRecords exist in
- * 06-DailyRecordService.gs but are NOT registered here, so the
- * matching DataService calls currently return "Unknown action".
- * Register them below when you decide to activate that flow.
+ * v3: daily-record lifecycle actions are now registered (they were
+ * missing before, so the frontend's submit/approve calls failed with
+ * "Unknown action"), plus clients, manpower, SOW budget/baseline.
  */
 
 // ============================================================
@@ -99,5 +96,23 @@ const API_ACTIONS = {
   deleteSOWItem: deleteSOWItem,
   addProject: addProject,
   getSOWItemsForProject: getSOWItemsForProject,
-  uploadImage: uploadImage
+  uploadImage: uploadImage,
+
+  // ─── v3 ────────────────────────────────────────────
+  // Daily record lifecycle (previously missing — see header note)
+  submitDailyRecordForApproval: submitDailyRecordForApproval,
+  approveDailyRecord: approveDailyRecord,
+  rejectDailyRecord: rejectDailyRecord,
+  getPendingDailyRecords: getPendingDailyRecords,
+  // Clients
+  getClients: getClients,
+  addClient: addClient,
+  // Manpower catalog
+  getAllManpower: getAllManpower,
+  getManpower: getManpower,
+  requestManpower: requestManpower,
+  searchManpower: searchManpower,
+  // SOW budget mode + Gantt baseline
+  updateSOWBudget: updateSOWBudget,
+  saveBaseline: saveBaseline
 };

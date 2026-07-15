@@ -20,7 +20,7 @@ Object.assign(ProjectPage, {
             <div class="daily-form-header" style="background:var(--blueprint);color:#fff;padding:12px 16px;border-radius:var(--radius) var(--radius) 0 0;margin:-16px -16px 16px -16px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;">
                     <div>
-                        <div style="font-family:'Oswald',sans-serif;font-size:16px;text-transform:uppercase;letter-spacing:0.05em;">FCTC Construction Services</div>
+                        <div style="font-family:'Oswald',sans-serif;font-size:16px;text-transform:uppercase;letter-spacing:0.05em;">FCTC Site Operations Board</div>
                         <div style="font-size:11px;opacity:0.8;">Daily Site Record</div>
                     </div>
                     <div style="text-align:right;font-size:12px;">
@@ -38,23 +38,23 @@ Object.assign(ProjectPage, {
             </div>
             <div class="daily-form-section" id="manpowerSection">
                 <div class="section-label">Manpower <span class="rule"></span><span style="font-weight:400;font-size:10px;color:var(--ink-soft);" id="manpowerTotal">Total: 0</span></div>
-                <div id="manpowerEntries"><div class="entry-row"><div class="field"><label>Trade / Role</label><input type="text" class="mp-role" placeholder="e.g. Foreman" /></div><div class="field"><label>Number Present</label><input type="number" class="mp-count" placeholder="0" min="0" /></div><div class="field" style="grid-column:3/-1;display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'manpower')">${Icon.close({size:13})}</button></div></div></div>
+                <div id="manpowerEntries"><div class="entry-row"><div class="field"><label>Trade / Role</label><select class="mp-role">${this._manpowerOptions()}</select></div><div class="field"><label>Number Present</label><input type="number" class="mp-count" placeholder="0" min="0" /></div><div class="field" style="grid-column:3/-1;display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'manpower')">${Icon.close({size:13})}</button></div></div></div>
                 <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('manpower')">+ Add Role</button></div>
                 <div class="manpower-total" id="manpowerTotalDisplay">Total: 0</div>
             </div>
             <div class="daily-form-section" id="equipmentSection">
                 <div class="section-label">Equipment on Site <span class="rule"></span></div>
-                <div id="equipmentEntries"><div class="entry-row"><div class="field"><label>Equipment</label><input type="text" class="eq-name" placeholder="e.g. Excavator" /></div><div class="field"><label>Qty</label><input type="number" class="eq-qty" placeholder="1" min="0" /></div><div class="field"><label>Status</label><input type="text" class="eq-status" placeholder="Operational" /></div><div class="field"><label>Remarks</label><input type="text" class="eq-remarks" placeholder="Optional" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'equipment')">${Icon.close({size:13})}</button></div></div></div>
+                <div id="equipmentEntries"><div class="entry-row"><div class="field"><label>Equipment</label><select class="eq-name">${this._equipmentOptionsDaily()}</select></div><div class="field"><label>Qty</label><input type="number" class="eq-qty" placeholder="1" min="0" /></div><div class="field"><label>Status</label><input type="text" class="eq-status" placeholder="Operational" /></div><div class="field"><label>Remarks</label><input type="text" class="eq-remarks" placeholder="Optional" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'equipment')">${Icon.close({size:13})}</button></div></div></div>
                 <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('equipment')">+ Add Equipment</button></div>
             </div>
             <div class="daily-form-section" id="workSection">
                 <div class="section-label">Work Accomplished <span class="rule"></span></div>
-                <div id="workEntries"><div class="entry-row"><div class="field"><label>Location</label><input type="text" class="wk-location" /></div><div class="field"><label>Scope</label><input type="text" class="wk-scope" /></div><div class="field" style="grid-column:1/-1;"><label>Description</label><textarea class="wk-desc" rows="1"></textarea></div><div class="field"><label>% Complete</label><input type="number" class="wk-pct" min="0" max="100" /></div><div class="field"><label>Photo</label><input type="file" accept="image/*" class="wk-image" data-photo onchange="ProjectPage.previewSmallImage(this,'wk-preview-${Date.now()}')" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'work')">${Icon.close({size:13})}</button></div></div></div>
+                <div id="workEntries"><div class="entry-row"><div class="field"><label>Location</label><input type="text" class="wk-location" /></div><div class="field"><label>Scope (SOW Item)</label><select class="wk-scope">${this._sowOptions()}</select></div><div class="field" style="grid-column:1/-1;"><label>Description</label><textarea class="wk-desc" rows="1"></textarea></div><div class="field"><label>% Complete</label><input type="number" class="wk-pct" min="0" max="100" /></div><div class="field"><label>Photo</label><input type="file" accept="image/*" class="wk-image" data-photo onchange="ProjectPage.previewSmallImage(this,'wk-preview-${Date.now()}')" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'work')">${Icon.close({size:13})}</button></div></div></div>
                 <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('work')">+ Add Work Item</button></div>
             </div>
             <div class="daily-form-section" id="materialsSection">
                 <div class="section-label">Materials Delivered <span class="rule"></span></div>
-                <div id="materialsEntries"><div class="entry-row"><div class="field"><label>Material</label><input type="text" class="mat-name" /></div><div class="field"><label>Qty</label><input type="number" class="mat-qty" min="0" /></div><div class="field"><label>Unit</label><input type="text" class="mat-unit" /></div><div class="field"><label>Supplier / DR No.</label><input type="text" class="mat-supplier" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'materials')">${Icon.close({size:13})}</button></div></div></div>
+                <div id="materialsEntries"><div class="entry-row"><div class="field"><label>Material</label><select class="mat-name" onchange="ProjectPage.syncMaterialUnit(this)">${this._materialOptionsDaily()}</select></div><div class="field"><label>Qty</label><input type="number" class="mat-qty" min="0" /></div><div class="field"><label>Unit</label><input type="text" class="mat-unit" readonly placeholder="auto" title="Filled automatically from the material database" /></div><div class="field"><label>Supplier / DR No.</label><input type="text" class="mat-supplier" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'materials')">${Icon.close({size:13})}</button></div></div></div>
                 <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('materials')">+ Add Material</button></div>
             </div>
             <div class="daily-form-section" id="issuesSection">
@@ -77,6 +77,43 @@ Object.assign(ProjectPage, {
                 <button class="btn-ghost" onclick="ProjectPage.toggleAddRecord()">Cancel</button>
             </div>
         `;
+    },
+
+    /**
+     * v3 dropdown builders — every list feeds from its approved
+     * database so daily reports use consistent, analyzable values
+     * (the Gantt progress rollup depends on scope === SOW id).
+     */
+    _sowOptions() {
+        const items = this._sowItems || [];
+        return '<option value="">Select SOW...</option>' +
+            items.map(s => `<option value="${s.id}">${s.id} — ${(s.description || '').replace(/"/g, '&quot;')}</option>`).join('');
+    },
+    _manpowerOptions() {
+        const list = this._approvedManpower || [];
+        if (!list.length) return '<option value="">No approved roles — add via Manpower DB</option>';
+        return '<option value="">Select role...</option>' +
+            list.map(m => `<option value="${(m.role || '').replace(/"/g, '&quot;')}">${m.role}${m.classification ? ' (' + m.classification + ')' : ''}</option>`).join('');
+    },
+    _equipmentOptionsDaily() {
+        const list = this._approvedEquipment || [];
+        if (!list.length) return '<option value="">No approved equipment</option>';
+        return '<option value="">Select equipment...</option>' +
+            list.map(e => `<option value="${(e.name || '').replace(/"/g, '&quot;')}">${e.name}${e.brand ? ' — ' + e.brand : ''}</option>`).join('');
+    },
+    _materialOptionsDaily() {
+        const list = this._approvedMaterials || [];
+        if (!list.length) return '<option value="">No approved materials</option>';
+        return '<option value="">Select material...</option>' +
+            list.map(m => `<option value="${(m.name || '').replace(/"/g, '&quot;')}" data-unit="${(m.unit || '').replace(/"/g, '&quot;')}">${m.name}${m.brand ? ' — ' + m.brand : ''}</option>`).join('');
+    },
+    /** syncMaterialUnit (v3) - Auto-fills the Unit from the selected material. */
+    syncMaterialUnit(selectEl) {
+        const row = selectEl.closest('.entry-row');
+        if (!row) return;
+        const unitInput = row.querySelector('.mat-unit');
+        const opt = selectEl.selectedOptions[0];
+        if (unitInput) unitInput.value = (opt && opt.dataset.unit) || '';
     },
 
     gatherDailyFormData() {
@@ -305,7 +342,15 @@ Object.assign(ProjectPage, {
         const records = this._dailyRecords || [];
         const record = records[index];
         if (!record) { UI.toast('Record not found.', 'error'); return; }
-        PrintModal.open(record);
+        PrintModal.open(record, this._recordMeta(record));
+    },
+
+    /** _recordMeta (v3) - Header info shared by every record modal. */
+    _recordMeta(record) {
+        return {
+            projectName: (this._data && this._data.name) || this._currentProjectId || '',
+            preparedBy: record.createdBy || ''
+        };
     },
 
     async viewRecordById(id) {
@@ -313,7 +358,7 @@ Object.assign(ProjectPage, {
         if (!p) { UI.toast('Project data not loaded.', 'error'); return; }
         const record = (p.dailyRecords || []).find(r => r.id === id);
         if (!record) { UI.toast('Record not found.', 'error'); return; }
-        PrintModal.open(record);
+        PrintModal.open(record, this._recordMeta(record));
     },
 
     async submitDailyForApproval(recordId) {

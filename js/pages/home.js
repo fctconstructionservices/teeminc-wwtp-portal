@@ -100,6 +100,7 @@ const HomePage = {
                 { id: 'search', label: 'Search Records', sub: 'All transactions', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
                 { id: 'materials', label: 'Materials DB', sub: 'Master list & approval', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
                 { id: 'equipment', label: 'Tools & Equipment', sub: 'Equipment inventory', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
+                { id: 'manpower', label: 'Manpower DB', sub: 'Roles & trades · approval', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
                 { id: 'approvals', label: 'Approvals', sub: 'My requests & pending', roles: ['superadmin', 'admin', 'approver', 'request-only'] }
             ];
 
@@ -143,9 +144,11 @@ const HomePage = {
                 const badgeHtml = isApproval ? `<span class="t-badge" id="approvalBadgeHome">${pendingCount}</span>` : '';
                 const borderStyle = t.id === 'materials' ? 'border-color:var(--blueprint);' :
                                     t.id === 'equipment' ? 'border-color:var(--amber);' :
+                                    t.id === 'manpower' ? 'border-color:var(--ink);' :
                                     isApproval ? 'border-color:var(--green);' : '';
                 const iconBg = t.id === 'materials' ? 'background:var(--blueprint);color:#fff;' :
                                t.id === 'equipment' ? 'background:var(--amber);color:#fff;' :
+                               t.id === 'manpower' ? 'background:var(--ink);color:#fff;' :
                                isApproval ? 'background:#E1F0E8;color:var(--green);' : '';
                 const iconEl = t.id === 'request' ? Icon.wallet({ size: 18 }) :
                                 t.id === 'record-cash' ? Icon.incoming({ size: 18 }) :
@@ -154,6 +157,7 @@ const HomePage = {
                                 t.id === 'search' ? Icon.search({ size: 18 }) :
                                 t.id === 'materials' ? Icon.package({ size: 18 }) :
                                 t.id === 'equipment' ? Icon.wrench({ size: 18 }) :
+                                t.id === 'manpower' ? Icon.users({ size: 18 }) :
                                 t.id === 'approvals' ? Icon.checkCircle({ size: 18, color: 'currentColor' }) : '';
                 ticketHtml += `
                     <button class="ticket ${safetyClass} ${approvalClass}" onclick="App.navigate('${t.id}')" style="${borderStyle}">

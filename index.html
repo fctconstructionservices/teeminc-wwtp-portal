@@ -284,6 +284,31 @@
     </section>
 
     <!-- ════════════════════════════════════════════ -->
+    <!--  MANPOWER DATABASE PAGE (v3)               -->
+    <!-- ════════════════════════════════════════════ -->
+    <section id="page-manpower" class="page" aria-label="Manpower Database">
+        <div class="wrap">
+            <div class="topbar">
+                <div class="mark">F</div>
+                <div class="brand">
+                    <div class="name">Manpower Database</div>
+                    <div class="sub">Roles & trades · Search · Approval</div>
+                </div>
+                <div class="spacer"></div>
+                <button class="hamburger" onclick="toggleMenu()"></button>
+                <div class="actions" id="topActionsManpower">
+                    <button class="theme-toggle" onclick="App.toggleTheme()"></button>
+                    <button onclick="App.navigate('home')">Back</button>
+                </div>
+            </div>
+            <div class="crumb"><button onclick="App.navigate('home')">Home</button> / Manpower</div>
+            <div id="manpowerContent">
+                <div class="loading-overlay"><div class="loader"></div><p>Loading manpower...</p></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
     <!--  APPROVALS PAGE (NEW)                      -->
     <!-- ════════════════════════════════════════════ -->
     <section id="page-approvals" class="page" aria-label="Approvals">
@@ -681,11 +706,14 @@
     <script src="js/pages/project/project-core.js"></script>
     <script src="js/pages/project/project-daily.js"></script>
     <script src="js/pages/project/project-sow.js"></script>
+    <!-- project-gantt.js augments ProjectPage via Object.assign — must load AFTER project-sow.js -->
+    <script src="js/pages/project/project-gantt.js"></script>
     <script src="js/pages/project/project-estimates.js"></script>
     <script src="js/pages/approvals.js"></script>
     <script src="js/pages/finance.js"></script>
     <script src="js/pages/materials.js"></script>
     <script src="js/pages/equipment.js"></script>
+    <script src="js/pages/manpower.js"></script>
     <script src="js/features/search.js"></script>
     <script src="js/features/form-submissions.js"></script>
     <script src="js/init.js"></script>

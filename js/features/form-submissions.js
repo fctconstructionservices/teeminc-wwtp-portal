@@ -301,6 +301,7 @@ async function submitRequestForm(e) {
             amount, 
             requestType, 
             scopeOfWork, 
+            sowId: scopeOfWork,   // v3: req-scope's value IS the SOW id — this feeds the SOW "actual" via Reviewed releases
             dateNeeded
         };
 

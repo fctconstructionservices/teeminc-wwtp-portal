@@ -60,8 +60,8 @@ function replaceGroupChildren_(sheetName, groupId, items, fields) {
 function submitEstimatesForApproval(projectId, sowId) {
   const g = readAll_('EstimateGroups').find(function (row) { return row.projectId === projectId && row.sowId === sowId; });
   if (!g) throw new Error('Estimate group not found');
-  updateRow_('EstimateGroups', 'id', g.id, { status: 'pending' });
-  logActivity_('Estimate for ' + sowId + ' submitted for approval', 'g');
+  updateRow_('EstimateGroups', 'id', g.id, { status: 'pending', submittedBy: currentUserEmail_() });
+  logActivity_('Estimate for ' + sowId + ' submitted for approval by ' + currentUserName_(), 'g');
   return { success: true };
 }
 
@@ -70,8 +70,16 @@ function approveEstimates(projectId, sowId) {
   let newBudget = null;
   if (g) {
     updateRow_('EstimateGroups', 'id', g.id, { status: 'approved' });
-    newBudget = computeEstimateGroupTotal_(g.id);
-    updateRow_('SOWItems', 'id', sowId, { budget: newBudget });
+    // v3: the write-back respects the SOW item's budgetMode —
+    //   auto     -> materials + labor + equipment
+    //   indirect -> indirect costs only
+    //   manual   -> hands off; the user typed the budget themselves
+    const sow = readAll_('SOWItems').find(function (s) { return s.id === sowId && s.projectId === projectId; });
+    const mode = (sow && sow.budgetMode) || 'auto';
+    if (mode !== 'manual') {
+      newBudget = computeEstimateGroupTotalByMode_(g.id, mode);
+      updateRow_('SOWItems', 'id', sowId, { budget: newBudget });
+    }
   }
   logActivity_('Estimate for ' + sowId + ' approved' + (newBudget !== null ? ' — SOW budget set to ₱' + newBudget.toFixed(2) : ''), 'g');
   return { success: true, budget: newBudget };
@@ -87,4 +95,26 @@ function computeEstimateGroupTotal_(groupId) {
   const indSum = readAll_('EstimateIndirect').filter(function (i) { return i.groupId === groupId; })
     .reduce(function (s, i) { return s + (parseFloat(i.amount) || 0); }, 0);
   return matSum + laborSum + eqSum + indSum;
+}
+
+
+/**
+ * computeEstimateGroupTotalByMode_ (v3) - Group total filtered by the
+ * SOW budgetMode. 'auto' = direct costs (materials+labor+equipment);
+ * 'indirect' = indirect costs only. Used by getProjectData (live
+ * display), updateSOWBudget and approveEstimates (write-back).
+ */
+function computeEstimateGroupTotalByMode_(groupId, mode) {
+  if (mode === 'indirect') {
+    return readAll_('EstimateIndirect').filter(function (i) { return i.groupId === groupId; })
+      .reduce(function (s, i) { return s + (parseFloat(i.amount) || 0); }, 0);
+  }
+  // 'auto': direct costs only
+  const matSum = readAll_('EstimateMaterials').filter(function (m) { return m.groupId === groupId; })
+    .reduce(function (s, m) { return s + (parseFloat(m.cost) || 0); }, 0);
+  const laborSum = readAll_('EstimateLabor').filter(function (l) { return l.groupId === groupId; })
+    .reduce(function (s, l) { return s + (parseFloat(l.cost) || 0); }, 0);
+  const eqSum = readAll_('EstimateEquipment').filter(function (e) { return e.groupId === groupId; })
+    .reduce(function (s, e) { return s + (parseFloat(e.cost) || 0); }, 0);
+  return matSum + laborSum + eqSum;
 }

@@ -20,6 +20,7 @@ const ProjectPage = {
     _estimatesData: null,
     _approvedMaterials: [],
     _approvedEquipment: [],
+    _approvedManpower: [],   // v3: feeds the daily report Role dropdown
     _sowItems: [],
 
     /**
@@ -60,6 +61,13 @@ const ProjectPage = {
             } catch (e) {
                 console.error('Failed to load approved equipment:', e);
                 this._approvedEquipment = [];
+            }
+            // v3: manpower role catalog for the daily report dropdown
+            try {
+                this._approvedManpower = await DataService.getManpower('approved');
+            } catch (e) {
+                console.error('Failed to load approved manpower:', e);
+                this._approvedManpower = [];
             }
 
             // Ensure SOW items have corresponding estimate groups
@@ -184,19 +192,43 @@ const ProjectPage = {
                         <div class="error-msg">Project Name is required.</div>
                     </div>
                     <div class="field">
-                        <label>Status</label>
-                        <select id="add-proj-status">
-                            <option value="Ongoing">Ongoing</option>
-                            <option value="On Hold">On Hold</option>
-                            <option value="Completed">Completed</option>
-                        </select>
+                        <label>Client *</label>
+                        <div style="display:flex;gap:6px;align-items:stretch;">
+                            <select id="add-proj-client" required style="flex:1;">
+                                <option value="">Loading clients...</option>
+                            </select>
+                            <button type="button" class="btn-sm primary" onclick="ProjectPage.toggleAddClientForm()" title="Add a new client">+ Client</button>
+                        </div>
+                        <div class="error-msg">Client is required.</div>
+                    </div>
+                    <!-- v3: inline mini-form to add a client without leaving the modal -->
+                    <div id="addClientInline" style="display:none;border:1px dashed var(--line);border-radius:6px;padding:10px;margin-bottom:12px;">
+                        <div class="field"><label>Client Name *</label><input type="text" id="new-client-name" placeholder="e.g. ABC Development Corp." /></div>
+                        <div class="field"><label>Contact Person</label><input type="text" id="new-client-contact" /></div>
+                        <div class="field"><label>Contact Number</label><input type="text" id="new-client-number" /></div>
+                        <div class="field"><label>Email</label><input type="email" id="new-client-email" /></div>
+                        <div class="field"><label>Address</label><input type="text" id="new-client-address" /></div>
+                        <div style="display:flex;gap:6px;">
+                            <button type="button" class="btn-sm success" onclick="ProjectPage.submitInlineClient()">Save Client</button>
+                            <button type="button" class="btn-sm" onclick="ProjectPage.toggleAddClientForm()">Cancel</button>
+                        </div>
                     </div>
                     <div class="field">
-                        <label>Initial Revenue (₱)</label>
-                        <input type="number" id="add-proj-revenue" value="0" step="0.01" min="0" />
+                        <label>Location</label>
+                        <input type="text" id="add-proj-location" placeholder="e.g. Mabalacat, Pampanga" />
+                    </div>
+                    <div class="field">
+                        <label>Start Date *</label>
+                        <input type="date" id="add-proj-start" required />
+                        <div class="error-msg">Start date is required.</div>
+                    </div>
+                    <div class="field">
+                        <label>End Date *</label>
+                        <input type="date" id="add-proj-end" required />
+                        <div class="error-msg">End date is required.</div>
                     </div>
                     <div class="system-check-note" style="margin-top:12px;font-size:11px;">
-                        <strong>Note:</strong> New project will appear in the Projects list immediately after creation.
+                        <strong>Note:</strong> New projects always start with <strong>Ongoing</strong> status and appear in the Projects list immediately.
                     </div>
                     <div class="submit-row">
                         <button type="submit" class="btn-primary">Add Project</button>
@@ -207,10 +239,73 @@ const ProjectPage = {
         `;
         document.body.appendChild(modal);
 
+        // v3: default dates (today -> +30 days) and async client list
+        const today = new Date();
+        const plus30 = new Date(today.getTime() + 30 * 86400000);
+        document.getElementById('add-proj-start').value = today.toISOString().split('T')[0];
+        document.getElementById('add-proj-end').value = plus30.toISOString().split('T')[0];
+        this._loadClientDropdown();
+
         setTimeout(() => {
             const input = document.getElementById('add-proj-id');
             if (input) input.focus();
         }, 100);
+    },
+
+    /**
+     * _loadClientDropdown (v3) - Fills the client select from the
+     * ClientLists sheet. Keeps the current selection across reloads
+     * (used after adding a client inline).
+     */
+    async _loadClientDropdown(selectId) {
+        const sel = document.getElementById('add-proj-client');
+        if (!sel) return;
+        try {
+            const clients = await DataService.getClients();
+            sel.innerHTML = '<option value="">Select client...</option>' +
+                clients.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+            if (selectId) sel.value = selectId;
+        } catch (err) {
+            sel.innerHTML = '<option value="">Failed to load clients</option>';
+            UI.toast('Could not load clients: ' + err.message, 'error');
+        }
+    },
+
+    /** toggleAddClientForm (v3) - Shows/hides the inline client mini-form. */
+    toggleAddClientForm() {
+        const el = document.getElementById('addClientInline');
+        if (!el) return;
+        el.style.display = el.style.display === 'none' ? 'block' : 'none';
+        if (el.style.display === 'block') {
+            document.getElementById('new-client-name').focus();
+        }
+    },
+
+    /**
+     * submitInlineClient (v3) - Saves the mini-form client, then
+     * reloads the dropdown with the new client pre-selected.
+     */
+    async submitInlineClient() {
+        const name = document.getElementById('new-client-name').value.trim();
+        if (!name) { UI.toast('Client name is required.', 'error'); return; }
+        try {
+            const result = await DataService.addClient({
+                name: name,
+                contactPerson: document.getElementById('new-client-contact').value.trim(),
+                contactNumber: document.getElementById('new-client-number').value.trim(),
+                email: document.getElementById('new-client-email').value.trim(),
+                address: document.getElementById('new-client-address').value.trim()
+            });
+            UI.toast(`Client "${name}" added.`, 'success');
+            this.toggleAddClientForm();
+            ['name','contact','number','email','address'].forEach(f => {
+                const el = document.getElementById('new-client-' + f);
+                if (el) el.value = '';
+            });
+            await this._loadClientDropdown(result.id);
+        } catch (err) {
+            UI.toast('' + err.message, 'error');
+        }
     },
 
     async submitAddProject(e) {
@@ -218,8 +313,10 @@ const ProjectPage = {
 
         let id = document.getElementById('add-proj-id').value.trim();
         const name = document.getElementById('add-proj-name').value.trim();
-        const status = document.getElementById('add-proj-status').value;
-        const revenue = parseFloat(document.getElementById('add-proj-revenue').value) || 0;
+        const clientId = document.getElementById('add-proj-client').value;
+        const location = document.getElementById('add-proj-location').value.trim();
+        const startDate = document.getElementById('add-proj-start').value;
+        const endDate = document.getElementById('add-proj-end').value;
 
         if (!id) {
             document.getElementById('add-proj-id').closest('.field').classList.add('error');
@@ -244,8 +341,25 @@ const ProjectPage = {
             document.getElementById('add-proj-name').closest('.field').classList.remove('error');
         }
 
-        const confirmed = await Confirm.open('Add Project?', 
-            `Add "${name}" (${id}) with initial revenue of ₱${revenue.toFixed(2)}?`
+        if (!clientId) {
+            document.getElementById('add-proj-client').closest('.field').classList.add('error');
+            UI.toast('Please select a client (or add one with + Client).', 'error');
+            return false;
+        }
+        document.getElementById('add-proj-client').closest('.field').classList.remove('error');
+
+        if (!startDate || !endDate) {
+            UI.toast('Start and End dates are required.', 'error');
+            return false;
+        }
+        if (new Date(endDate) < new Date(startDate)) {
+            UI.toast('End date cannot be earlier than start date.', 'error');
+            return false;
+        }
+
+        const clientName = document.getElementById('add-proj-client').selectedOptions[0].textContent;
+        const confirmed = await Confirm.open('Add Project?',
+            `Add "${name}" (${id}) for ${clientName}, ${startDate} to ${endDate}? Status will be set to Ongoing.`
         );
         if (!confirmed) return false;
 
@@ -255,7 +369,7 @@ const ProjectPage = {
         submitBtn.disabled = true;
 
         try {
-            await DataService.addProject(id, name, status, revenue, 0, revenue);
+            await DataService.addProject(id, name, clientId, location, startDate, endDate);
             UI.toast(`Project "${name}" added successfully!`, 'success');
             document.getElementById('addProjectModal').remove();
             await HomePage.load();

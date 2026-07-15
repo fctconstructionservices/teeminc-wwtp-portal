@@ -80,8 +80,18 @@ const DataService = {
         return await gasCall('getProjectData', projectId);
     },
 
-    async addProject(id, name, status, revenue, expenses, cashPosition) {
-        return await gasCall('addProject', id, name, status, revenue, expenses, cashPosition);
+    // v3: status/revenue removed from the form — backend fixes status
+    // to 'Ongoing' and zeroes the money fields.
+    async addProject(id, name, clientId, location, startDate, endDate) {
+        return await gasCall('addProject', id, name, clientId, location, startDate, endDate);
+    },
+
+    // ─── CLIENTS (v3) ─────────────────────────────────────────
+    async getClients() {
+        return await gasCall('getClients');
+    },
+    async addClient(data) {
+        return await gasCall('addClient', data);
     },
 
     // ─── FINANCE ──────────────────────────────────────────────
@@ -153,6 +163,32 @@ const DataService = {
         return await gasCall('searchEquipment', query);
     },
 
+    // ─── MANPOWER (v3) ────────────────────────────────────────
+    _pendingManpower: [],
+    _manpower: [],
+    async getAllManpower() {
+        const list = await gasCall('getAllManpower');
+        this._manpower = list;
+        this._pendingManpower = list.filter(m => m.status === 'Pending');
+        return list;
+    },
+    async getManpower(status = 'approved') {
+        return await gasCall('getManpower', status);
+    },
+    async requestManpower(data) {
+        const result = await gasCall('requestManpower', data);
+        await this.getAllManpower();
+        return result;
+    },
+    async approveManpower(id) {
+        const result = await gasCall('approveItem', id, 'Manpower');
+        await this.getAllManpower();
+        return result;
+    },
+    async searchManpower(query) {
+        return await gasCall('searchManpower', query);
+    },
+
     // ─── DAILY RECORDS ────────────────────────────────────────
     async addDailyRecord(projectId, data) {
         return await gasCall('addDailyRecord', projectId, data);
@@ -180,6 +216,14 @@ const DataService = {
     async deleteSOWItem(projectId, sowId) {
         return await gasCall('deleteSOWItem', projectId, sowId);
     },
+    // v3: budget derivation per SOW item ('auto' | 'indirect' | 'manual')
+    async updateSOWBudget(projectId, sowId, mode, manualAmount) {
+        return await gasCall('updateSOWBudget', projectId, sowId, mode, manualAmount);
+    },
+    // v3: MS Project-style baseline snapshot for the Gantt
+    async saveBaseline(projectId) {
+        return await gasCall('saveBaseline', projectId);
+    },
 
     // ─── PHOTO UPLOAD ──────────────────────────────────────────
     async uploadImage(base64Data, fileName, mimeType) {
@@ -194,9 +238,11 @@ const DataService = {
             requests: requests,
             cashAdvances: data.cashAdvances || [],
             releases: data.releases || [],
+            incomingCash: data.incomingCash || [],   // v3
             liquidations: data.liquidations || [],
             materials: data.materials || [],
             equipment: data.equipment || [],
+            manpower: data.manpower || [],           // v3
             estimates: data.estimates || [],
             dailyRecords: data.dailyRecords || []
         };

@@ -1,0 +1,129 @@
+/* ================================================================
+   pages/gantt.css — v3 MS Project-style Timeline
+   Imported AFTER project-sow.css so these rules override the older
+   Gantt styling (notably the wider 220px label column).
+   ================================================================ */
+
+/* Wider label column — the inline width:220px in project-gantt.js
+   must be matched here so the header offset and rows line up. */
+.gantt-timeline {
+    padding-left: 0;           /* label spacer is now an inline element */
+}
+.gantt-row-label {
+    width: 220px;              /* overrides the 120px in project-sow.css */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    line-height: 1.25;
+    white-space: normal;       /* allow the sub-line to wrap */
+    overflow: hidden;
+    padding-right: 10px;
+    gap: 1px;
+}
+.gantt-label-text {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.gantt-label-sub {
+    font-size: 8.5px;
+    color: var(--ink-soft);
+    font-family: 'IBM Plex Mono', monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Critical-path emphasis: red outline on bars and milestones */
+.gantt-bar.gantt-critical {
+    outline: 2px solid var(--red);
+    outline-offset: 1px;
+}
+.gantt-milestone.gantt-critical {
+    filter: drop-shadow(0 0 2px var(--red));
+}
+
+/* Progress fill inside a bar (driven by daily report % complete) */
+.gantt-progress-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.28);
+    border-radius: 6px 0 0 6px;
+    z-index: 1;
+    pointer-events: none;
+}
+.gantt-bar-label {
+    position: relative;
+    z-index: 2;
+    pointer-events: none;
+}
+.gantt-bar .resize-handle {
+    z-index: 3;
+}
+
+/* Baseline ghost bar — thin bar under the live bar */
+.gantt-baseline {
+    position: absolute;
+    bottom: 2px;
+    height: 5px;
+    background: repeating-linear-gradient(
+        90deg,
+        var(--ink-soft),
+        var(--ink-soft) 4px,
+        transparent 4px,
+        transparent 7px
+    );
+    opacity: 0.7;
+    border-radius: 3px;
+    z-index: 1;
+    pointer-events: none;
+}
+
+/* Milestone diamond */
+.gantt-milestone {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 18px;
+    line-height: 1;
+    color: var(--blueprint, #24455A);
+    cursor: pointer;
+    z-index: 4;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+.gantt-milestone:hover {
+    color: var(--ink);
+}
+
+/* Today vertical line spanning the body */
+.gantt-today-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--red);
+    opacity: 0.55;
+    z-index: 2;
+    pointer-events: none;
+}
+.gantt-today-line::before {
+    content: 'TODAY';
+    position: absolute;
+    top: -2px;
+    left: 3px;
+    font-size: 7px;
+    font-weight: 700;
+    color: var(--red);
+    font-family: 'IBM Plex Mono', monospace;
+    letter-spacing: 0.05em;
+}
+
+/* SVG dependency links overlay sits above rows but below bars’ hover */
+#ganttLinks {
+    z-index: 2;
+}

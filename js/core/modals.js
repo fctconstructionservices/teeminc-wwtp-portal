@@ -13,10 +13,15 @@
 // ─── PRINT MODAL ─────────────────────────────────────────────────
 
 const PrintModal = {
-    open(record) {
+    /**
+     * open(record, meta) — meta (v3, optional):
+     *   { projectName, preparedBy } shown in the header so the modal
+     *   matches the daily record FORM header.
+     */
+    open(record, meta) {
         const modal = document.getElementById('printModal');
         const body = document.getElementById('printBody');
-        body.innerHTML = this.renderPrintView(record);
+        body.innerHTML = this.renderPrintView(record, meta || {});
         modal.classList.add('open');
         document.body.style.overflow = 'hidden';
     },
@@ -24,7 +29,8 @@ const PrintModal = {
         document.getElementById('printModal').classList.remove('open');
         document.body.style.overflow = '';
     },
-    renderPrintView(r) {
+    renderPrintView(r, meta) {
+        meta = meta || {};
         const totalManpower = r.manpower ? r.manpower.reduce((s, m) => s + (parseInt(m.count) || 0), 0) : 0;
         const statusCls = r.status === 'On Track' ? 'ontrack' : r.status === 'Delayed' ? 'delayed' : 'completed';
         let html = `
@@ -32,6 +38,11 @@ const PrintModal = {
                     <h2>Daily Site Record</h2>
                     <div class="print-meta">${r.date} · <span class="stamp ${statusCls}" style="transform:none;font-size:10px;">${r.status}</span></div>
                 </div>
+                <div class="print-section"><div class="ps-title">Report Header</div><div class="ps-grid">
+                    <div class="item"><span class="label">Project</span><span class="value">${meta.projectName || '—'}</span></div>
+                    <div class="item"><span class="label">Prepared By</span><span class="value">${meta.preparedBy || r.createdBy || '—'}</span></div>
+                    <div class="item"><span class="label">Report Date</span><span class="value">${r.date || '—'}</span></div>
+                </div></div>
                 <div class="print-section"><div class="ps-title">Weather & Status</div><div class="ps-grid">
                     <div class="item"><span class="label">Weather AM</span><span class="value">${r.weatherAM || '—'}</span></div>
                     <div class="item"><span class="label">Weather PM</span><span class="value">${r.weatherPM || '—'}</span></div>

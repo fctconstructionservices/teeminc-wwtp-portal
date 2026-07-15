@@ -10,233 +10,11 @@
 Object.assign(ProjectPage, {
 
     // ─── GANTT ──────────────────────────────────────────────────
-    renderGantt(p) {
-        const container = document.getElementById('proj-tab-gantt');
-        container.innerHTML = `
-            <div class="section-head">
-                <h2>Project Timeline (Gantt Chart)</h2>
-                <div class="rule"></div>
-                <span class="badge">Drag bars to move · Drag edges to resize</span>
-            </div>
-            <div class="gantt-wrapper" id="ganttWrapper">
-                <div class="gantt-container" id="ganttContainer">
-                    <div class="gantt-timeline" id="ganttTimeline"></div>
-                    <div class="gantt-body" id="ganttBody"></div>
-                </div>
-            </div>
-            <div class="gantt-legend">
-                <span><span class="dot" style="background:var(--green);"></span> On Track</span>
-                <span><span class="dot" style="background:var(--amber);"></span> At Risk</span>
-                <span><span class="dot" style="background:var(--red);"></span> Overdue / Delayed</span>
-                <span style="color:var(--ink-soft);font-size:11px;">Click a bar to edit dates manually</span>
-            </div>
-            <div class="gantt-tooltip" id="ganttTooltip"></div>`;
-        this._ganttData = this._sowItems;
-        setTimeout(() => this._renderGanttChart(p), 100);
-    },
+    // ─── GANTT ────────────────────────────────────────────────
+    // v3: the Timeline tab was rebuilt as a full CPM Gantt and now
+    // lives in project-gantt.js (renderGantt + helpers). It loads
+    // after this file and attaches to the same ProjectPage object.
 
-    _renderGanttChart(p) {
-        const items = this._sowItems || [];
-        if (!items || items.length === 0) {
-            document.getElementById('ganttBody').innerHTML =
-                `<div class="empty"><p>No SOW items with dates.</p></div>`;
-            return;
-        }
-        const dates = [];
-        items.forEach(item => {
-            if (item.startDate && item.endDate) {
-                dates.push(new Date(item.startDate));
-                dates.push(new Date(item.endDate));
-            }
-        });
-        if (dates.length === 0) {
-            document.getElementById('ganttBody').innerHTML =
-                `<div class="empty"><p>No dates set. Please add start/end dates to SOW items.</p></div>`;
-            return;
-        }
-        const minDate = new Date(Math.min(...dates));
-        const maxDate = new Date(Math.max(...dates));
-        minDate.setDate(minDate.getDate() - 2);
-        maxDate.setDate(maxDate.getDate() + 2);
-        const totalDays = Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24)) || 1;
-
-        const timeline = document.getElementById('ganttTimeline');
-        let tlHtml =
-            `<div style="width:120px;flex-shrink:0;font-size:9px;font-weight:600;color:var(--ink-soft);">SOW Item</div>`;
-        for (let d = new Date(minDate); d <= maxDate; d.setDate(d.getDate() + 1)) {
-            const day = new Date(d);
-            tlHtml += `<div class="gt-day">${day.getDate()}/${day.getMonth()+1}</div>`;
-        }
-        timeline.innerHTML = tlHtml;
-
-        const body = document.getElementById('ganttBody');
-        let bodyHtml = '';
-        items.forEach((item, idx) => {
-            if (!item.startDate || !item.endDate) {
-                bodyHtml +=
-                    `<div class="gantt-row"><div class="gantt-row-label">${item.id}</div><div class="gantt-row-track"><span style="font-size:10px;color:var(--ink-soft);padding-left:10px;">No dates</span></div></div>`;
-                return;
-            }
-            const start = new Date(item.startDate);
-            const end = new Date(item.endDate);
-            const startOffset = Math.ceil((start - minDate) / (1000 * 60 * 60 * 24));
-            const duration = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
-            const leftPct = (startOffset / totalDays) * 100;
-            const widthPct = (duration / totalDays) * 100;
-            const statusCls = item.status === 'Completed' ? '' : item.status === 'At Risk' ? 'warn' : item
-                .status === 'Overdue' ? 'danger' : '';
-            const barColor = statusCls === 'warn' ? 'var(--amber)' : statusCls === 'danger' ?
-                'var(--red)' : 'var(--green)';
-            bodyHtml += `
-                    <div class="gantt-row" data-idx="${idx}">
-                        <div class="gantt-row-label" title="${item.id} — ${item.description}">${item.id}</div>
-                        <div class="gantt-row-track">
-                            <div class="gantt-bar ${statusCls}" style="left:${Math.max(0,leftPct)}%;width:${Math.max(2,widthPct)}%;background:${barColor};" 
-                                 data-idx="${idx}" data-start="${item.startDate}" data-end="${item.endDate}">
-                                <span style="font-size:8px;opacity:0.9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${item.id}</span>
-                                <div class="resize-handle left" data-action="resize-left">◀</div>
-                                <div class="resize-handle right" data-action="resize-right">▶</div>
-                            </div>
-                        </div>
-                    </div>`;
-        });
-        body.innerHTML = bodyHtml;
-        this._attachGanttEvents(minDate, totalDays, items);
-    },
-
-    _attachGanttEvents(minDate, totalDays, items) {
-        const bars = document.querySelectorAll('.gantt-bar');
-        let activeBar = null;
-        let isResizing = false;
-        let resizeSide = null;
-
-        const onMouseMove = (e) => {
-            if (!activeBar) return;
-            const track = activeBar.closest('.gantt-row-track');
-            if (!track) return;
-            const rect = track.getBoundingClientRect();
-            const pct = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
-
-            if (isResizing && resizeSide) {
-                const leftPct = parseFloat(activeBar.style.left) || 0;
-                let widthPct = parseFloat(activeBar.style.width) || 10;
-                if (resizeSide === 'right') {
-                    widthPct = Math.max(2, pct - leftPct);
-                } else {
-                    const newLeft = Math.max(0, Math.min(100 - 2, pct));
-                    const diff = leftPct - newLeft;
-                    widthPct = Math.max(2, widthPct + diff);
-                    activeBar.style.left = newLeft + '%';
-                    const dayOffsetStart = Math.floor((newLeft / 100) * totalDays);
-                    const newStart = new Date(minDate);
-                    newStart.setDate(newStart.getDate() + dayOffsetStart);
-                    const idx = parseInt(activeBar.dataset.idx);
-                    if (!isNaN(idx) && items[idx]) {
-                        items[idx].startDate = newStart.toISOString().split('T')[0];
-                        activeBar.dataset.start = items[idx].startDate;
-                    }
-                }
-                activeBar.style.width = Math.max(2, widthPct) + '%';
-                const left = parseFloat(activeBar.style.left) || 0;
-                const w = parseFloat(activeBar.style.width) || 10;
-                const dayOffsetEnd = Math.floor(((left + w) / 100) * totalDays) - 1;
-                const newEnd = new Date(minDate);
-                newEnd.setDate(newEnd.getDate() + Math.max(dayOffsetEnd, 0));
-                const idx = parseInt(activeBar.dataset.idx);
-                if (!isNaN(idx) && items[idx]) {
-                    items[idx].endDate = newEnd.toISOString().split('T')[0];
-                    activeBar.dataset.end = items[idx].endDate;
-                }
-                const tooltip = document.getElementById('ganttTooltip');
-                if (items[idx]) {
-                    tooltip.textContent =
-                        `${items[idx].id}: ${items[idx].startDate} → ${items[idx].endDate}`;
-                    tooltip.style.left = e.clientX - 40 + 'px';
-                    tooltip.style.top = e.clientY - 30 + 'px';
-                    tooltip.classList.add('show');
-                }
-                return;
-            }
-
-            const leftPct = Math.max(0, Math.min(100 - (parseFloat(activeBar.style.width) || 10), pct));
-            activeBar.style.left = leftPct + '%';
-            const widthPct = parseFloat(activeBar.style.width) || 10;
-            const dayOffsetStart = Math.floor((leftPct / 100) * totalDays);
-            const dayOffsetEnd = Math.floor(((leftPct + widthPct) / 100) * totalDays) - 1;
-            const newStart = new Date(minDate);
-            newStart.setDate(newStart.getDate() + dayOffsetStart);
-            const newEnd = new Date(minDate);
-            newEnd.setDate(newEnd.getDate() + Math.max(dayOffsetEnd, dayOffsetStart));
-            const idx = parseInt(activeBar.dataset.idx);
-            if (!isNaN(idx) && items[idx]) {
-                items[idx].startDate = newStart.toISOString().split('T')[0];
-                items[idx].endDate = newEnd.toISOString().split('T')[0];
-                activeBar.dataset.start = items[idx].startDate;
-                activeBar.dataset.end = items[idx].endDate;
-            }
-            const tooltip = document.getElementById('ganttTooltip');
-            if (items[idx]) {
-                tooltip.textContent = `${items[idx].id}: ${items[idx].startDate} → ${items[idx].endDate}`;
-                tooltip.style.left = e.clientX - 40 + 'px';
-                tooltip.style.top = e.clientY - 30 + 'px';
-                tooltip.classList.add('show');
-            }
-        };
-
-        const onMouseUp = () => {
-            if (activeBar) {
-                document.getElementById('ganttTooltip').classList.remove('show');
-                UI.toast('Timeline updated (simulated).', 'success');
-            }
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
-            activeBar = null;
-            isResizing = false;
-            resizeSide = null;
-        };
-
-        bars.forEach(bar => {
-            bar.addEventListener('click', function(e) {
-                if (e.target.closest('.resize-handle')) return;
-                const idx = parseInt(this.dataset.idx);
-                if (isNaN(idx) || !items[idx]) return;
-                const item = items[idx];
-                const newStart = prompt('Edit Start Date (YYYY-MM-DD):', item.startDate);
-                if (newStart) {
-                    const newEnd = prompt('Edit End Date (YYYY-MM-DD):', item.endDate);
-                    if (newEnd) {
-                        item.startDate = newStart;
-                        item.endDate = newEnd;
-                        UI.toast(`Updated ${item.id} dates.`, 'success');
-                        const p = ProjectPage._data;
-                        if (p) ProjectPage._renderGanttChart(p);
-                    }
-                }
-            });
-            bar.querySelectorAll('.resize-handle').forEach(handle => {
-                handle.addEventListener('mousedown', function(e) {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    activeBar = bar;
-                    isResizing = true;
-                    resizeSide = this.dataset.action === 'resize-left' ? 'left' : 'right';
-                    document.addEventListener('mousemove', onMouseMove);
-                    document.addEventListener('mouseup', onMouseUp);
-                });
-            });
-            bar.addEventListener('mousedown', function(e) {
-                if (e.target.closest('.resize-handle')) return;
-                e.preventDefault();
-                activeBar = bar;
-                isResizing = false;
-                resizeSide = null;
-                document.addEventListener('mousemove', onMouseMove);
-                document.addEventListener('mouseup', onMouseUp);
-            });
-        });
-    },
-
-    // ─── SOW BUDGET ──────────────────────────────────────────────
     showAddSOWModal() {
         const modal = document.createElement('div');
         modal.className = 'print-modal-overlay open';
@@ -299,9 +77,16 @@ Object.assign(ProjectPage, {
 
         try {
             await DataService.addSOWItem(this._currentProjectId, { id, description, qty, unit });
-            UI.toast('SOW added successfully!', 'success');
-            document.getElementById('addSOWModal').remove();
-            await this.open(this._currentProjectId);
+            UI.toast(`SOW ${id} added! You can add another.`, 'success');
+            // v3: NO full page reload. The modal stays open with cleared
+            // fields for rapid batch entry, and the SOW tab refreshes in
+            // the background — you never leave SOW Budget.
+            document.getElementById('sow-id').value = '';
+            document.getElementById('sow-desc').value = '';
+            document.getElementById('sow-qty').value = '';
+            document.getElementById('sow-unit').value = '';
+            document.getElementById('sow-id').focus();
+            this.refreshSOWData();   // fire-and-forget background refresh
         } catch (err) {
             UI.toast('Error: ' + err.message, 'error');
         } finally {
@@ -309,6 +94,39 @@ Object.assign(ProjectPage, {
             submitBtn.disabled = false;
         }
         return false;
+    },
+
+    /**
+     * refreshSOWData (v3) - Silently re-fetches project data and
+     * re-renders ONLY the data-dependent tabs (SOW, Timeline,
+     * Estimates) without navigating or showing the loading overlay.
+     * The active tab is preserved.
+     */
+    async refreshSOWData() {
+        try {
+            const p = await DataService.getProjectData(this._currentProjectId);
+            if (!p) return;
+            this._sowItems = Array.isArray(p.sowItems) ? p.sowItems : [];
+            p.sowItems = this._sowItems;
+            this._data = p;
+            this._estimatesData = p.estimates || {};
+            this._estimatesData.groups = Array.isArray(this._estimatesData.groups) ? this._estimatesData.groups : [];
+            this._sowItems.forEach(sow => {
+                if (!this._estimatesData.groups.find(g => g.sowId === sow.id)) {
+                    this._estimatesData.groups.push({
+                        sowId: sow.id, sowDescription: sow.description || '',
+                        status: 'draft', createdBy: '',
+                        materials: [], labor: [], equipment: [], indirect: []
+                    });
+                }
+            });
+            this.renderSOWBudget(p);
+            this.renderGantt(p);
+            this.renderEstimates(p);
+        } catch (err) {
+            console.error('SOW refresh error:', err);
+            UI.toast('Refresh failed: ' + err.message, 'error');
+        }
     },
 
     /**
@@ -401,12 +219,12 @@ Object.assign(ProjectPage, {
                 statusClass = 'draft';
             }
 
-            const isBudgetFromEstimate = estimateStatus === 'approved' && Math.abs(budget - itemEstimate) < 0.01;
-            const budgetSourceLabel = isBudgetFromEstimate ? 
-                '<span class="budget-source">✅ from approved estimate</span>' : 
-                (estimateStatus === 'approved' ? 
-                    '<span class="budget-source">⚠️ manually adjusted</span>' : 
-                    '<span class="budget-source">📄 pending approval</span>');
+            // v3: label follows the item's budgetMode
+            const mode = item.budgetMode || 'auto';
+            const budgetSourceLabel =
+                mode === 'manual'   ? '<span class="budget-source">✏️ manual</span>' :
+                mode === 'indirect' ? '<span class="budget-source">🧾 indirect costs only</span>' :
+                '<span class="budget-source">Σ mat + labor + equipment</span>';
 
             const variance = budget - actual;
             const varianceClass = variance >= 0 ? 'positive' : 'negative';
@@ -442,7 +260,10 @@ Object.assign(ProjectPage, {
                         </div>
                         
                         <div class="sow-number-group budget">
-                            <span class="sn-label">Budget</span>
+                            <span class="sn-label">Budget
+                                <button class="btn-sm" style="padding:0 5px;font-size:9px;margin-left:4px;" title="Edit how this budget is computed"
+                                    onclick="event.stopPropagation();ProjectPage.editSOWBudget('${item.id}')">✎</button>
+                            </span>
                             <span class="sn-value">₱${budget.toFixed(2)}</span>
                             ${budgetSourceLabel}
                         </div>
@@ -457,6 +278,12 @@ Object.assign(ProjectPage, {
                             <span class="sn-label">Variance</span>
                             <span class="sn-value">${varianceLabel}</span>
                         </div>
+
+                        <div class="sow-number-group">
+                            <span class="sn-label">Progress</span>
+                            <span class="sn-value">${(item.progress || 0).toFixed(0)}%</span>
+                            <span class="budget-source">from daily reports</span>
+                        </div>
                     </div>
                     
                     <div class="sow-progress">
@@ -467,20 +294,17 @@ Object.assign(ProjectPage, {
                     </div>
                     
                     <div class="sow-actions">
-                        <button class="btn-sm" onclick="event.stopPropagation();ProjectPage.switchTab('estimates')">
-                            ${Icon.ruler({size:12})} Edit Estimate
-                        </button>
+                        ${estimateStatus === 'draft' ?
+                            `<button class="btn-sm" onclick="event.stopPropagation();ProjectPage.switchTab('estimates')">
+                                ${Icon.ruler({size:12})} Edit Estimate
+                            </button>` : ''
+                        }
                         <button class="btn-sm" onclick="event.stopPropagation();ProjectPage.openSOWBreakdown('${item.id}')">
                             ${Icon.search({size:12})} Breakdown
                         </button>
                         ${estimateStatus === 'pending' && App.isApprover() ? 
                             `<button class="btn-sm success" onclick="event.stopPropagation();ProjectPage.switchTab('estimates')">
                                 ⏳ Review
-                            </button>` : ''
-                        }
-                        ${estimateStatus === 'draft' ? 
-                            `<button class="btn-sm amber" onclick="event.stopPropagation();ProjectPage.switchTab('estimates')">
-                                📝 Complete
                             </button>` : ''
                         }
                     </div>
@@ -522,17 +346,70 @@ Object.assign(ProjectPage, {
         setTimeout(() => this._buildSOWChart(p), 100);
     },
 
+    /**
+     * openSOWBreakdown (v3 FIX) - The modal's fallback path filters
+     * flat arrays by a `.sow` property the items never had, so the
+     * breakdown always rendered empty. Passing { groups } routes the
+     * modal through its groups path, which matches by sowId correctly.
+     */
     openSOWBreakdown(sowId) {
         const estimates = this._estimatesData || { groups: [] };
         const group = (estimates.groups || []).find(g => g.sowId === sowId);
         if (!group) { UI.toast('No estimate data for this SOW.', 'error'); return; }
-        const data = {
-            materials: group.materials || [],
-            equipment: group.equipment || [],
-            labor: group.labor || [],
-            indirect: group.indirect || []
-        };
-        SOWBreakdownModal.open(sowId, data);
+        SOWBreakdownModal.open(sowId, { groups: estimates.groups });
+    },
+
+    /**
+     * editSOWBudget (v3) - Small modal to choose how the SOW budget
+     * is derived: auto (mat+labor+equipment), indirect only, or a
+     * manual amount.
+     */
+    editSOWBudget(sowId) {
+        const item = (this._sowItems || []).find(s => s.id === sowId);
+        if (!item) { UI.toast('SOW item not found.', 'error'); return; }
+        const existing = document.getElementById('sowBudgetModal');
+        if (existing) existing.remove();
+
+        const mode = item.budgetMode || 'auto';
+        const modal = document.createElement('div');
+        modal.className = 'print-modal-overlay open';
+        modal.id = 'sowBudgetModal';
+        modal.innerHTML = `
+            <div class="print-modal-content" style="max-width:440px;">
+                <button class="close-modal" onclick="document.getElementById('sowBudgetModal').remove()">${Icon.close({size:18})}</button>
+                <div class="print-header"><h2>${sowId} — Budget Setting</h2></div>
+                <div class="field">
+                    <label>Budget Source</label>
+                    <select id="sow-budget-mode" onchange="document.getElementById('sowManualWrap').style.display = this.value==='manual' ? 'block' : 'none'">
+                        <option value="auto" ${mode==='auto'?'selected':''}>Auto — Materials + Labor + Equipment (from estimate)</option>
+                        <option value="indirect" ${mode==='indirect'?'selected':''}>Indirect costs only (from estimate)</option>
+                        <option value="manual" ${mode==='manual'?'selected':''}>Manual amount</option>
+                    </select>
+                </div>
+                <div class="field" id="sowManualWrap" style="display:${mode==='manual'?'block':'none'};">
+                    <label>Manual Budget (₱)</label>
+                    <input type="number" id="sow-budget-manual" step="0.01" min="0" value="${(item.budget||0).toFixed(2)}" />
+                </div>
+                <p style="font-size:11px;color:var(--ink-soft);">Auto and Indirect recompute live from the estimate; approving an estimate also writes back using this setting. Manual is never overwritten.</p>
+                <div class="submit-row">
+                    <button class="btn-primary" onclick="ProjectPage.submitSOWBudget('${sowId}')">Save</button>
+                    <button class="btn-ghost" onclick="document.getElementById('sowBudgetModal').remove()">Cancel</button>
+                </div>
+            </div>`;
+        document.body.appendChild(modal);
+    },
+
+    async submitSOWBudget(sowId) {
+        const mode = document.getElementById('sow-budget-mode').value;
+        const manual = parseFloat(document.getElementById('sow-budget-manual').value) || 0;
+        try {
+            const result = await DataService.updateSOWBudget(this._currentProjectId, sowId, mode, manual);
+            UI.toast(`Budget for ${sowId} set to ₱${(result.budget||0).toFixed(2)} (${mode}).`, 'success');
+            document.getElementById('sowBudgetModal').remove();
+            this.refreshSOWData();
+        } catch (err) {
+            UI.toast('' + err.message, 'error');
+        }
     },
 
     _buildSOWChart(p) {
