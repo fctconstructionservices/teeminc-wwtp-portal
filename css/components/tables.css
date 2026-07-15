@@ -1,40 +1,81 @@
-/* ==========================================
-   COMPONENTS: Tables
-   ========================================== */
+/* ================================================================
+   components/tables.css — Panels & data tables
+   Panel container and the standard striped data table.
+   ================================================================ */
 
-.table-wrapper {
-  overflow-x: auto;
-  margin-top: 12px;
+/* ─── PANELS & TABLES ─── */
+.panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
 }
-
-table.data-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.875rem;
+.panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+    background: var(--blueprint-tint);
 }
-
-table.data-table th {
-  background: var(--bg-primary);
-  text-align: left;
-  padding: 10px 12px;
-  font-weight: 600;
-  border-bottom: 2px solid var(--border-color);
+.panel-head h3 {
+    font-family: 'Oswald', sans-serif;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--blueprint);
+    margin: 0;
 }
-
-table.data-table td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border-color);
+.empty {
+    padding: 44px 20px;
+    text-align: center;
+    color: var(--ink-soft);
 }
-
-table.data-table tr:hover td {
-  background: var(--bg-primary);
+.empty .glyph {
+    font-size: 22px;
+    margin-bottom: 8px;
+    opacity: .5;
 }
-
-table.data-table .status-badge {
-  display: inline-block;
-  padding: 2px 10px;
-  border-radius: 999px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: uppercase;
+.empty p {
+    font-size: 12.5px;
+    margin: 4px 0;
+}
+.empty .small {
+    font-size: 11px;
+    opacity: .75;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+th {
+    text-align: left;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--ink-soft);
+    padding: 9px 16px;
+    border-bottom: 1px solid var(--line);
+}
+td {
+    padding: 10px 16px;
+    border-bottom: 1px solid #F0EEE6;
+    font-size: 12.5px;
+    vertical-align: middle;
+}
+tbody tr:last-child td {
+    border-bottom: none;
+}
+tbody tr:hover td {
+    background: var(--bg);
+}
+.req-id {
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--blueprint);
+    font-size: 12px;
+}
+.amt {
+    font-family: 'IBM Plex Mono', monospace;
+    text-align: right;
+    white-space: nowrap;
 }

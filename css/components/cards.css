@@ -1,31 +1,175 @@
-/* ==========================================
-   COMPONENTS: Cards
-   ========================================== */
+/* ================================================================
+   components/cards.css — Tickets, project cards, gauges
+   Request ticket rows, home project cards and the SVG gauge strip.
+   ================================================================ */
 
-.card {
-  background: var(--bg-secondary);
-  border-radius: var(--radius);
-  padding: 20px 24px;
-  box-shadow: var(--shadow-sm);
-  border: 1px solid var(--border-color);
-  transition: box-shadow 0.2s;
+/* ─── TICKETS ─── */
+.tickets {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+}
+.ticket {
+    background: var(--surface);
+    border: 1.5px solid var(--ink);
+    border-radius: 8px;
+    padding: 18px 16px 16px;
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    transition: transform .15s ease, box-shadow .15s ease, background var(--transition);
+}
+.ticket:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow);
+}
+.ticket .ico {
+    width: 34px;
+    height: 34px;
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 12px;
+    background: var(--blueprint-tint);
+    color: var(--blueprint);
+}
+.ticket.safety .ico {
+    background: #FDEBE1;
+    color: var(--safety-ink);
+}
+.ticket.approval-ticket .ico {
+    background: #E1F0E8;
+    color: var(--green);
+}
+.ticket .t-label {
+    font-family: 'Oswald', sans-serif;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+.ticket .t-sub {
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    margin-top: 4px;
+}
+.ticket .t-badge {
+    display: inline-block;
+    background: var(--safety);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 8px;
+    border-radius: 99px;
+    margin-top: 6px;
+    font-family: 'Oswald', sans-serif;
+    letter-spacing: .04em;
+}
+@media (max-width: 900px) {
+    .tickets {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+@media (max-width: 600px) {
+    .tickets {
+        grid-template-columns: 1fr;
+    }
 }
 
-.card:hover {
-  box-shadow: var(--shadow-md);
+/* ─── PROJECT CARDS ─── */
+.projects-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+}
+.project-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    transition: transform .15s ease, box-shadow .15s ease;
+}
+.project-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow);
+}
+.project-card .pc-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.project-card .pc-name {
+    font-family: 'Oswald', sans-serif;
+    font-size: 13.5px;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+}
+.project-card .pc-stats {
+    display: flex;
+    gap: 18px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+}
+.project-card .pc-stat .k {
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--ink-soft);
+}
+.project-card .pc-stat .v {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    margin-top: 2px;
+}
+@media (max-width: 640px) {
+    .projects-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
-.card-header {
-  font-weight: 600;
-  font-size: 1.1rem;
-  margin-bottom: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border-color);
+/* ─── GAUGES ─── */
+.gauges {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
 }
-
-.card-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
+.gauge {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.gauge svg {
+    flex-shrink: 0;
+}
+.gauge .g-num {
+    font-family: 'Oswald', sans-serif;
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 1;
+}
+.gauge .g-label {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--ink-soft);
+    margin-top: 4px;
+}
+@media (max-width: 900px) {
+    .gauges {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+@media (max-width: 520px) {
+    .gauges {
+        grid-template-columns: 1fr;
+    }
 }

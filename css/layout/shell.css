@@ -1,0 +1,159 @@
+/* ================================================================
+   layout/shell.css — App shell
+   Topbar, brand, nav actions, page container and section headers.
+   ================================================================ */
+
+/* ─── APP SHELL ─── */
+.wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 20px 20px 60px;
+}
+.topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--blueprint);
+    color: #fff;
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    transition: background var(--transition);
+}
+.topbar .mark {
+    width: 32px;
+    height: 32px;
+    border: 1.5px solid #fff;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Oswald', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+.topbar .brand {
+    flex: 1;
+    min-width: 120px;
+}
+.topbar .name {
+    font-family: 'Oswald', sans-serif;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+}
+.topbar .sub {
+    font-size: 10.5px;
+    color: #C9D9E0;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+.topbar .spacer {
+    flex: 1;
+}
+.topbar .actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.topbar .actions button,
+.topbar .actions .theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, .10);
+    border: 1px solid rgba(255, 255, 255, .25);
+    color: #fff;
+    border-radius: 99px;
+    padding: 7px 12px;
+    cursor: pointer;
+    transition: background .15s;
+    white-space: nowrap;
+}
+.topbar .actions button:hover,
+.topbar .actions .theme-toggle:hover {
+    background: rgba(255, 255, 255, .22);
+}
+.topbar .actions .theme-toggle {
+    font-size: 16px;
+    line-height: 1;
+    padding: 4px 10px;
+}
+.hamburger {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, .10);
+    border: 1px solid rgba(255, 255, 255, .25);
+    border-radius: 6px;
+    color: #fff;
+    padding: 7px 9px;
+    cursor: pointer;
+    line-height: 1;
+}
+@media (max-width: 700px) {
+    .hamburger {
+        display: block;
+    }
+    .topbar .actions {
+        display: none;
+        width: 100%;
+        flex-direction: column;
+        align-items: stretch;
+        padding-top: 10px;
+        border-top: 1px solid rgba(255, 255, 255, .15);
+    }
+    .topbar .actions.open {
+        display: flex;
+    }
+    .topbar .actions button,
+    .topbar .actions .theme-toggle {
+        text-align: center;
+        justify-content: center;
+    }
+}
+
+.crumb {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 16px;
+    font-size: 11.5px;
+    color: var(--ink-soft);
+}
+.crumb button {
+    background: none;
+    border: none;
+    color: var(--blueprint);
+    font: inherit;
+    cursor: pointer;
+    padding: 0;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+.section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin: 22px 0 12px;
+}
+.section-head h2 {
+    font-family: 'Oswald', sans-serif;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: var(--blueprint);
+    margin: 0;
+}
+.section-head .rule {
+    flex: 1;
+    height: 1px;
+    background: var(--line);
+}
+.section-head .badge {
+    font-size: 11px;
+    color: var(--ink-soft);
+}

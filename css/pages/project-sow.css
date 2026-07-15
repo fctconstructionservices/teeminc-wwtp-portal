@@ -1,0 +1,514 @@
+/* ================================================================
+   pages/project-sow.css — SOW budget + enhancements
+   SOW budget list (1577) and the enhanced status badges, legend,
+   summary and mobile rules (2548-end). Later rules intentionally
+   override the earlier block exactly as in the original cascade.
+   ================================================================ */
+
+/* ─── SOW BUDGET ─── */
+.sow-item {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line);
+    align-items: center;
+    cursor: pointer;
+    transition: background .15s;
+    border-radius: 4px;
+    padding-left: 8px;
+    padding-right: 8px;
+}
+.sow-item:hover {
+    background: var(--bg);
+}
+.sow-item:last-child {
+    border-bottom: none;
+}
+.sow-item .sow-desc {
+    flex: 1.5;
+    min-width: 140px;
+    font-weight: 500;
+}
+.sow-item .sow-numbers {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    flex: 3;
+    align-items: center;
+}
+.sow-item .sow-numbers .sn {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+}
+.sow-item .sow-bar {
+    flex: 1.5;
+    min-width: 100px;
+    height: 6px;
+    border-radius: 99px;
+    background: var(--line);
+    overflow: hidden;
+}
+.sow-item .sow-bar .fill {
+    height: 100%;
+    border-radius: 99px;
+    background: var(--green);
+    transition: width .4s ease;
+}
+.sow-item .sow-bar .fill.warn {
+    background: var(--amber);
+}
+.sow-item .sow-bar .fill.danger {
+    background: var(--red);
+}
+.sow-total-row {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 2px solid var(--line);
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    font-weight: 600;
+}
+.sow-total-row span {
+    font-family: 'IBM Plex Mono', monospace;
+}
+
+/* ═══════════════════════════════════════════════ */
+/*  GANTT CHART STYLES                           */
+/* ═══════════════════════════════════════════════ */
+.gantt-wrapper {
+    overflow-x: auto;
+    padding: 10px 0 20px 0;
+    position: relative;
+}
+.gantt-container {
+    position: relative;
+    min-height: 240px;
+    background: var(--bg);
+    border-radius: var(--radius);
+    border: 1px solid var(--line);
+    padding: 10px 0 10px 0;
+    min-width: 800px;
+}
+.gantt-timeline {
+    display: flex;
+    border-bottom: 2px solid var(--line);
+    padding-bottom: 4px;
+    margin-bottom: 6px;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 5;
+    padding-left: 120px;
+    padding-right: 20px;
+}
+.gantt-timeline .gt-day {
+    flex: 1;
+    font-size: 9px;
+    text-align: center;
+    color: var(--ink-soft);
+    font-family: 'IBM Plex Mono', monospace;
+    border-left: 1px solid var(--line);
+    padding: 2px 0;
+    min-width: 30px;
+}
+.gantt-timeline .gt-day:first-child {
+    border-left: none;
+}
+.gantt-body {
+    position: relative;
+    min-height: 200px;
+}
+.gantt-row {
+    display: flex;
+    align-items: center;
+    height: 38px;
+    border-bottom: 1px dashed var(--line);
+    position: relative;
+}
+.gantt-row:last-child {
+    border-bottom: none;
+}
+.gantt-row-label {
+    width: 120px;
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 500;
+    padding-right: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--ink);
+}
+.gantt-row-track {
+    flex: 1;
+    height: 100%;
+    position: relative;
+    min-height: 38px;
+}
+.gantt-bar {
+    position: absolute;
+    top: 4px;
+    height: 30px;
+    border-radius: 6px;
+    background: var(--green);
+    color: #fff;
+    font-size: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    z-index: 3;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .15);
+    transition: box-shadow .15s;
+    font-weight: 600;
+    letter-spacing: .02em;
+    min-width: 20px;
+    padding: 0 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.gantt-bar:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, .25);
+    z-index: 6;
+}
+.gantt-bar.warn {
+    background: var(--amber);
+}
+.gantt-bar.danger {
+    background: var(--red);
+}
+.gantt-bar .resize-handle {
+    position: absolute;
+    top: 0;
+    width: 12px;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.3);
+    cursor: ew-resize;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 8px;
+    color: rgba(255, 255, 255, 0.7);
+    border-radius: 6px;
+}
+.gantt-bar .resize-handle.left {
+    left: 0;
+    border-radius: 6px 0 0 6px;
+}
+.gantt-bar .resize-handle.right {
+    right: 0;
+    border-radius: 0 6px 6px 0;
+}
+.gantt-bar .resize-handle:hover {
+    background: rgba(255, 255, 255, 0.5);
+}
+.gantt-legend {
+    display: flex;
+    gap: 16px;
+    margin-top: 10px;
+    font-size: 11px;
+    flex-wrap: wrap;
+}
+.gantt-legend .dot {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 4px;
+    margin-right: 4px;
+    vertical-align: middle;
+}
+.gantt-tooltip {
+    position: absolute;
+    background: var(--ink);
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 11px;
+    pointer-events: none;
+    z-index: 20;
+    opacity: 0;
+    transition: opacity .2s;
+    white-space: nowrap;
+}
+.gantt-tooltip.show {
+    opacity: 1;
+}
+
+/* ─── SOW BUDGET ENHANCEMENTS ─── */
+.sow-item {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 14px 12px;
+    border-bottom: 1px solid var(--line);
+    align-items: flex-start;
+    cursor: pointer;
+    transition: background .15s, border-color .2s;
+    border-radius: 4px;
+    border-left: 3px solid transparent;
+}
+.sow-item:hover {
+    background: var(--bg);
+}
+.sow-item[data-estimate-status="approved"] {
+    border-left-color: var(--green);
+}
+.sow-item[data-estimate-status="pending"] {
+    border-left-color: var(--amber);
+}
+.sow-item[data-estimate-status="draft"] {
+    border-left-color: var(--ink-soft);
+}
+.sow-item:last-child {
+    border-bottom: none;
+}
+
+.sow-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.sow-desc {
+    flex: 1;
+    min-width: 140px;
+    font-weight: 500;
+    font-size: 13px;
+}
+.sow-desc .sow-qty {
+    font-size: 11px;
+    color: var(--ink-soft);
+    font-weight: 400;
+}
+
+.sow-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 14px;
+    border-radius: 99px;
+    font-family: 'Oswald', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+.sow-status-badge.draft {
+    background: var(--bg);
+    color: var(--ink-soft);
+    border: 1.5px solid var(--line);
+}
+.sow-status-badge.pending {
+    background: #FBF1DE;
+    color: var(--amber);
+    border: 1.5px solid var(--amber);
+    animation: pulse-pending 2s ease-in-out infinite;
+}
+@keyframes pulse-pending {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+.sow-status-badge.approved {
+    background: #E7F3EA;
+    color: var(--green);
+    border: 1.5px solid var(--green);
+}
+.sow-status-badge .sow-status-date {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    font-weight: 400;
+    opacity: 0.7;
+    text-transform: none;
+}
+
+.sow-numbers {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    width: 100%;
+    padding: 4px 0;
+}
+.sow-number-group {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 2px 4px;
+    min-width: 70px;
+    flex: 1 0 auto;
+}
+.sow-number-group .sn-label {
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-soft);
+    font-family: 'Oswald', sans-serif;
+}
+.sow-number-group .sn-value {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 14px;
+    font-weight: 600;
+}
+.sow-number-group.estimate .sn-value {
+    color: var(--blueprint);
+}
+.sow-number-group.budget .sn-value {
+    color: var(--green);
+}
+.sow-number-group.budget .budget-source {
+    font-size: 8px;
+    color: var(--ink-soft);
+    font-style: italic;
+}
+.sow-number-group.actual .sn-value {
+    color: var(--safety);
+}
+.sow-number-group.actual .actual-status {
+    font-size: 8px;
+    color: var(--ink-soft);
+}
+.sow-number-group.variance.positive .sn-value {
+    color: var(--green);
+}
+.sow-number-group.variance.negative .sn-value {
+    color: var(--red);
+}
+
+.sow-progress {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    margin: 2px 0;
+}
+.sow-progress .sow-bar {
+    flex: 1;
+    min-width: 100px;
+    height: 6px;
+    border-radius: 99px;
+    background: var(--line);
+    overflow: hidden;
+}
+.sow-progress .sow-bar .fill {
+    height: 100%;
+    border-radius: 99px;
+    transition: width .4s ease;
+}
+
+.sow-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
+    padding-top: 6px;
+    border-top: 1px dashed var(--line);
+    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+
+.sow-status-legend {
+    display: flex;
+    gap: 16px;
+    padding: 8px 0 12px 0;
+    flex-wrap: wrap;
+    border-bottom: 1px dashed var(--line);
+    margin-bottom: 8px;
+}
+.sow-status-legend .legend-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    font-weight: 600;
+}
+.sow-status-legend .legend-item {
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--ink-soft);
+}
+.sow-status-legend .legend-item .badge-sample {
+    padding: 1px 8px;
+    font-size: 8px;
+    border-radius: 99px;
+    font-family: 'Oswald', sans-serif;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.sow-status-legend .legend-item .badge-sample.draft {
+    background: var(--bg);
+    color: var(--ink-soft);
+    border: 1px solid var(--line);
+}
+.sow-status-legend .legend-item .badge-sample.pending {
+    background: #FBF1DE;
+    color: var(--amber);
+    border: 1px solid var(--amber);
+}
+.sow-status-legend .legend-item .badge-sample.approved {
+    background: #E7F3EA;
+    color: var(--green);
+    border: 1px solid var(--green);
+}
+
+.sow-status-summary {
+    display: flex;
+    gap: 24px;
+    padding: 12px 8px 4px 8px;
+    border-top: 2px solid var(--line);
+    margin-top: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+.sow-status-summary .summary-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ink);
+}
+.sow-status-summary .summary-item {
+    font-size: 11px;
+    color: var(--ink-soft);
+}
+.sow-status-summary .summary-item .count {
+    font-weight: 600;
+}
+.sow-status-summary .summary-item .count.approved { color: var(--green); }
+.sow-status-summary .summary-item .count.pending { color: var(--amber); }
+.sow-status-summary .summary-item .count.draft { color: var(--ink-soft); }
+.sow-status-summary .summary-alert {
+    font-size: 10px;
+    margin-left: auto;
+}
+.sow-status-summary .summary-alert.pending {
+    color: var(--amber);
+}
+.sow-status-summary .summary-alert.success {
+    color: var(--green);
+}
+.sow-status-summary .summary-alert.info {
+    color: var(--ink-soft);
+}
+
+@media (max-width: 700px) {
+    .sow-header {
+flex-direction: column;
+align-items: flex-start;
+    }
+    .sow-number-group {
+min-width: 50px;
+flex: 1 1 40%;
+    }
+    .sow-numbers {
+gap: 10px;
+    }
+    .sow-status-summary {
+gap: 12px;
+    }
+}

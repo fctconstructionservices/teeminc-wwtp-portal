@@ -1,35 +1,81 @@
-/* ==========================================
-   BASE: Reset / Normalize
-   ========================================== */
+/* ================================================================
+   base/reset.css — Reset, base typography, focus states
+   Box-sizing, body defaults, .mono utility, form-control font
+   inheritance and the global focus-visible outline.
+   ================================================================ */
 
 * {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+    box-sizing: border-box;
 }
-
-html {
-  scroll-behavior: smooth;
-}
-
 body {
-  font-family: var(--font-family);
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  line-height: 1.6;
-  transition: background 0.2s, color 0.2s;
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
+    min-height: 100vh;
+    transition: background var(--transition), color var(--transition);
 }
-
-a {
-  text-decoration: none;
-  color: var(--blueprint);
+.mono {
+    font-family: 'IBM Plex Mono', monospace;
 }
-
-ul {
-  list-style: none;
+button,
+input,
+select,
+textarea {
+    font: inherit;
 }
-
-img {
-  max-width: 100%;
-  display: block;
+a:focus-visible,
+button:focus-visible,
+select:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+    outline: 2px solid var(--safety);
+    outline-offset: 2px;
+}
+@media (prefers-reduced-motion: no-preference) {
+    .page.active {
+        animation: fadeUp .30s ease both;
+    }
+}
+@keyframes fadeUp {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+.page {
+    display: none;
+    min-height: 100vh;
+}
+.page.active {
+    display: block;
+}
+.loader {
+    display: inline-block;
+    width: 28px;
+    height: 28px;
+    border: 3px solid var(--line);
+    border-radius: 50%;
+    border-top-color: var(--blueprint);
+    animation: spin .7s linear infinite;
+}
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+.loading-overlay {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    gap: 12px;
+    color: var(--ink-soft);
 }

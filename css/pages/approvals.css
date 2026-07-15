@@ -1,0 +1,169 @@
+/* ================================================================
+   pages/approvals.css — Approvals page
+   Approvals inbox (2352), My Requests section (2437) and the
+   estimates overview cards (2480).
+   ================================================================ */
+
+/* ─── APPROVALS PAGE ─── */
+.approval-tab-bar {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+    border-bottom: 2px solid var(--line);
+    padding-bottom: 0;
+}
+.approval-tab-bar button {
+    background: none;
+    border: none;
+    padding: 8px 16px;
+    font-family: 'Oswald', sans-serif;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--ink-soft);
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transition: color .15s, border-color .15s;
+    margin-bottom: -2px;
+}
+.approval-tab-bar button:hover {
+    color: var(--ink);
+}
+.approval-tab-bar button.active {
+    color: var(--blueprint);
+    border-bottom-color: var(--blueprint);
+}
+.approval-tab-content {
+    display: none;
+}
+.approval-tab-content.active {
+    display: block;
+    animation: fadeUp .25s ease;
+}
+.approval-request-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+    transition: background .15s;
+    border-radius: 4px;
+    cursor: default;
+}
+.approval-request-item:hover {
+    background: var(--bg);
+}
+.approval-request-item .ar-icon {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--blueprint);
+    flex-shrink: 0;
+}
+.approval-request-item .ar-body {
+    flex: 1;
+}
+.approval-request-item .ar-body .ar-title {
+    font-weight: 600;
+    font-size: 13px;
+}
+.approval-request-item .ar-body .ar-meta {
+    font-size: 11px;
+    color: var(--ink-soft);
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 2px;
+}
+.approval-request-item .ar-body .ar-meta .ar-id {
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--blueprint);
+}
+.approval-request-item .ar-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+}
+
+/* ─── MY REQUESTS SECTION ─── */
+.my-request-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--line);
+    transition: background .15s;
+    border-radius: 4px;
+}
+.my-request-item:hover {
+    background: var(--bg);
+}
+.my-request-item .mr-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--blueprint);
+    flex-shrink: 0;
+}
+.my-request-item .mr-body {
+    flex: 1;
+}
+.my-request-item .mr-body .mr-title {
+    font-weight: 500;
+    font-size: 13px;
+}
+.my-request-item .mr-body .mr-meta {
+    font-size: 11px;
+    color: var(--ink-soft);
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.my-request-item .mr-body .mr-meta .mr-id {
+    font-family: 'IBM Plex Mono', monospace;
+}
+.my-request-item .mr-status {
+    flex-shrink: 0;
+}
+
+/* ─── ESTIMATES OVERVIEW IN APPROVALS ─── */
+.est-overview-item {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    transition: box-shadow .15s;
+}
+.est-overview-item:hover {
+    box-shadow: var(--shadow);
+}
+.est-overview-item .eo-left {
+    flex: 1;
+}
+.est-overview-item .eo-left .eo-title {
+    font-weight: 600;
+    font-size: 13px;
+}
+.est-overview-item .eo-left .eo-meta {
+    font-size: 11px;
+    color: var(--ink-soft);
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.est-overview-item .eo-right {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}

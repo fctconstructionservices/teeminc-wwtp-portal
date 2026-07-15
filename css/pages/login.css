@@ -1,0 +1,140 @@
+/* ================================================================
+   pages/login.css — Login screen
+   Blueprint-styled login card and validation error states.
+   ================================================================ */
+
+/* ─── LOGIN ─── */
+#page-login {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 20px;
+    background: linear-gradient(var(--blueprint), var(--blueprint)),
+        repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(255, 255, 255, .04) 40px),
+        repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(255, 255, 255, .04) 40px);
+}
+#page-login.active {
+    display: flex;
+}
+.login-card {
+    width: 100%;
+    max-width: 360px;
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 30px 28px 26px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, .25);
+    transition: background var(--transition);
+}
+.login-mark {
+    width: 46px;
+    height: 46px;
+    border: 2px solid var(--blueprint);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Oswald', sans-serif;
+    font-weight: 700;
+    font-size: 20px;
+    color: var(--blueprint);
+    margin-bottom: 16px;
+    position: relative;
+}
+.login-mark::after {
+    content: "";
+    position: absolute;
+    inset: 4px;
+    border: 1px solid var(--blueprint);
+    opacity: .3;
+    border-radius: 4px;
+}
+.login-card h1 {
+    font-family: 'Oswald', sans-serif;
+    font-size: 17px;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+}
+.login-card p.sub {
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    margin-top: 3px;
+    letter-spacing: .04em;
+}
+.field {
+    margin-top: 18px;
+}
+.field label {
+    display: block;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--ink-soft);
+    margin-bottom: 6px;
+    font-family: 'Oswald', sans-serif;
+    font-weight: 500;
+}
+.field input,
+.field select,
+.field textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1.5px solid var(--line);
+    border-radius: 7px;
+    outline: none;
+    background: var(--bg);
+    color: var(--ink);
+    transition: border-color var(--transition), background var(--transition);
+}
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+    border-color: var(--blueprint);
+    background: var(--surface);
+}
+.field .error-msg {
+    font-size: 11px;
+    color: var(--red);
+    margin-top: 4px;
+    display: none;
+}
+.field.error input,
+.field.error select,
+.field.error textarea {
+    border-color: var(--red);
+}
+.field.error .error-msg {
+    display: block;
+}
+.login-btn {
+    width: 100%;
+    margin-top: 22px;
+    padding: 11px;
+    border: none;
+    border-radius: 7px;
+    background: var(--safety);
+    color: #fff;
+    cursor: pointer;
+    font-family: 'Oswald', sans-serif;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    font-weight: 600;
+    transition: background .15s;
+}
+.login-btn:hover {
+    background: var(--safety-ink);
+}
+.login-note {
+    margin-top: 14px;
+    font-size: 11px;
+    color: var(--ink-soft);
+    text-align: center;
+    line-height: 1.5;
+}
+.login-note small {
+    display: block;
+    margin-top: 4px;
+    font-size: 10px;
+    color: var(--ink-soft);
+}

@@ -1,47 +1,36 @@
-/* ==========================================
-   BASE: Variables & Themes
-   ========================================== */
+/* ================================================================
+   base/variables.css — Design tokens
+   All colors, radii, shadows and transitions for light + dark themes.
+   Change a token here and every component follows.
+   ================================================================ */
 
+/* ─────────── ROOT & BASE ─────────── */
 :root {
-  /* Light Theme */
-  --bg-primary: #f4f7fc;
-  --bg-secondary: #ffffff;
-  --bg-sidebar: #1a2332;
-  --text-primary: #1e293b;
-  --text-secondary: #475569;
-  --text-light: #94a3b8;
-  --border-color: #e2e8f0;
-  
-  /* Brand Colors (FCTC) */
-  --blueprint: #0a3d6b;
-  --safety: #f59e0b;
-  --amber: #d97706;
-  --green: #10b981;
-  --red: #ef4444;
-  
-  /* Status Colors */
-  --status-pending: #f59e0b;
-  --status-approved: #10b981;
-  --status-rejected: #ef4444;
-  --status-for-approval: #3b82f6;
-  --status-completed: #8b5cf6;
-  
-  /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
-  --shadow-md: 0 4px 6px rgba(0,0,0,0.07);
-  --shadow-lg: 0 10px 15px rgba(0,0,0,0.1);
-  
-  /* Fonts */
-  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --radius: 8px;
+    --bg: #EDECE4;
+    --surface: #FFFFFF;
+    --ink: #1C2321;
+    --ink-soft: #5B6360;
+    --blueprint: #24455A;
+    --blueprint-tint: #E8EFF1;
+    --safety: #E15412;
+    --safety-ink: #8C3007;
+    --amber: #C2860F;
+    --green: #2F7A46;
+    --red: #B23A2E;
+    --line: #D6D2C4;
+    --radius: 10px;
+    --shadow: 0 8px 18px rgba(28, 35, 33, .10);
+    --transition: 0.25s ease;
 }
-
 [data-theme="dark"] {
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --bg-sidebar: #0b1120;
-  --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --text-light: #64748b;
-  --border-color: #334155;
+    --bg: #121212;
+    --surface: #1E1E1E;
+    --ink: #E8E8E8;
+    --ink-soft: #A0A0A0;
+    --blueprint: #5A8AA8;
+    --blueprint-tint: #2A3A45;
+    --line: #3A3A3A;
+    --shadow: 0 8px 18px rgba(0, 0, 0, 0.6);
+    --safety: #F06A2A;
+    --safety-ink: #B24A1A;
 }

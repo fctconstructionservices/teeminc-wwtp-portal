@@ -1,0 +1,37 @@
+/* ================================================================
+   components/utilities.css — Misc utilities
+   badge-count, spacing and flex helpers.
+   ================================================================ */
+
+/* ─── MISC ─── */
+.badge-count {
+    display: inline-block;
+    background: var(--safety);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 8px;
+    border-radius: 99px;
+    font-family: 'Oswald', sans-serif;
+    letter-spacing: .04em;
+    margin-left: 4px;
+}
+.flex-grow {
+    flex: 1;
+}
+.text-muted {
+    color: var(--ink-soft);
+    font-size: 11px;
+}
+.mt-8 {
+    margin-top: 8px;
+}
+.mb-8 {
+    margin-bottom: 8px;
+}
+.gap-8 {
+    gap: 8px;
+}
+.items-center {
+    align-items: center;
+}

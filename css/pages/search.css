@@ -1,0 +1,32 @@
+/* ================================================================
+   pages/search.css — Search page
+   Search input row and result count.
+   ================================================================ */
+
+/* ─── SEARCH ─── */
+.searchbar {
+    display: flex;
+    gap: 10px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    align-items: center;
+    margin-bottom: 18px;
+}
+.searchbar input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font: inherit;
+    background: none;
+    color: var(--ink);
+}
+.searchbar input::placeholder {
+    color: var(--ink-soft);
+}
+.searchbar .search-icon {
+    color: var(--ink-soft);
+    display: inline-flex;
+    align-items: center;
+}

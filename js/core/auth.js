@@ -1,52 +1,58 @@
-/**
- * ============================================
- * FILE: core/auth.js
- * PURPOSE: Login/logout at session management.
- * ============================================
- */
+// ================================================================
+//  core/auth.js — Login form handler
+//
+//  PURPOSE: Validates the login form, authenticates through
+//  DataService.login() (backend Users sheet is the single source of
+//  truth for accounts), persists the session and enters the app.
+//
+//  CLEANUP NOTE: the legacy client-side USER_DB / ROLE_LABELS tables
+//  that previously lived in this file were removed — they were dead
+//  code with zero references; authentication has been fully
+//  server-side since the DataService bridge was introduced.
+// ================================================================
 
-import { api } from './api-client.js';
-import { showToast } from './utils.js';
+// ─── LOGIN HANDLER ────────────────────────────────────────────
 
-let currentUser = null;
+async function handleLogin(e) {
+    e.preventDefault();
+    const email = document.getElementById('login-email').value.trim().toLowerCase();
+    const pass = document.getElementById('login-pass').value.trim();
+    let valid = true;
 
-export function isLoggedIn() {
-  return !!localStorage.getItem('fctc_token') && !!localStorage.getItem('fctc_user');
-}
+    if (!email) {
+        document.getElementById('login-email-field').classList.add('error');
+        valid = false;
+    } else {
+        document.getElementById('login-email-field').classList.remove('error');
+    }
+    if (!pass) {
+        document.getElementById('login-pass-field').classList.add('error');
+        valid = false;
+    } else {
+        document.getElementById('login-pass-field').classList.remove('error');
+    }
+    if (!valid) return false;
 
-export function getCurrentUser() {
-  if (!currentUser) {
-    const userStr = localStorage.getItem('fctc_user');
-    if (userStr) currentUser = JSON.parse(userStr);
-  }
-  return currentUser;
-}
+    let user;
+    try {
+        user = await DataService.login(email, pass);
+    } catch (err) {
+        UI.toast('' + err.message, 'error');
+        document.getElementById('login-pass-field').classList.add('error');
+        return false;
+    }
 
-export async function login(username, password) {
-  const result = await api.login(username, password);
-  if (result && result.user) {
-    currentUser = result.user;
-    localStorage.setItem('fctc_token', result.token);
-    localStorage.setItem('fctc_user', JSON.stringify(result.user));
-    showToast(`Welcome, ${result.user.name}!`, 'success');
-    return true;
-  }
-  return false;
-}
+    localStorage.setItem('fctc_user', JSON.stringify(user));
+    App.currentUser = user;
 
-export function logout() {
-  currentUser = null;
-  localStorage.removeItem('fctc_token');
-  localStorage.removeItem('fctc_user');
-  showToast('Logged out.', 'info');
-  window.location.hash = '#login';
-  location.reload(); // Force refresh para malinis ang state
-}
+    App.updateUserBadges();
 
-export function requireAuth() {
-  if (!isLoggedIn()) {
-    window.location.hash = '#login';
+    const label = document.getElementById('home-user-label');
+    if (label) {
+        label.textContent = `${user.roleLabel} — ${user.name}`;
+    }
+
+    UI.toast(`Welcome, ${user.name}! (${user.roleLabel})`, 'success');
+    App.navigate('home');
     return false;
-  }
-  return true;
 }

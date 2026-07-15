@@ -1,0 +1,44 @@
+/* ================================================================
+   pages/home.css — Activity log
+   Home page activity log list.
+   ================================================================ */
+
+/* ─── LOG ─── */
+.log {
+    padding: 14px 16px;
+}
+.log-item {
+    display: flex;
+    gap: 10px;
+    padding: 9px 0;
+    border-bottom: 1px dashed var(--line);
+}
+.log-item:last-child {
+    border-bottom: none;
+}
+.log-tick {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    margin-top: 5px;
+    flex-shrink: 0;
+    background: var(--blueprint);
+}
+.log-tick.g {
+    background: var(--green);
+}
+.log-tick.a {
+    background: var(--amber);
+}
+.log-tick.r {
+    background: var(--red);
+}
+.log-body p {
+    font-size: 12px;
+    margin: 0 0 2px;
+}
+.log-body time {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    color: var(--ink-soft);
+}

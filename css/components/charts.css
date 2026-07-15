@@ -1,0 +1,68 @@
+/* ================================================================
+   components/charts.css — Chart panels
+   Canvas wrappers and chart legends (Finance + Project charts).
+   ================================================================ */
+
+/* ─── CHARTS ─── */
+.chart-grid {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 16px;
+    margin-top: 14px;
+}
+.chart-grid.full {
+    grid-template-columns: 1fr;
+}
+.chart-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px;
+}
+.chart-card .cc-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+.chart-card h3 {
+    font-family: 'Oswald', sans-serif;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--blueprint);
+    margin: 0;
+}
+.chart-card .cc-note {
+    font-size: 10.5px;
+    color: var(--ink-soft);
+}
+.chart-card .canvas-wrap {
+    position: relative;
+    height: 230px;
+    margin-top: 10px;
+}
+.chart-card .canvas-wrap.short {
+    height: 190px;
+}
+@media (max-width: 1000px) {
+    .chart-grid {
+        grid-template-columns: 1fr;
+    }
+}
+.data-source-note {
+    margin-top: 20px;
+    padding: 12px 14px;
+    background: var(--blueprint-tint);
+    border: 1px dashed var(--blueprint);
+    border-radius: 8px;
+    font-size: 11.5px;
+    color: var(--blueprint);
+    line-height: 1.5;
+}
+.data-source-note code {
+    background: rgba(0, 0, 0, .06);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+}

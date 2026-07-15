@@ -1,0 +1,66 @@
+/* ================================================================
+   components/dialogs.css — Confirm dialog
+   Promise-based confirm overlay (see core/ui.js Confirm).
+   ================================================================ */
+
+/* ─── CONFIRM DIALOG ─── */
+.confirm-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 3000;
+    backdrop-filter: blur(4px);
+    animation: fadeIn .2s ease;
+}
+.confirm-overlay.open {
+    display: flex;
+}
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+.confirm-box {
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 28px 24px 24px;
+    max-width: 400px;
+    width: 100%;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .4);
+    animation: slideUp .25s ease;
+}
+@keyframes slideUp {
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+.confirm-box h3 {
+    font-family: 'Oswald', sans-serif;
+    font-size: 16px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    margin: 0 0 6px;
+}
+.confirm-box p {
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin: 6px 0 18px;
+    line-height: 1.5;
+}
+.confirm-box .actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}

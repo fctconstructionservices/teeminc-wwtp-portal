@@ -1,0 +1,41 @@
+/* ================================================================
+   main.css — Single stylesheet entry point
+   ================================================================
+   index.html links ONLY this file. Import order below preserves the
+   original cascade exactly (verified rule-for-rule) — do not reorder
+   without checking selectors that appear in more than one file
+   (e.g. .sow-* rules in project-sow.css intentionally override the
+   earlier definitions, exactly as in the original single file).
+
+   TO ADD A NEW MODULE/PAGE: create css/pages/<module>.css and add
+   one @import at the end of the "pages" group.
+   ================================================================ */
+
+/* ─── base: tokens first, then reset/typography ─── */
+@import url('base/variables.css');
+@import url('base/reset.css');
+
+/* ─── layout ─── */
+@import url('layout/shell.css');
+@import url('layout/two-column.css');
+
+/* ─── shared components ─── */
+@import url('components/cards.css');
+@import url('components/tables.css');
+@import url('components/stamps.css');
+@import url('components/forms.css');
+@import url('components/charts.css');
+@import url('components/toast.css');
+@import url('components/dialogs.css');
+@import url('components/print-modal.css');
+@import url('components/utilities.css');
+
+/* ─── pages ─── */
+@import url('pages/login.css');
+@import url('pages/home.css');
+@import url('pages/finance.css');
+@import url('pages/search.css');
+@import url('pages/project.css');
+@import url('pages/project-sow.css');
+@import url('pages/materials-equipment.css');
+@import url('pages/approvals.css');

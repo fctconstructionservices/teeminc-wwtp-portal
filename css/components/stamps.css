@@ -1,0 +1,50 @@
+/* ================================================================
+   components/stamps.css — Status stamps & badges
+   Approved / pending / rejected stamps used across all lists.
+   ================================================================ */
+
+/* ─── STAMPS ─── */
+.stamp {
+    display: inline-block;
+    font-family: 'Oswald', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border: 1.5px solid currentColor;
+    border-radius: 4px;
+    transform: rotate(-2deg);
+}
+.stamp.approved {
+    color: var(--green);
+    background: #E7F3EA;
+}
+.stamp.pending {
+    color: var(--amber);
+    background: #FBF1DE;
+}
+.stamp.rejected {
+    color: var(--red);
+    background: #FAEBE9;
+}
+.stamp.ontrack {
+    color: var(--green);
+    background: #E7F3EA;
+}
+.stamp.atrisk {
+    color: var(--amber);
+    background: #FBF1DE;
+}
+.stamp.overbudget {
+    color: var(--red);
+    background: #FAEBE9;
+}
+.stamp.draft {
+    color: var(--ink-soft);
+    background: var(--bg);
+}
+.stamp.submitted {
+    color: var(--amber);
+    background: #FBF1DE;
+}
