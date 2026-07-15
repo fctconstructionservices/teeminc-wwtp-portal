@@ -20,7 +20,7 @@ Object.assign(ProjectPage, {
             <div class="daily-form-header" style="background:var(--blueprint);color:#fff;padding:12px 16px;border-radius:var(--radius) var(--radius) 0 0;margin:-16px -16px 16px -16px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;">
                     <div>
-                        <div style="font-family:'Oswald',sans-serif;font-size:16px;text-transform:uppercase;letter-spacing:0.05em;">FCTC Site Operations Board</div>
+                        <div style="font-family:'Oswald',sans-serif;font-size:16px;text-transform:uppercase;letter-spacing:0.05em;">FCTC Construction Services</div>
                         <div style="font-size:11px;opacity:0.8;">Daily Site Record</div>
                     </div>
                     <div style="text-align:right;font-size:12px;">
