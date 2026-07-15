@@ -1,0 +1,47 @@
+/* ==========================================
+   BASE: Variables & Themes
+   ========================================== */
+
+:root {
+  /* Light Theme */
+  --bg-primary: #f4f7fc;
+  --bg-secondary: #ffffff;
+  --bg-sidebar: #1a2332;
+  --text-primary: #1e293b;
+  --text-secondary: #475569;
+  --text-light: #94a3b8;
+  --border-color: #e2e8f0;
+  
+  /* Brand Colors (FCTC) */
+  --blueprint: #0a3d6b;
+  --safety: #f59e0b;
+  --amber: #d97706;
+  --green: #10b981;
+  --red: #ef4444;
+  
+  /* Status Colors */
+  --status-pending: #f59e0b;
+  --status-approved: #10b981;
+  --status-rejected: #ef4444;
+  --status-for-approval: #3b82f6;
+  --status-completed: #8b5cf6;
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+  --shadow-md: 0 4px 6px rgba(0,0,0,0.07);
+  --shadow-lg: 0 10px 15px rgba(0,0,0,0.1);
+  
+  /* Fonts */
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --radius: 8px;
+}
+
+[data-theme="dark"] {
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-sidebar: #0b1120;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-light: #64748b;
+  --border-color: #334155;
+}

@@ -1,0 +1,36 @@
+/* ==========================================
+   COMPONENTS: Forms
+   ========================================== */
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  font-weight: 500;
+  font-size: 0.875rem;
+  margin-bottom: 4px;
+}
+
+.form-control {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-family: var(--font-family);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  transition: border 0.2s;
+}
+
+.form-control:focus {
+  outline: none;
+  border-color: var(--blueprint);
+  box-shadow: 0 0 0 3px rgba(10, 61, 107, 0.15);
+}
+
+select.form-control {
+  appearance: auto;
+}

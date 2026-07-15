@@ -1,0 +1,66 @@
+/* ==========================================
+   COMPONENTS: Buttons
+   ========================================== */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-weight: 500;
+  font-family: var(--font-family);
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-primary {
+  background: var(--blueprint);
+  color: #fff;
+  border-color: var(--blueprint);
+}
+.btn-primary:hover {
+  background: #0a2d4e;
+}
+
+.btn-success {
+  background: var(--green);
+  color: #fff;
+  border-color: var(--green);
+}
+.btn-success:hover {
+  background: #059669;
+}
+
+.btn-danger {
+  background: var(--red);
+  color: #fff;
+  border-color: var(--red);
+}
+.btn-danger:hover {
+  background: #dc2626;
+}
+
+.btn-warning {
+  background: var(--safety);
+  color: #fff;
+  border-color: var(--safety);
+}
+.btn-warning:hover {
+  background: #d97706;
+}
+
+.btn-sm {
+  padding: 4px 12px;
+  font-size: 0.75rem;
+}

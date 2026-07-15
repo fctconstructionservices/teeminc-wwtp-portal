@@ -1,0 +1,30 @@
+/* ==========================================
+   MODULE: Projects Page
+   LINKED TO: js/modules/projects.js
+   ========================================== */
+
+.project-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: var(--bg-secondary);
+  padding: 16px;
+  border-radius: var(--radius);
+  text-align: center;
+  border: 1px solid var(--border-color);
+}
+
+.stat-card .number {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--blueprint);
+}
+
+.stat-card .label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}

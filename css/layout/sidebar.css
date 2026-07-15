@@ -1,0 +1,87 @@
+/* ==========================================
+   LAYOUT: Sidebar Navigation
+   ========================================== */
+
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 280px;
+  height: 100vh;
+  background: var(--bg-sidebar);
+  color: #fff;
+  padding: 24px 16px;
+  overflow-y: auto;
+  z-index: 1000;
+  transition: transform 0.3s;
+}
+
+.sidebar .logo {
+  font-size: 1.3rem;
+  font-weight: 700;
+  padding: 0 12px 24px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  margin-bottom: 24px;
+}
+
+.sidebar .logo span {
+  color: var(--safety);
+}
+
+.sidebar .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  color: rgba(255,255,255,0.7);
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 2px;
+  border: none;
+  background: none;
+  width: 100%;
+  font-size: 0.95rem;
+  font-family: var(--font-family);
+}
+
+.sidebar .nav-item:hover {
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+}
+
+.sidebar .nav-item.active {
+  background: var(--blueprint);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(10, 61, 107, 0.4);
+}
+
+.sidebar .nav-item .icon {
+  font-size: 1.2rem;
+  width: 24px;
+  text-align: center;
+}
+
+.sidebar .logout-btn {
+  margin-top: 32px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  padding-top: 16px;
+  color: var(--red);
+}
+
+.sidebar .logout-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ff6b6b;
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    transform: translateX(-100%);
+  }
+  .sidebar.open {
+    transform: translateX(0);
+  }
+  .hamburger {
+    display: block !important;
+  }
+}

@@ -1,0 +1,12 @@
+/* ==========================================
+   MODULE: Liquidations Page
+   LINKED TO: js/modules/liquidations.js
+   ========================================== */
+
+.liquidation-attachment {
+  max-width: 200px;
+  max-height: 150px;
+  object-fit: cover;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-color);
+}
