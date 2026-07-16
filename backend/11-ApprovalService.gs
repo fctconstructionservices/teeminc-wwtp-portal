@@ -24,6 +24,20 @@ function getPendingApprovals() {
     return u.email.toLowerCase() === userEmail; 
   });
   const isAdmin = userRecord && (userRecord.role === 'admin' || userRecord.role === 'superadmin');
+  const isSuper = userRecord && userRecord.role === 'superadmin';
+
+  // v4 multi-sig: set of requestIds THIS user has already signed. An item
+  // leaves an admin's queue once they've signed, but a super admin (who
+  // only force-decides) keeps seeing everything so they can override.
+  const myDecided = {};
+  if (!isSuper) {
+    readAll_('Approvals').forEach(function (a) {
+      if (low_(a.approver) === userEmail) myDecided[a.requestId] = true;
+    });
+  }
+  const notMine_ = function (list) {
+    return isSuper ? list : list.filter(function (it) { return !myDecided[it.id]; });
+  };
 
   // Cash Advances
   const cashAdvances = readAll_('CashAdvanceRequests').filter(function (r) {
@@ -36,7 +50,13 @@ function getPendingApprovals() {
   let releases = [];
   if (isAdmin && userRecord.role !== 'superadmin') {
     releases = readAll_('CashRelease').filter(function (r) {
-      return r.status === 'For Review' && r.releasedBy && r.releasedBy.toLowerCase() !== userEmail;
+      return r.status === 'For Review' && r.releasedBy && r.releasedBy.toLowerCase() !== userEmail
+        && (function () {
+          // v4 per-admin visibility: hide releases this admin already reviewed.
+          var rv = [];
+          try { rv = JSON.parse(r.reviewedByJSON || '[]'); } catch (e) { rv = []; }
+          return rv.indexOf(userEmail) === -1;
+        })();
     }).map(function (r) {
       return { 
         id: r.id, 
@@ -48,7 +68,8 @@ function getPendingApprovals() {
         description: r.description, 
         status: r.status, 
         createdAt: r.createdAt,
-        releasedBy: r.releasedBy
+        releasedBy: r.releasedBy,
+        reviewedByJSON: r.reviewedByJSON || '[]'
       };
     });
   }
@@ -87,15 +108,15 @@ function getPendingApprovals() {
   });
 
   return {
-    cashAdvances: cashAdvances,
-    releases: releases,
-    incomingCash: incomingCash,
-    liquidations: liquidations,
-    materials: materials,
-    equipment: equipment,
-    manpower: manpower,
-    dailyRecords: dailyRecords,
-    estimates: estimates
+    cashAdvances: notMine_(cashAdvances),
+    releases: notMine_(releases),
+    incomingCash: notMine_(incomingCash),
+    liquidations: notMine_(liquidations),
+    materials: notMine_(materials),
+    equipment: notMine_(equipment),
+    manpower: notMine_(manpower),
+    dailyRecords: notMine_(dailyRecords),
+    estimates: notMine_(estimates)
   };
 }
 
@@ -234,180 +255,195 @@ function rejectItem(id, type) {
   return decideItem_(id, type, 'Rejected');
 }
 
-function decideItem_(id, type, decision) {
+/**
+ * ── APPROVAL ENGINE (v4: multi-signature for ALL types) ──
+ *
+ * MODEL (mirrors Cash Release, generalized to every type):
+ *   • Required signers = every user with role 'admin' (super admins are
+ *     EXCLUDED and can only force-approve/reject), minus the submitter.
+ *   • Each admin signs once; their signature is recorded in the central
+ *     Approvals sheet (requestId, approver, decision, timestamp).
+ *   • An item leaves an admin's pending queue the moment THAT admin has
+ *     signed, but stays visible to admins who haven't signed yet.
+ *   • The item FINALIZES (takes effect) only when ALL required admins
+ *     have approved. A single Rejected sign-off rejects it immediately.
+ *   • Super Admin force-approve/reject finalizes at once, bypassing the
+ *     signature count.
+ */
+function decideItem_(id, type, decision, isForce) {
   const approver = currentUserEmail_().toLowerCase();
-
-  // ─── CASH ADVANCE ────────────────────────────────
-  if (type === 'CashAdvance') {
-    const ca = readAll_('CashAdvanceRequests').find(function (r) { return r.id === id; });
-    if (!ca) throw new Error('Cash advance request not found.');
-    if (ca.requestorEmail && ca.requestorEmail.toLowerCase() === approver) {
-      throw new Error('Self-approval is not allowed.');
-    }
-    if (ca.status !== 'Pending') throw new Error('Request is not pending.');
-    
-    // Check if user already approved/rejected
-    const existingApprovals = readAll_('Approvals').filter(function (a) {
-      return a.requestId === id && a.approver === approver;
-    });
-    if (existingApprovals.length > 0) {
-      throw new Error('You have already approved/rejected this request.');
-    }
-
-    appendRow_('Approvals', {
-      requestId: id,
-      approver: approver,
-      decision: decision,
-      timestamp: new Date(),
-      remarks: ''
-    });
-
-    let finalStatus = 'Pending';
-    if (decision === 'Rejected') {
-      finalStatus = 'Rejected';
-    } else {
-      const allApprovers = getAdminEmails_();
-      const approvals = readAll_('Approvals').filter(function (a) {
-        return a.requestId === id && a.decision === 'Approved';
-      });
-      const distinctApprovers = approvals.map(function (a) { return a.approver; });
-      const uniqueApprovers = distinctApprovers.filter(function (v, i, self) { return self.indexOf(v) === i; });
-      const requiredForApproval = allApprovers.filter(function (a) {
-        return a !== String(ca.requestorEmail).toLowerCase();
-      });
-      const allApproved = requiredForApproval.every(function (approverEmail) {
-        return uniqueApprovers.indexOf(approverEmail) !== -1;
-      });
-      finalStatus = allApproved ? 'Approved' : 'Pending';
-    }
-
-    if (finalStatus === 'Approved') {
-      return approveCashAdvance(id);
-    } else {
-      updateRow_('CashAdvanceRequests', 'id', id, { status: finalStatus });
-      logActivity_('Cash advance ' + id + ' ' + finalStatus.toLowerCase(), finalStatus === 'Rejected' ? 'a' : 'blue');
-      return { success: true, status: finalStatus };
-    }
+  const meta = resolveApprovalItem_(id, type);
+  if (!meta.found) throw new Error(meta.msg || 'Request not found.');
+  if (!meta.isPending) throw new Error(meta.notPendingMsg || 'Request is not pending.');
+  if (meta.submitter && meta.submitter === approver) {
+    throw new Error('Self-approval is not allowed.');
   }
 
-  // ─── CASH RELEASE ────────────────────────────────
+  // Cash Release keeps its own dedicated review flow (reviewedByJSON).
   if (type === 'CashRelease') {
-    const release = readAll_('CashRelease').find(function (r) { return r.id === id; });
-    if (!release) throw new Error('Cash release record not found.');
-    if (release.releasedBy && release.releasedBy.toLowerCase() === approver) {
-      throw new Error('Self-review is not allowed.');
-    }
-    if (release.status !== 'For Review') throw new Error('Release is not in review status.');
     return reviewRelease(id, approver);
   }
 
-  // ─── INCOMING CASH ──────────────────────────────
-  if (type === 'IncomingCash' || type === 'Incoming Cash') {
-    const inc = readAll_('IncomingCashRequests').find(function (r) { return r.id === id; });
-    if (!inc) throw new Error('Request not found.');
-    if (inc.requestorEmail && inc.requestorEmail.toLowerCase() === approver) {
-      throw new Error('Self-approval is not allowed.');
-    }
-    if (inc.status !== 'Pending') throw new Error('Request is not pending.');
-    if (decision === 'Approved') {
-      return approveIncomingCash(id);
-    } else {
+  // Super Admin force: finalize immediately, no signature tracking.
+  if (isForce) {
+    return finalizeDecision_(id, type, decision, meta);
+  }
+
+  // Normal admin path — cannot sign twice.
+  if (hasDecided_(id, approver)) {
+    throw new Error('You have already decided on this request.');
+  }
+  appendRow_('Approvals', {
+    requestId: id, approver: approver, decision: decision,
+    timestamp: new Date(), remarks: ''
+  });
+
+  // One rejection rejects the whole item.
+  if (decision === 'Rejected') {
+    return finalizeDecision_(id, type, 'Rejected', meta);
+  }
+
+  // Approval finalizes only when every required admin has approved.
+  if (allSignersApproved_(id, meta.submitter)) {
+    return finalizeDecision_(id, type, 'Approved', meta);
+  }
+
+  logActivity_(type + ' ' + id + ' approved by ' + currentUserName_() + ' — awaiting other admins', 'blue', id);
+  return { success: true, status: 'pending', awaiting: true };
+}
+
+/**
+ * resolveApprovalItem_ - Uniform lookup for any approvable type.
+ * Returns { found, isPending, submitter (lowercased email) }.
+ */
+function resolveApprovalItem_(id, type) {
+  var r, subField;
+  switch (type) {
+    case 'CashAdvance':
+      r = readAll_('CashAdvanceRequests').find(function (x) { return x.id === id; });
+      return r ? { found: true, isPending: r.status === 'Pending', submitter: low_(r.requestorEmail), obj: r }
+               : { found: false, msg: 'Cash advance request not found.' };
+    case 'CashRelease':
+      r = readAll_('CashRelease').find(function (x) { return x.id === id; });
+      return r ? { found: true, isPending: r.status === 'For Review', submitter: low_(r.releasedBy), obj: r }
+               : { found: false, msg: 'Cash release record not found.' };
+    case 'IncomingCash':
+    case 'Incoming Cash':
+      r = readAll_('IncomingCashRequests').find(function (x) { return x.id === id; });
+      return r ? { found: true, isPending: r.status === 'Pending', submitter: low_(r.requestorEmail), obj: r }
+               : { found: false, msg: 'Incoming cash request not found.' };
+    case 'Liquidation':
+      r = readAll_('Liquidations').find(function (x) { return x.id === id; });
+      return r ? { found: true, isPending: r.status === 'Pending', submitter: low_(r.requestorEmail), obj: r }
+               : { found: false, msg: 'Liquidation record not found.' };
+    case 'Material':
+      r = readAll_('Materials').find(function (x) { return x.id === id; });
+      return r ? { found: true, isPending: r.status === 'Pending', submitter: low_(r.requestedBy), obj: r }
+               : { found: false, msg: 'Material not found.' };
+    case 'Equipment':
+      r = readAll_('Equipment').find(function (x) { return x.id === id; });
+      return r ? { found: true, isPending: r.status === 'Pending', submitter: low_(r.requestedBy), obj: r }
+               : { found: false, msg: 'Equipment not found.' };
+    case 'Manpower':
+      r = readAll_('Manpower').find(function (x) { return x.id === id; });
+      return r ? { found: true, isPending: r.status === 'Pending', submitter: low_(r.requestedBy), obj: r }
+               : { found: false, msg: 'Manpower role not found.' };
+    case 'DailyRecord':
+      r = readAll_('DailyRecords').find(function (x) { return x.id === id; });
+      return r ? { found: true, isPending: r.status === 'pending', submitter: low_(r.createdBy), obj: r }
+               : { found: false, msg: 'Daily record not found.' };
+    case 'Estimate':
+      r = readAll_('EstimateGroups').find(function (x) { return x.id === id; });
+      return r ? { found: true, isPending: r.status === 'pending', submitter: low_(r.submittedBy), obj: r }
+               : { found: false, msg: 'Estimate group not found.' };
+    default:
+      return { found: false, msg: 'Invalid type for approval: ' + type };
+  }
+}
+
+/**
+ * finalizeDecision_ - Applies the real effect once a decision is final
+ * (all admins approved, a rejection, or a super-admin force).
+ */
+function finalizeDecision_(id, type, decision, meta) {
+  var approved = decision === 'Approved';
+  switch (type) {
+    case 'CashAdvance':
+      if (approved) return approveCashAdvance(id);
+      updateRow_('CashAdvanceRequests', 'id', id, { status: 'Rejected' });
+      logActivity_('Cash advance ' + id + ' rejected', 'a', id);
+      return { success: true, status: 'Rejected' };
+
+    case 'IncomingCash':
+      if (approved) return approveIncomingCash(id);
       updateRow_('IncomingCashRequests', 'id', id, { status: 'Rejected' });
       logActivity_('Incoming cash ' + id + ' rejected', 'a', id);
       return { success: true, status: 'Rejected' };
-    }
-  }
 
-  // ─── LIQUIDATION ──────────────────────────────────
-  if (type === 'Liquidation') {
-    const liq = readAll_('Liquidations').find(function (l) { return l.id === id; });
-    if (!liq) throw new Error('Liquidation record not found.');
-    if (liq.requestorEmail && liq.requestorEmail.toLowerCase() === approver) {
-      throw new Error('Self-approval is not allowed.');
-    }
-    if (liq.status !== 'Pending') throw new Error('Liquidation is not pending.');
-    if (decision === 'Approved') {
-      return approveLiquidation(id);
-    } else {
-      return rejectLiquidation(id);
-    }
-  }
+    case 'Liquidation':
+      return approved ? approveLiquidation(id) : rejectLiquidation(id);
 
-  // ─── MATERIALS ────────────────────────────────────
-  if (type === 'Material') {
-    const mat = readAll_('Materials').find(function (m) { return m.id === id; });
-    if (!mat) throw new Error('Material not found.');
-    if (mat.requestedBy && mat.requestedBy.toLowerCase() === approver) {
-      throw new Error('Self-approval is not allowed.');
-    }
-    if (mat.status !== 'Pending') throw new Error('Material is not pending.');
-    updateRow_('Materials', 'id', id, { status: decision === 'Approved' ? 'approved' : 'rejected' });
-    logActivity_('Material ' + id + ' ' + (decision === 'Approved' ? 'approved' : 'rejected'), decision === 'Approved' ? 'g' : 'a', id);
-    return { success: true };
-  }
+    case 'Material':
+      updateRow_('Materials', 'id', id, { status: approved ? 'approved' : 'rejected' });
+      logActivity_('Material ' + id + ' ' + (approved ? 'approved' : 'rejected'), approved ? 'g' : 'a', id);
+      return { success: true };
 
-  // ─── EQUIPMENT ────────────────────────────────────
-  if (type === 'Equipment') {
-    const eq = readAll_('Equipment').find(function (e) { return e.id === id; });
-    if (!eq) throw new Error('Equipment not found.');
-    if (eq.requestedBy && eq.requestedBy.toLowerCase() === approver) {
-      throw new Error('Self-approval is not allowed.');
-    }
-    if (eq.status !== 'Pending') throw new Error('Equipment is not pending.');
-    updateRow_('Equipment', 'id', id, { status: decision === 'Approved' ? 'approved' : 'rejected' });
-    logActivity_('Equipment ' + id + ' ' + (decision === 'Approved' ? 'approved' : 'rejected'), decision === 'Approved' ? 'g' : 'a', id);
-    return { success: true };
-  }
+    case 'Equipment':
+      updateRow_('Equipment', 'id', id, { status: approved ? 'approved' : 'rejected' });
+      logActivity_('Equipment ' + id + ' ' + (approved ? 'approved' : 'rejected'), approved ? 'g' : 'a', id);
+      return { success: true };
 
-  // ─── DAILY RECORD ──────────────────────────────────
-  if (type === 'DailyRecord') {
-    const dr = readAll_('DailyRecords').find(function (d) { return d.id === id; });
-    if (!dr) throw new Error('Daily record not found.');
-    if (dr.createdBy && dr.createdBy.toLowerCase() === approver) {
-      throw new Error('Self-approval is not allowed.');
-    }
-    if (dr.status !== 'pending') throw new Error('Daily record is not pending.');
-    updateRow_('DailyRecords', 'id', id, { status: decision === 'Approved' ? 'approved' : 'rejected' });
-    logActivity_('Daily record ' + id + ' ' + (decision === 'Approved' ? 'approved' : 'rejected'), decision === 'Approved' ? 'g' : 'a', id);
-    return { success: true };
-  }
+    case 'Manpower':
+      updateRow_('Manpower', 'id', id, { status: approved ? 'approved' : 'rejected' });
+      logActivity_('Manpower role ' + id + ' ' + (approved ? 'approved' : 'rejected'), approved ? 'g' : 'a', id);
+      return { success: true };
 
-  // ─── MANPOWER (v3) ─────────────────────────────────
-  if (type === 'Manpower') {
-    const mp = readAll_('Manpower').find(function (m) { return m.id === id; });
-    if (!mp) throw new Error('Manpower role not found.');
-    if (mp.requestedBy && mp.requestedBy.toLowerCase() === approver) {
-      throw new Error('Self-approval is not allowed.');
-    }
-    if (mp.status !== 'Pending') throw new Error('Manpower role is not pending.');
-    updateRow_('Manpower', 'id', id, { status: decision === 'Approved' ? 'approved' : 'rejected' });
-    logActivity_('Manpower role ' + id + ' ' + (decision === 'Approved' ? 'approved' : 'rejected'), decision === 'Approved' ? 'g' : 'a', id);
-    return { success: true };
-  }
+    case 'DailyRecord':
+      updateRow_('DailyRecords', 'id', id, { status: approved ? 'approved' : 'rejected' });
+      logActivity_('Daily record ' + id + ' ' + (approved ? 'approved' : 'rejected'), approved ? 'g' : 'a', id);
+      return { success: true };
 
-  // ─── ESTIMATE ──────────────────────────────────────
-  // v3 FIX: this used to call approveEstimates(id) with one argument
-  // (the group id where projectId+sowId were expected), so approving
-  // an estimate from the inbox never found the group. The id received
-  // here is the EstimateGroups row id; we resolve it first.
-  if (type === 'Estimate') {
-    const eg = readAll_('EstimateGroups').find(function (g) { return g.id === id; });
-    if (!eg) throw new Error('Estimate group not found.');
-    if (eg.submittedBy && String(eg.submittedBy).toLowerCase() === approver) {
-      throw new Error('Self-approval is not allowed.');
-    }
-    if (eg.status !== 'pending') throw new Error('Estimate is not pending.');
-    if (decision === 'Approved') {
-      return approveEstimates(eg.projectId, eg.sowId);
-    }
-    // Rejection returns the estimate to draft so the creator can edit
-    // and resubmit (editing is only allowed in draft status).
-    updateRow_('EstimateGroups', 'id', id, { status: 'draft' });
-    logActivity_('Estimate for ' + eg.sowId + ' rejected — returned to draft', 'a', id);
-    return { success: true, status: 'draft' };
-  }
+    case 'Estimate':
+      var eg = readAll_('EstimateGroups').find(function (g) { return g.id === id; });
+      if (!eg) throw new Error('Estimate group not found.');
+      if (approved) return approveEstimates(eg.projectId, eg.sowId);
+      updateRow_('EstimateGroups', 'id', id, { status: 'draft' });
+      logActivity_('Estimate for ' + eg.sowId + ' rejected — returned to draft', 'a', id);
+      return { success: true, status: 'draft' };
 
-  throw new Error('Invalid type for approval: ' + type);
+    default:
+      throw new Error('Invalid type for approval: ' + type);
+  }
+}
+
+// ── Multi-signature helpers ──
+function low_(v) { return String(v || '').toLowerCase(); }
+
+/** requiredSigners_ - every admin-role user, minus the submitter. */
+function requiredSigners_(submitterEmail) {
+  var sub = low_(submitterEmail);
+  return readAll_('Users')
+    .filter(function (u) { return u.role === 'admin'; })
+    .map(function (u) { return low_(u.email); })
+    .filter(function (e) { return e && e !== sub; });
+}
+
+/** hasDecided_ - has this approver already signed this request? */
+function hasDecided_(id, approver) {
+  approver = low_(approver);
+  return readAll_('Approvals').some(function (a) {
+    return a.requestId === id && low_(a.approver) === approver;
+  });
+}
+
+/** allSignersApproved_ - have ALL required admins approved this item? */
+function allSignersApproved_(id, submitterEmail) {
+  var required = requiredSigners_(submitterEmail);
+  if (required.length === 0) return true; // no other admins -> first approval is final
+  var approvedBy = readAll_('Approvals')
+    .filter(function (a) { return a.requestId === id && a.decision === 'Approved'; })
+    .map(function (a) { return low_(a.approver); });
+  return required.every(function (e) { return approvedBy.indexOf(e) !== -1; });
 }
 
 // ─── SUPER ADMIN FORCE APPROVE/REJECT ─────────────────────────
@@ -419,7 +455,7 @@ function forceApprove(id, type) {
   if (!user || user.role !== 'superadmin') {
     throw new Error('Only the Super Admin can force-approve.');
   }
-  return decideItem_(id, type, 'Approved');
+  return decideItem_(id, type, 'Approved', true);
 }
 
 function forceReject(id, type) {
@@ -429,5 +465,5 @@ function forceReject(id, type) {
   if (!user || user.role !== 'superadmin') {
     throw new Error('Only the Super Admin can force-reject.');
   }
-  return decideItem_(id, type, 'Rejected');
+  return decideItem_(id, type, 'Rejected', true);
 }

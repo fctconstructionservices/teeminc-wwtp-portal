@@ -13,7 +13,7 @@
 //  wrapper method here — pages never call fetch() directly.
 // ================================================================
 
-const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxZlZxUwlzyM2RRGSE1zlBQea5vqKKqsZ5LcP0Ovtv2lO_X87kDNP7H8RLzhKMFIP16/exec';
+const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbw6f2tk5aSYY1Pz-c0vQ_9wTCCbd_KBTdqT-8oRYQbO9mxUjrUY-SWchtqYX9iEaqjV/exec';
 
 /**
  * getCurrentUserEmail - Retrieves the current user's email from localStorage
@@ -302,6 +302,10 @@ const DataService = {
     // ─── LIQUIDATION ────────────────────────────────────────────
     async submitLiquidation(payload) {
         return await gasCall('submitLiquidation', payload);
+    },
+    // v4: Reviewed releases still awaiting liquidation (auto-populates the Liquidate form)
+    async getReleasesToLiquidate() {
+        return await gasCall('getReleasesToLiquidate');
     },
     async approveLiquidation(id) {
         return await gasCall('approveLiquidation', id);

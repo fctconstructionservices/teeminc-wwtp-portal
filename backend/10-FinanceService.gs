@@ -233,10 +233,15 @@ function submitLiquidation(payload) {
   const fileUrl = uploaded.fileUrl;
   const fileName = uploaded.fileName;
 
+  // v4: derive the projectId from the linked cash advance so liquidations
+  // always carry the right project even if the form didn't send it.
+  var srcCa = readAll_('CashAdvanceRequests').find(function (r) { return r.id === payload.requestId; });
+  var derivedProject = payload.projectId || (srcCa ? srcCa.projectId : '');
+
   appendRow_('Liquidations', {
     id: id,
     cashAdvanceId: payload.requestId || '',
-    projectId: payload.projectId || '',
+    projectId: derivedProject,
     requestor: currentUserName_(),
     requestorEmail: currentUserEmail_(),
     amount: payload.amount,
@@ -262,7 +267,112 @@ function approveLiquidation(id) {
     reviewedBy: currentUserEmail_()
   });
   logActivity_('Liquidation ' + id + ' approved', 'g', id);
+
+  // ── v4 item 6: auto-reimbursement when liquidation exceeds the advance ──
+  // If the approved liquidations for this cash advance now total MORE than
+  // the amount originally requested, the company owes the requestor the
+  // excess. Create a Reimbursement-type cash advance for exactly that
+  // excess (same project + SOW), attach this liquidation's receipt, set
+  // date-needed to +3 days, and auto-submit it for admin approval.
+  try {
+    var caId = liq.cashAdvanceId;
+    if (caId) {
+      var ca = readAll_('CashAdvanceRequests').find(function (r) { return r.id === caId; });
+      if (ca) {
+        var requested = parseFloat(ca.amount) || 0;
+        var approvedLiqs = readAll_('Liquidations').filter(function (l) {
+          return l.cashAdvanceId === caId && l.status === 'Approved';
+        });
+        var newTotal = approvedLiqs.reduce(function (s, l) { return s + (parseFloat(l.amount) || 0); }, 0);
+        var prevTotal = newTotal - (parseFloat(liq.amount) || 0);
+        // excess introduced by THIS liquidation (never reimburse the same peso twice)
+        var excess = newTotal - Math.max(requested, prevTotal);
+        if (excess > 0.009) {
+          createReimbursementCA_(ca, liq, excess);
+        }
+      }
+    }
+  } catch (e) {
+    logActivity_('Reimbursement auto-create skipped for ' + id + ': ' + e.message, 'a', id);
+  }
+
   return { success: true };
+}
+
+/**
+ * createReimbursementCA_ (v4) - Auto-generates a Reimbursement-type cash
+ * advance for the amount a liquidation exceeded its advance. Same project
+ * and SOW as the source advance; attachment copied from the liquidation
+ * that caused the overage; date-needed = +3 days; auto-submitted (Pending)
+ * for admin approval.
+ */
+function createReimbursementCA_(sourceCa, liq, excess) {
+  var tz = Session.getScriptTimeZone();
+  var dateNeeded = Utilities.formatDate(new Date(Date.now() + 3 * 86400000), tz, 'yyyy-MM-dd');
+  var id = nextId_('CA');
+  appendRow_('CashAdvanceRequests', {
+    id: id,
+    type: 'Cash Advance',
+    projectId: sourceCa.projectId || '',
+    requestor: sourceCa.requestor || currentUserName_(),
+    requestorEmail: sourceCa.requestorEmail || currentUserEmail_(),
+    amount: Math.round(excess * 100) / 100,
+    description: 'Auto-reimbursement: liquidation ' + liq.id + ' exceeded advance ' + sourceCa.id + ' by ₱' + excess.toFixed(2) + '.',
+    scope: sourceCa.scope || '',
+    attachmentsJSON: liq.attachmentsJSON || '[]',
+    payloadJSON: JSON.stringify({ requestType: 'Reimbursement', dateNeeded: dateNeeded, sourceLiquidationId: liq.id, sourceAdvanceId: sourceCa.id }),
+    status: 'Pending',
+    createdAt: new Date(),
+    dateNeeded: dateNeeded,
+    sowId: sourceCa.sowId || ''
+  });
+  logActivity_('Auto-reimbursement ' + id + ' (₱' + excess.toFixed(2) + ') created from liquidation ' + liq.id + ' — submitted for approval', 'blue', id);
+  return id;
+}
+
+/**
+ * liquidationTotalForCA_ (v4) - Sum of APPROVED liquidations against a
+ * cash advance. Used to decide when an advance is fully liquidated.
+ */
+function liquidationTotalForCA_(caId, allLiquidations) {
+  var liqs = allLiquidations || readAll_('Liquidations');
+  return liqs
+    .filter(function (l) { return l.cashAdvanceId === caId && l.status === 'Approved'; })
+    .reduce(function (s, l) { return s + (parseFloat(l.amount) || 0); }, 0);
+}
+
+/**
+ * getReleasesToLiquidate (v4 item 4 + 5) - Reviewed cash releases whose
+ * cash advance is NOT yet fully liquidated. This is what the Liquidate
+ * Cash Advance screen lists automatically; an entry disappears once its
+ * approved liquidations total >= the amount requested.
+ */
+function getReleasesToLiquidate() {
+  var releases = readAll_('CashRelease').filter(function (r) { return r.status === 'Reviewed'; });
+  var cas = readAll_('CashAdvanceRequests');
+  var liqs = readAll_('Liquidations');
+  var out = [];
+  releases.forEach(function (r) {
+    var caId = r.originalRequestId;
+    if (!caId) return;
+    var ca = cas.find(function (x) { return x.id === caId; });
+    if (!ca) return;
+    var requested = parseFloat(ca.amount) || 0;
+    var liquidated = liquidationTotalForCA_(caId, liqs);
+    if (liquidated >= requested) return; // item 5: fully liquidated -> drop
+    out.push({
+      cashAdvanceId: caId,
+      releaseId: r.id,
+      projectId: r.projectId || ca.projectId || '',
+      requestor: r.requestor || ca.requestor || '',
+      requested: requested,
+      liquidated: liquidated,
+      remaining: requested - liquidated,
+      sowId: ca.sowId || '',
+      releasedAt: r.releasedAt || r.createdAt || ''
+    });
+  });
+  return out;
 }
 
 function rejectLiquidation(id) {
@@ -333,8 +443,10 @@ function getFinanceData() {
       return items.reduce(function (s, i) { return s + Number(i.budget || 0); }, 0);
     }),
     actual: projects.map(function (p) {
-      const items = sowItems.filter(function (s) { return s.projectId === p.id; });
-      return items.reduce(function (s, i) { return s + Number(i.actual || 0); }, 0);
+      // v4 FIX: the SOWItems 'actual' column is stale (actual is computed
+      // live in getProjectData, never written back). Use the real actual
+      // cost = sum of Reviewed cash releases for the project.
+      return getTotalReleasedCashForProject(p.id);
     })
   };
 
@@ -352,11 +464,15 @@ function getFinanceData() {
     values: breakdownKeys.length ? breakdownKeys.map(function (k) { return Math.round((typeGroups[k] / breakdownTotal) * 100); }) : [100]
   };
 
-  const pendingCAForAging = readAll_('CashAdvanceRequests').filter(function (r) { return r.status === 'Pending'; });
+  // ── v4 item 8: Cash Advance LIQUIDATION aging ──
+  // Basis = released (Reviewed) advances that are not yet fully liquidated,
+  // aged by how long since release — i.e. how long they've gone unliquidated.
+  const toLiquidate = getReleasesToLiquidate();
   const buckets = { '0-30 days': 0, '31-60 days': 0, '61-90 days': 0, '90+ days': 0 };
-  pendingCAForAging.forEach(function (r) {
-    const days = Math.floor((now - new Date(r.createdAt)) / (1000 * 60 * 60 * 24));
-    const amt = Number(r.amount || 0);
+  toLiquidate.forEach(function (r) {
+    const base = r.releasedAt ? new Date(r.releasedAt) : now;
+    const days = Math.floor((now - base) / (1000 * 60 * 60 * 24));
+    const amt = Number(r.remaining || 0);
     if (days <= 30) buckets['0-30 days'] += amt;
     else if (days <= 60) buckets['31-60 days'] += amt;
     else if (days <= 90) buckets['61-90 days'] += amt;
@@ -367,7 +483,9 @@ function getFinanceData() {
   const costStatus = projects.map(function (p) {
     const items = sowItems.filter(function (s) { return s.projectId === p.id; });
     const budget = items.reduce(function (s, i) { return s + Number(i.budget || 0); }, 0);
-    const actual = items.reduce(function (s, i) { return s + Number(i.actual || 0); }, 0);
+    // v4 FIX: actual now comes from Reviewed cash releases, not the stale
+    // SOWItems 'actual' column (which is only computed live in getProjectData).
+    const actual = getTotalReleasedCashForProject(p.id);
     const pct = budget > 0 ? (actual / budget) * 100 : 0;
     const status = pct >= 100 ? 'Over Budget' : pct >= 85 ? 'At Risk' : 'On Track';
     const cls = pct >= 100 ? 'danger' : pct >= 85 ? 'warn' : 'good';

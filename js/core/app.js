@@ -75,6 +75,9 @@ const App = {
         if (page === 'release-cash') {
             setTimeout(loadReleaseDropdown, 100);
         }
+        if (page === 'liquidate') {
+            setTimeout(loadLiquidateDropdown, 100);   // v4: auto-list reviewed advances to liquidate
+        }
 
         this.updateUserBadges();
         await this.updateApprovalBadge();

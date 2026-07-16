@@ -61,7 +61,9 @@ const RequestDetailModal = {
     _renderDetails(data) {
         const user = App.currentUser;
         const isSuperAdmin = user && user.role === 'superadmin';
-        const isApprover = App.isApprover() && !isSuperAdmin;
+        // v4: only ADMIN role approves in the normal flow; super admin
+        // force-decides only and is not counted among approvers.
+        const isApprover = user && user.role === 'admin';
         const isRequestor = user && data.requestorEmail && 
             user.email.toLowerCase() === data.requestorEmail.toLowerCase();
         const statusCls = data.status === 'Approved' ? 'approved' : data.status === 'Pending' ? 'pending' : data.status === 'Reviewing' ? 'pending' : 'rejected';
@@ -231,7 +233,8 @@ const ApprovalsPage = {
     _renderPendingTab(data) {
         const user = App.currentUser;
         const isSuperAdmin = user && user.role === 'superadmin';
-        const isApprover = App.isApprover() && !isSuperAdmin;
+        // v4: normal Approve/Reject is admin-role only; super admin sees Force only.
+        const isApprover = user && user.role === 'admin';
 
         let html = '';
 
@@ -556,9 +559,9 @@ const ApprovalsPage = {
                 actionsHtml = `<span style="font-size:10px;color:var(--ink-soft);">Waiting for Admin review</span>`;
             }
             html += `
-                <div class="approval-request-item">
+                <div class="approval-request-item" style="cursor:pointer;">
                     <div class="ar-icon">${Icon.outgoing({size:16})}</div>
-                    <div class="ar-body">
+                    <div class="ar-body" onclick="RequestDetailModal.open('${r.id}','request')">
                         <div class="ar-title">Release Cash — ${r.requestor} (${r.projectId || '—'})</div>
                         <div class="ar-meta">
                             <span class="ar-id">${r.id}</span>

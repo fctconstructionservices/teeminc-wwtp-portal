@@ -77,7 +77,7 @@ async function loadProjectsDropdown() {
         
         setDateNeededMin();
         
-        console.log('✅ Ongoing projects loaded:', ongoingProjects.length);
+        //console.log('✅ Ongoing projects loaded:', ongoingProjects.length);
         
     } catch (err) {
         console.error('Error loading ongoing projects:', err);
@@ -127,7 +127,7 @@ async function loadIncomingProjectsDropdown() {
             });
         }
         
-        console.log('✅ Incoming projects loaded:', ongoingProjects.length);
+        //console.log('✅ Incoming projects loaded:', ongoingProjects.length);
         
     } catch (err) {
         console.error('Error loading incoming projects:', err);
@@ -620,6 +620,50 @@ async function submitRecordCashForm(e) {
  * loadReleaseDropdown - I-load ang pending releases mula sa CashRelease sheet
  * PURPOSE: Only shows releases with status 'Pending'
  */
+/**
+ * loadLiquidateDropdown (v4) - Auto-populates the Liquidate Cash Advance
+ * form with Reviewed advances that still need liquidating. Each option
+ * shows the remaining (unliquidated) balance; selecting one pre-fills the
+ * amount with that remaining balance. Entries vanish once fully liquidated.
+ */
+async function loadLiquidateDropdown() {
+    try {
+        const select = document.getElementById('liq-req-id');
+        if (!select) return;
+
+        const rows = await DataService.getReleasesToLiquidate();
+
+        select.innerHTML = '<option value="">— Select released cash advance —</option>';
+        if (!rows || rows.length === 0) {
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.textContent = '— No advances awaiting liquidation —';
+            opt.disabled = true;
+            select.appendChild(opt);
+            return;
+        }
+
+        rows.forEach(function (r) {
+            const opt = document.createElement('option');
+            opt.value = r.cashAdvanceId;
+            opt.dataset.remaining = r.remaining;
+            opt.dataset.projectId = r.projectId || '';
+            opt.textContent = `${r.cashAdvanceId} · ${r.requestor} · req ₱${parseFloat(r.requested).toFixed(2)} · remaining ₱${parseFloat(r.remaining).toFixed(2)}`;
+            select.appendChild(opt);
+        });
+
+        select.addEventListener('change', function () {
+            const sel = this.options[this.selectedIndex];
+            const amt = document.getElementById('liq-amount');
+            if (amt && sel && sel.dataset.remaining) {
+                amt.value = parseFloat(sel.dataset.remaining).toFixed(2);
+            }
+        });
+    } catch (err) {
+        console.error('Liquidate dropdown load error:', err);
+    }
+}
+
 async function loadReleaseDropdown() {
     try {
         const select = document.getElementById('rel-req-id');

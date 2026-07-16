@@ -114,5 +114,7 @@ const API_ACTIONS = {
   searchManpower: searchManpower,
   // SOW budget mode + Gantt baseline
   updateSOWBudget: updateSOWBudget,
-  saveBaseline: saveBaseline
+  saveBaseline: saveBaseline,
+  // v4 liquidation flow
+  getReleasesToLiquidate: getReleasesToLiquidate
 };
