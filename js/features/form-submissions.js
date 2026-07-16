@@ -278,7 +278,7 @@ async function submitRequestForm(e) {
         return false;
     }
 
-    const confirmed = await Confirm.open('Submit Request?', `Submit for ₱${amount.toFixed(2)}?`);
+    const confirmed = await Confirm.open('Submit Request?', `Submit for ₱${fmtMoney(amount)}?`);
     if (!confirmed) return false;
 
     const resultDiv = document.getElementById('submissionResult');
@@ -435,7 +435,7 @@ async function submitLiquidateForm(e) {
         return false;
     }
     
-    const confirmed = await Confirm.open('Submit Liquidation?', `Liquidate ₱${amount.toFixed(2)} for request ${requestId}?`);
+    const confirmed = await Confirm.open('Submit Liquidation?', `Liquidate ₱${fmtMoney(amount)} for request ${requestId}?`);
     if (!confirmed) return false;
     
     try {
@@ -566,7 +566,7 @@ async function submitRecordCashForm(e) {
     }
     
     const confirmed = await Confirm.open('Record Incoming Cash?', 
-        `Record ₱${amount.toFixed(2)} for ${project}?\n\nThis will be submitted for approval.`);
+        `Record ₱${fmtMoney(amount)} for ${project}?\n\nThis will be submitted for approval.`);
     if (!confirmed) return false;
     
     const submitBtn = document.querySelector('#recordCashForm .btn-primary');
@@ -648,7 +648,7 @@ async function loadLiquidateDropdown() {
             opt.value = r.cashAdvanceId;
             opt.dataset.remaining = r.remaining;
             opt.dataset.projectId = r.projectId || '';
-            opt.textContent = `${r.cashAdvanceId} · ${r.requestor} · req ₱${parseFloat(r.requested).toFixed(2)} · remaining ₱${parseFloat(r.remaining).toFixed(2)}`;
+            opt.textContent = `${r.cashAdvanceId} · ${r.requestor} · req ₱${fmtMoney(parseFloat(r.requested))} · remaining ₱${fmtMoney(parseFloat(r.remaining))}`;
             select.appendChild(opt);
         });
 
@@ -687,7 +687,7 @@ async function loadReleaseDropdown() {
             option.value = r.id;
             option.dataset.amount = r.amount;
             const dateStr = r.createdAt ? new Date(r.createdAt).toLocaleDateString() : 'N/A';
-            option.textContent = `${r.id} · ${r.requestor} · ₱${parseFloat(r.amount).toFixed(2)} · ${dateStr}`;
+            option.textContent = `${r.id} · ${r.requestor} · ₱${fmtMoney(parseFloat(r.amount))} · ${dateStr}`;
             select.appendChild(option);
         });
         
@@ -741,13 +741,13 @@ async function submitReleaseForm(e) {
     
     if (amount != approvedAmount) {
         document.getElementById('rel-amount-field').classList.add('error');
-        UI.toast(`Release amount (₱${amount.toFixed(2)}) is not equal to the approved amount (₱${approvedAmount.toFixed(2)}).`, 'error');
+        UI.toast(`Release amount (₱${fmtMoney(amount)}) is not equal to the approved amount (₱${fmtMoney(approvedAmount)}).`, 'error');
         return false;
     }
     
     if (!valid) return false;
     
-    const confirmed = await Confirm.open('Release Cash?', `Release ₱${amount.toFixed(2)} for ${releaseId}?\n\nThis will be submitted for review by Administrators.`);
+    const confirmed = await Confirm.open('Release Cash?', `Release ₱${fmtMoney(amount)} for ${releaseId}?\n\nThis will be submitted for review by Administrators.`);
     if (!confirmed) return false;
     
     try {

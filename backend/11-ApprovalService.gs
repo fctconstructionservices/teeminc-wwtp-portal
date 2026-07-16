@@ -98,8 +98,10 @@ function getPendingApprovals() {
   const dailyRecords = readAll_('DailyRecords').filter(function (d) { 
     return d.status === 'pending' && d.createdBy && d.createdBy.toLowerCase() !== userEmail; 
   });
+  // v5 (item 13): exclude the submitter — same rule as every other type.
   const estimates = readAll_('EstimateGroups').filter(function (g) { 
-    return g.status === 'pending'; 
+    return g.status === 'pending' &&
+      String(g.submittedBy || '').toLowerCase() !== userEmail; 
   });
 
   // v3: pending manpower role requests (same flow as materials)

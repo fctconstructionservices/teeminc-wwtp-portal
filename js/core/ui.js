@@ -104,3 +104,18 @@ const Lightbox = {
         if (e.key === 'ArrowRight') Lightbox.next();
     }
 };
+
+/**
+ * fmtMoney / fmtNum (v5) - System-wide number formatting.
+ * fmtMoney(12345.6) -> "12,345.60"   (always 2 decimals, comma-grouped)
+ * fmtNum(12345.6)   -> "12,345.6"    (comma-grouped, no forced decimals)
+ * Every peso figure in the UI should render as ₱${fmtMoney(x)}.
+ */
+function fmtMoney(n) {
+    const v = Number(n) || 0;
+    return v.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function fmtNum(n) {
+    const v = Number(n) || 0;
+    return v.toLocaleString('en-PH', { maximumFractionDigits: 2 });
+}

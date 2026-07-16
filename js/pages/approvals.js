@@ -107,7 +107,7 @@ const RequestDetailModal = {
             <div class="detail-grid">
                 <div class="dg-item"><span class="dg-label">Requestor</span><span class="dg-value">${data.requestor}</span></div>
                 <div class="dg-item"><span class="dg-label">Project</span><span class="dg-value">${data.project || data.projectId || '—'}</span></div>
-                <div class="dg-item"><span class="dg-label">Amount</span><span class="dg-value">₱${(data.amount || 0).toFixed(2)}</span></div>
+                <div class="dg-item"><span class="dg-label">Amount</span><span class="dg-value">₱${fmtMoney((data.amount || 0))}</span></div>
                 <div class="dg-item"><span class="dg-label">Scope of Work</span><span class="dg-value">${data.scope || '—'}</span></div>
                 <div class="dg-item full"><span class="dg-label">Description</span><span class="dg-value">${data.description || '—'}</span></div>
                 ${attachmentsHtml}
@@ -264,7 +264,7 @@ const ApprovalsPage = {
                         <div class="ar-title">${r.requestor} — ${r.projectId || '—'}</div>
                         <div class="ar-meta">
                             <span class="ar-id">${r.id}</span>
-                            <span>₱${(r.amount || 0).toFixed(2)}</span>
+                            <span>₱${fmtMoney((r.amount || 0))}</span>
                             <span>${r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ''}</span>
                             <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${r.status}</span>
                         </div>
@@ -301,7 +301,7 @@ const ApprovalsPage = {
                         <div class="ar-title">${r.requestor} — ${r.projectId || '—'}</div>
                         <div class="ar-meta">
                             <span class="ar-id">${r.id}</span>
-                            <span>₱${(parseFloat(r.amount) || 0).toFixed(2)}</span>
+                            <span>₱${fmtMoney((parseFloat(r.amount) || 0))}</span>
                             <span>${r.paymentMethod || ''}${r.reference ? ' · ' + r.reference : ''}</span>
                             <span>${r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ''}</span>
                             <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${r.status}</span>
@@ -339,7 +339,7 @@ const ApprovalsPage = {
                         <div class="ar-title">${r.requestor} — ${r.projectId || '—'}</div>
                         <div class="ar-meta">
                             <span class="ar-id">${r.id}</span>
-                            <span>₱${(r.amount || 0).toFixed(2)}</span>
+                            <span>₱${fmtMoney((r.amount || 0))}</span>
                             <span>${r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ''}</span>
                             <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${r.status}</span>
                         </div>
@@ -565,7 +565,7 @@ const ApprovalsPage = {
                         <div class="ar-title">Release Cash — ${r.requestor} (${r.projectId || '—'})</div>
                         <div class="ar-meta">
                             <span class="ar-id">${r.id}</span>
-                            <span>₱${(r.amount || 0).toFixed(2)}</span>
+                            <span>₱${fmtMoney((r.amount || 0))}</span>
                             <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${r.status}</span>
                         </div>
                     </div>
@@ -605,7 +605,7 @@ const ApprovalsPage = {
                         <div class="mr-title">${r.type}: ${r.id} — ${r.projectId || '—'}</div>
                         <div class="mr-meta">
                             <span class="mr-id">${r.id}</span>
-                            ${r.amount ? `<span>₱${(r.amount || 0).toFixed(2)}</span>` : ''}
+                            ${r.amount ? `<span>₱${fmtMoney((r.amount || 0))}</span>` : ''}
                             ${r.description ? `<span>${r.description}</span>` : ''}
                             <span>${r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ''}</span>
                             <span class="stamp ${statusCls}" style="transform:none;padding:1px 8px;font-size:9px;">${r.status}</span>
@@ -676,8 +676,13 @@ const ApprovalsPage = {
         const confirmed = await Confirm.open('Approve Item?', `Approve ${id}?`);
         if (!confirmed) return;
         try {
-            await DataService.approveItemGeneric(id, type);
-            UI.toast(`${id} approved!`, 'success');
+            const result = await DataService.approveItemGeneric(id, type);
+            // v5: multi-sig — your signature may not be the last one needed
+            if (result && result.awaiting) {
+                UI.toast(`${id}: your approval is recorded — awaiting the other admins.`, 'success');
+            } else {
+                UI.toast(`${id} approved!`, 'success');
+            }
             if (closeModal) RequestDetailModal.close();
             this.load();
             HomePage.load();

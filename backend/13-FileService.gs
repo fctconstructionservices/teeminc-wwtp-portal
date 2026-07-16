@@ -43,8 +43,21 @@ function uploadImage(base64Data, fileName, mimeType) {
     );
     const folder = getOrCreateAttachmentsFolder_();
     const file = folder.createFile(blob);
-    return { success: true, url: file.getUrl(), id: file.getId() };
+    // v5 PHOTO FIX: file.getUrl() returns a Drive VIEWER page — it is not
+    // an image and always renders broken inside <img>. Share the file and
+    // return Drive's thumbnail endpoint, which serves the actual image.
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    return { success: true, url: driveImageUrl_(file.getId()), id: file.getId() };
   } catch (e) {
     throw new Error('Image upload failed: ' + e.message);
   }
+}
+
+/**
+ * driveImageUrl_ (v5) - Embeddable image URL for a Drive file id.
+ * The /thumbnail endpoint streams the image itself (up to the requested
+ * width), which is what <img src> needs.
+ */
+function driveImageUrl_(fileId) {
+  return 'https://drive.google.com/thumbnail?id=' + fileId + '&sz=w1200';
 }

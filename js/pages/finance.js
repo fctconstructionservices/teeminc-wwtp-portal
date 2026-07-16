@@ -32,10 +32,10 @@ const FinancePage = {
             <div class="chart-grid" style="margin-top:16px"><div class="chart-card"><div class="cc-head"><h3>Cash Advance Liquidation Aging</h3><span class="cc-note">unliquidated advances</span></div><div class="canvas-wrap short"><canvas id="agingChart"></canvas></div></div><div class="chart-card"><div class="cc-head"><h3>Project Cost Status</h3></div><table><thead><tr><th>Project</th><th style="text-align:right">Budget</th><th style="text-align:right">Actual</th><th>Status</th></tr></thead><tbody>`;
             data.costStatus.forEach(c => {
                 html +=
-                    `<tr><td>${c.project}</td><td class="amt">₱${c.budget.toLocaleString()}</td><td class="amt">₱${c.actual.toLocaleString()}</td><td><span class="stamp ${c.cls}">${c.status}</span></td></tr>`;
+                    `<tr><td>${c.project}</td><td class="amt">₱${fmtMoney(c.budget)}</td><td class="amt">₱${fmtMoney(c.actual)}</td><td><span class="stamp ${c.cls}">${c.status}</span></td></tr>`;
             });
             html += `</tbody></table></div></div>
-            <div class="data-source-note"><strong>Simulated data.</strong></div>`;
+            `;
             UI.setContent(container, html);
             this._buildCharts(data);
             this._loaded = true;
@@ -48,7 +48,15 @@ const FinancePage = {
         try {
             if (typeof Chart === 'undefined') return;
             const cf = data.cashflow;
-            const net = cf.inflow.map((v, i) => v - cf.outflow[i]);
+            // v5 (item 14): Net Cash is a RUNNING balance — everything that
+            // has come in minus everything that has gone out up to that
+            // month (seeded with the balance before the chart window) —
+            // not a per-month inflow−outflow difference.
+            let running = Number(cf.openingBalance || 0);
+            const net = cf.inflow.map((v, i) => {
+                running += v - (cf.outflow[i] || 0);
+                return running;
+            });
             this._charts.cf = new Chart(document.getElementById('cfChart'), {
                 type: 'bar',
                 data: {
@@ -85,9 +93,9 @@ const FinancePage = {
                     maintainAspectRatio: false,
                     plugins: {
                         legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8 } },
-                        tooltip: { callbacks: { label: c => `${c.dataset.label}: ₱${c.parsed.y.toLocaleString()}` } }
+                        tooltip: { callbacks: { label: c => `${c.dataset.label}: ₱${fmtMoney(c.parsed.y)}` } }
                     },
-                    scales: { y: { ticks: { callback: v => '₱' + (v / 1000) + 'k' },
+                    scales: { y: { ticks: { callback: v => '₱' + fmtNum(v / 1000) + 'k' },
                             grid: { color: '#EEEBE0' } }, x: { grid: { display: false } } }
                 }
             });
@@ -105,9 +113,9 @@ const FinancePage = {
                     maintainAspectRatio: false,
                     plugins: {
                         legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8 } },
-                        tooltip: { callbacks: { label: c => `${c.dataset.label}: ₱${c.parsed.y.toLocaleString()}` } }
+                        tooltip: { callbacks: { label: c => `${c.dataset.label}: ₱${fmtMoney(c.parsed.y)}` } }
                     },
-                    scales: { y: { ticks: { callback: v => '₱' + (v / 1000) + 'k' },
+                    scales: { y: { ticks: { callback: v => '₱' + fmtNum(v / 1000) + 'k' },
                             grid: { color: '#EEEBE0' } }, x: { grid: { display: false } } }
                 }
             });
@@ -145,8 +153,8 @@ const FinancePage = {
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: { legend: { display: false }, tooltip: { callbacks: { label: c =>
-                                '₱' + c.parsed.x.toLocaleString() } } },
-                    scales: { x: { ticks: { callback: v => '₱' + (v / 1000) + 'k' },
+                                '₱' + fmtMoney(c.parsed.x) } } },
+                    scales: { x: { ticks: { callback: v => '₱' + fmtNum(v / 1000) + 'k' },
                             grid: { color: '#EEEBE0' } }, y: { grid: { display: false } } }
                 }
             });

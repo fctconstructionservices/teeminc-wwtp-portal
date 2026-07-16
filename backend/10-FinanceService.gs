@@ -348,6 +348,9 @@ function liquidationTotalForCA_(caId, allLiquidations) {
  * approved liquidations total >= the amount requested.
  */
 function getReleasesToLiquidate() {
+  // v5 (item 11): kanya-kanyang liquidation — a user only sees THEIR OWN
+  // advances awaiting liquidation, since they are the one accountable.
+  var me = currentUserEmail_().toLowerCase();
   var releases = readAll_('CashRelease').filter(function (r) { return r.status === 'Reviewed'; });
   var cas = readAll_('CashAdvanceRequests');
   var liqs = readAll_('Liquidations');
@@ -357,6 +360,7 @@ function getReleasesToLiquidate() {
     if (!caId) return;
     var ca = cas.find(function (x) { return x.id === caId; });
     if (!ca) return;
+    if (String(ca.requestorEmail || '').toLowerCase() !== me) return;
     var requested = parseFloat(ca.amount) || 0;
     var liquidated = liquidationTotalForCA_(caId, liqs);
     if (liquidated >= requested) return; // item 5: fully liquidated -> drop
@@ -411,10 +415,10 @@ function getFinanceData() {
   const pendingAmount = pendingCA.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
 
   const kpis = [
-    { label: 'Total Revenue', value: '₱' + totalRevenue.toFixed(2), sub: 'All projects', cls: 'good' },
-    { label: 'Total Expenses', value: '₱' + totalExpenses.toFixed(2), sub: 'All projects', cls: '' },
-    { label: 'Cash Position', value: '₱' + cashPosition.toFixed(2), sub: 'Revenue - Expenses', cls: 'good' },
-    { label: 'Pending Requests', value: String(pendingCA.length), sub: '₱' + pendingAmount.toFixed(2) + ' total', cls: 'warn' }
+    { label: 'Total Revenue', value: '₱' + fmtMoney_(totalRevenue), sub: 'All projects', cls: 'good' },
+    { label: 'Total Expenses', value: '₱' + fmtMoney_(totalExpenses), sub: 'All projects', cls: '' },
+    { label: 'Cash Position', value: '₱' + fmtMoney_(cashPosition), sub: 'Revenue - Expenses', cls: 'good' },
+    { label: 'Pending Requests', value: String(pendingCA.length), sub: '₱' + fmtMoney_(pendingAmount) + ' total', cls: 'warn' }
   ];
 
   const months = [];
@@ -434,7 +438,18 @@ function getFinanceData() {
       return rd.getFullYear() === m.year && rd.getMonth() === m.month && r.status === 'Reviewed';
     }).reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
   });
-  const cashflow = { labels: months.map(function (m) { return m.label; }), inflow: inflow, outflow: outflow, projectedFrom: months.length };
+  // v5 (item 14): opening balance = all cash movement BEFORE the 6-month
+  // window, so the Net line is a true running cash position (all inflow
+  // minus all outflow to date), not a per-month difference.
+  const windowStart = new Date(months[0].year, months[0].month, 1);
+  const openInflow = allIncoming.filter(function (c) {
+    return c.status === 'Approved' && new Date(c.transactionDate || c.createdAt) < windowStart;
+  }).reduce(function (s, c) { return s + Number(c.amount || 0); }, 0);
+  const openOutflow = allReleases.filter(function (r) {
+    return r.status === 'Reviewed' && new Date(r.releasedAt || r.createdAt) < windowStart;
+  }).reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
+
+  const cashflow = { labels: months.map(function (m) { return m.label; }), inflow: inflow, outflow: outflow, projectedFrom: months.length, openingBalance: openInflow - openOutflow };
 
   const budgetVsActual = {
     labels: projects.map(function (p) { return p.name; }),

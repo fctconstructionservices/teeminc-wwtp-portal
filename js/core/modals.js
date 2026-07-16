@@ -12,6 +12,22 @@
 
 // ─── PRINT MODAL ─────────────────────────────────────────────────
 
+/**
+ * driveImgSrc (v5 PHOTO FIX) - Old records stored Drive VIEWER page URLs
+ * (…/file/d/ID/view…), which always render broken inside <img>. This
+ * rewrites any Drive link to the /thumbnail endpoint, which streams the
+ * actual image. New uploads already store the thumbnail form.
+ */
+function driveImgSrc(url) {
+    if (!url) return url;
+    const m = String(url).match(/drive\.google\.com\/file\/d\/([\w-]+)/) ||
+              String(url).match(/[?&]id=([\w-]+)/);
+    if (m && String(url).indexOf('thumbnail') === -1) {
+        return 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w1200';
+    }
+    return url;
+}
+
 const PrintModal = {
     /**
      * open(record, meta) — meta (v3, optional):
@@ -246,30 +262,30 @@ const SOWBreakdownModal = {
         let html = `
                 <div class="print-header">
                     <h2>${sowId} — Breakdown</h2>
-                    <div class="print-mono" style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--ink-soft);">Total Estimate: ₱${grandTotal.toFixed(2)}</div>
+                    <div class="print-mono" style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--ink-soft);">Total Estimate: ₱${fmtMoney(grandTotal)}</div>
                 </div>
 
                 <div class="bm-summary">
-                    <div class="bm-card"><div class="bm-label">Materials</div><div class="bm-value">₱${matTotal.toFixed(2)}</div></div>
-                    <div class="bm-card"><div class="bm-label">Equipment</div><div class="bm-value">₱${eqTotal.toFixed(2)}</div></div>
-                    <div class="bm-card"><div class="bm-label">Manpower</div><div class="bm-value">₱${laborTotal.toFixed(2)}</div></div>
-                    <div class="bm-card"><div class="bm-label">Indirect Costs</div><div class="bm-value">₱${indirectTotal.toFixed(2)}</div></div>
+                    <div class="bm-card"><div class="bm-label">Materials</div><div class="bm-value">₱${fmtMoney(matTotal)}</div></div>
+                    <div class="bm-card"><div class="bm-label">Equipment</div><div class="bm-value">₱${fmtMoney(eqTotal)}</div></div>
+                    <div class="bm-card"><div class="bm-label">Manpower</div><div class="bm-value">₱${fmtMoney(laborTotal)}</div></div>
+                    <div class="bm-card"><div class="bm-label">Indirect Costs</div><div class="bm-value">₱${fmtMoney(indirectTotal)}</div></div>
                 </div>
 
                 <div class="print-section"><div class="ps-title">BOM (Materials)</div>
-                    ${materials.length ? `<table class="ps-table"><thead><tr><th>Material</th><th>Description</th><th style="text-align:right">Qty</th><th style="text-align:right">Rate</th><th style="text-align:right">Cost</th></tr></thead><tbody>${materials.map(m => `<tr><td>${m.materialName || m.material}</td><td>${m.desc || '—'}</td><td style="text-align:right">${m.qty}</td><td style="text-align:right">₱${parseFloat(m.rate || 0).toFixed(2)}</td><td style="text-align:right">₱${parseFloat(m.cost || 0).toFixed(2)}</td></tr>`).join('')}</tbody></table>` : `<p style="font-size:12px;color:var(--ink-soft);">No materials assigned.</p>`}
+                    ${materials.length ? `<table class="ps-table"><thead><tr><th>Material</th><th>Description</th><th style="text-align:right">Qty</th><th style="text-align:right">Rate</th><th style="text-align:right">Cost</th></tr></thead><tbody>${materials.map(m => `<tr><td>${m.materialName || m.material}</td><td>${m.desc || '—'}</td><td style="text-align:right">${m.qty}</td><td style="text-align:right">₱${fmtMoney(parseFloat(m.rate || 0))}</td><td style="text-align:right">₱${fmtMoney(parseFloat(m.cost || 0))}</td></tr>`).join('')}</tbody></table>` : `<p style="font-size:12px;color:var(--ink-soft);">No materials assigned.</p>`}
                 </div>
 
                 <div class="print-section"><div class="ps-title">Equipment Needed</div>
-                    ${equipment.length ? `<table class="ps-table"><thead><tr><th>Equipment</th><th>Description</th><th style="text-align:right">Qty</th><th style="text-align:right">Duration</th><th style="text-align:right">Rate</th><th style="text-align:right">Cost</th></tr></thead><tbody>${equipment.map(e => `<tr><td>${e.equipName || e.equipment}</td><td>${e.desc || '—'}</td><td style="text-align:right">${e.qty}</td><td style="text-align:right">${e.duration}</td><td style="text-align:right">₱${parseFloat(e.rate || 0).toFixed(2)}</td><td style="text-align:right">₱${parseFloat(e.cost || 0).toFixed(2)}</td></tr>`).join('')}</tbody></table>` : `<p style="font-size:12px;color:var(--ink-soft);">No equipment assigned.</p>`}
+                    ${equipment.length ? `<table class="ps-table"><thead><tr><th>Equipment</th><th>Description</th><th style="text-align:right">Qty</th><th style="text-align:right">Duration</th><th style="text-align:right">Rate</th><th style="text-align:right">Cost</th></tr></thead><tbody>${equipment.map(e => `<tr><td>${e.equipName || e.equipment}</td><td>${e.desc || '—'}</td><td style="text-align:right">${e.qty}</td><td style="text-align:right">${e.duration}</td><td style="text-align:right">₱${fmtMoney(parseFloat(e.rate || 0))}</td><td style="text-align:right">₱${fmtMoney(parseFloat(e.cost || 0))}</td></tr>`).join('')}</tbody></table>` : `<p style="font-size:12px;color:var(--ink-soft);">No equipment assigned.</p>`}
                 </div>
 
                 <div class="print-section"><div class="ps-title">Manpower</div>
-                    ${labor.length ? `<table class="ps-table"><thead><tr><th>Role</th><th>Description</th><th style="text-align:right">Qty</th><th style="text-align:right">Duration</th><th style="text-align:right">Rate</th><th style="text-align:right">Cost</th></tr></thead><tbody>${labor.map(l => `<tr><td>${l.role}</td><td>${l.desc || '—'}</td><td style="text-align:right">${l.qty}</td><td style="text-align:right">${l.duration}</td><td style="text-align:right">₱${parseFloat(l.rate || 0).toFixed(2)}</td><td style="text-align:right">₱${parseFloat(l.cost || 0).toFixed(2)}</td></tr>`).join('')}</tbody></table>` : `<p style="font-size:12px;color:var(--ink-soft);">No manpower assigned.</p>`}
+                    ${labor.length ? `<table class="ps-table"><thead><tr><th>Role</th><th>Description</th><th style="text-align:right">Qty</th><th style="text-align:right">Duration</th><th style="text-align:right">Rate</th><th style="text-align:right">Cost</th></tr></thead><tbody>${labor.map(l => `<tr><td>${l.role}</td><td>${l.desc || '—'}</td><td style="text-align:right">${l.qty}</td><td style="text-align:right">${l.duration}</td><td style="text-align:right">₱${fmtMoney(parseFloat(l.rate || 0))}</td><td style="text-align:right">₱${fmtMoney(parseFloat(l.cost || 0))}</td></tr>`).join('')}</tbody></table>` : `<p style="font-size:12px;color:var(--ink-soft);">No manpower assigned.</p>`}
                 </div>
 
                 <div class="print-section"><div class="ps-title">Indirect Costs</div>
-                    ${indirect.length ? `<table class="ps-table"><thead><tr><th>Description</th><th>Type</th><th style="text-align:right">Amount</th></tr></thead><tbody>${indirect.map(i => `<tr><td>${i.desc || '—'}</td><td>${i.type || '—'}</td><td style="text-align:right">₱${parseFloat(i.amount || 0).toFixed(2)}</td></tr>`).join('')}</tbody></table>` : `<p style="font-size:12px;color:var(--ink-soft);">No indirect costs assigned.</p>`}
+                    ${indirect.length ? `<table class="ps-table"><thead><tr><th>Description</th><th>Type</th><th style="text-align:right">Amount</th></tr></thead><tbody>${indirect.map(i => `<tr><td>${i.desc || '—'}</td><td>${i.type || '—'}</td><td style="text-align:right">₱${fmtMoney(parseFloat(i.amount || 0))}</td></tr>`).join('')}</tbody></table>` : `<p style="font-size:12px;color:var(--ink-soft);">No indirect costs assigned.</p>`}
                 </div>
 
                 <div class="print-actions">

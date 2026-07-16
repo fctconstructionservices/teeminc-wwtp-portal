@@ -20,9 +20,14 @@ function addDailyRecord(projectId, data) {
   // The frontend also checks this, but the sheet is the source of
   // truth — two users submitting the same date simultaneously (or a
   // stale browser tab) must not be able to create duplicates.
+  // v5 FIX: dates read back from Sheets arrive as Date objects (long ISO
+  // when stringified), so a raw string compare against the form's
+  // 'yyyy-MM-dd' NEVER matched — the guard silently let duplicates in.
+  // Normalizing both sides with fmtDate_ makes the compare reliable.
+  const wanted = fmtDate_(data.date);
   const dup = readAll_('DailyRecords').find(function (d) {
     return d.projectId === projectId &&
-      String(d.date) === String(data.date) &&
+      fmtDate_(d.date) === wanted &&
       d.status !== 'rejected';
   });
   if (dup) {
@@ -50,7 +55,9 @@ function addDailyRecord(projectId, data) {
         );
         const folder = getOrCreateAttachmentsFolder_();
         const file = folder.createFile(blob);
-        photoUrls.push(file.getUrl());
+        // v5: share + embeddable thumbnail URL (see driveImageUrl_)
+        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        photoUrls.push(driveImageUrl_(file.getId()));
       } catch (e) {}
     });
   }

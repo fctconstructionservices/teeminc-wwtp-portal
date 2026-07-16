@@ -182,6 +182,28 @@ Object.assign(ProjectPage, {
         const photoResults = await Promise.all(photoPromises);
         data.photos = photoResults.filter(r => r && r.url).map(r => r.url);
 
+        // v5 (item 10): work-accomplished rows have their own photo input,
+        // but getRows() only captured the file input's .value — a useless
+        // "C:\\fakepath\\…" string that was stored as the image. Upload each
+        // work-row photo properly and store its real Drive URL instead.
+        const workRows = document.querySelectorAll('#workEntries .entry-row');
+        const workUploads = [];
+        workRows.forEach((row, i) => {
+            const inp = row.querySelector('.wk-image');
+            if (inp && inp.files && inp.files.length > 0) {
+                const file = inp.files[0];
+                workUploads.push(
+                    fileToBase64_(file)
+                        .then(b64 => DataService.uploadImage(b64, file.name, file.type))
+                        .then(res => { if (res && res.url && data.workAccomplished[i]) data.workAccomplished[i].image = res.url; })
+                        .catch(err => { console.error('Work photo upload error:', err); if (data.workAccomplished[i]) data.workAccomplished[i].image = ''; })
+                );
+            } else if (data.workAccomplished[i]) {
+                data.workAccomplished[i].image = '';   // never persist fakepath junk
+            }
+        });
+        await Promise.all(workUploads);
+
         const confirmed = await Confirm.open('Save Daily Record?', `Save record for ${data.date}?`);
         if (!confirmed) return;
         try {
@@ -428,15 +450,19 @@ Object.assign(ProjectPage, {
     // ─── PHOTOS ────────────────────────────────────────────────
     renderPhotos(p) {
         const container = document.getElementById('proj-tab-photos');
-        const images = p.photos || [];
+        // v5 (item 10): the gallery never included record.photos — the
+        // photos users actually upload on the daily form — and old rows
+        // contain fakepath junk. Collect everything, keep only real URLs,
+        // and rewrite Drive viewer links to embeddable thumbnails.
+        let images = [];
         (p.dailyRecords || []).forEach(record => {
-            if (record.workAccomplished) {
-                record.workAccomplished.forEach(w => { if (w.image) images.push(w.image); });
-            }
-            if (record.issues) {
-                record.issues.forEach(iss => { if (iss.image) images.push(iss.image); });
-            }
+            (record.photos || []).forEach(u => images.push(u));
+            (record.workAccomplished || []).forEach(w => { if (w.image) images.push(w.image); });
+            (record.issues || []).forEach(iss => { if (iss.image) images.push(iss.image); });
         });
+        images = images
+            .filter(u => typeof u === 'string' && u.indexOf('http') === 0)
+            .map(u => driveImgSrc(u));
         if (images.length === 0) {
             images.push('https://placehold.co/600x400/24455A/FFFFFF?text=No+Photos');
         }

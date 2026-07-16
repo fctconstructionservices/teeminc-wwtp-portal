@@ -56,8 +56,8 @@ function getHomeData() {
   const gauges = [
     { label: 'Pending Approval', value: String(pendingCA.length + pendingLiquidation.length), color: '#C2860F', dashOffset: 70 },
     { label: 'Pending Release', value: String(pendingReleases.length), color: '#24455A', dashOffset: 55 },
-    { label: 'Released, This Month', value: '₱' + releasedThisMonth.toLocaleString(), color: '#2F7A46', dashOffset: 60 },
-    { label: 'Total Liquid Cash', value: '₱' + availableBudget.toLocaleString(), color: '#24455A', dashOffset: 30 }
+    { label: 'Released, This Month', value: '₱' + fmtMoney_(releasedThisMonth), color: '#2F7A46', dashOffset: 60 },
+    { label: 'Total Liquid Cash', value: '₱' + fmtMoney_(availableBudget), color: '#24455A', dashOffset: 30 }
   ];
 
   const logs = readAll_('ActivityLog').slice(-10).reverse().map(function (l) {
@@ -151,7 +151,10 @@ function getProjectData(projectId) {
     .map(function (d) {
       return {
         id: d.id,
-        date: d.date,
+        // v5: normalized to 'yyyy-MM-dd' — Sheets returns Date objects for
+        // date cells; unformatted they serialize to long ISO strings, which
+        // broke the display AND the duplicate-date check.
+        date: fmtDate_(d.date),
         weatherAM: d.weatherAM,
         weatherPM: d.weatherPM,
         status: d.status || 'draft',
@@ -171,6 +174,16 @@ function getProjectData(projectId) {
   const allLabor = readAll_('EstimateLabor');
   const allEq = readAll_('EstimateEquipment');
   const allInd = readAll_('EstimateIndirect');
+
+  // v5 (item 13): which admins already signed each pending group, so the
+  // Estimates tab can hide the Approve button from someone who signed.
+  const allSignoffs = readAll_('Approvals');
+  const approvedByFor_ = function (groupId) {
+    return allSignoffs
+      .filter(function (a) { return a.requestId === groupId && a.decision === 'Approved'; })
+      .map(function (a) { return String(a.approver || '').toLowerCase(); });
+  };
+
   const estimateGroups = groups.map(function (g) {
     return {
       id: g.id,
@@ -178,6 +191,7 @@ function getProjectData(projectId) {
       sowDescription: g.sowDescription,
       status: g.status,
       submittedBy: g.submittedBy || '',
+      approvedBy: g.status === 'pending' ? approvedByFor_(g.id) : [],
       materials: allMat.filter(function (m) { return m.groupId === g.id; }),
       labor: allLabor.filter(function (l) { return l.groupId === g.id; }),
       equipment: allEq.filter(function (e) { return e.groupId === g.id; }),
@@ -200,7 +214,21 @@ function getProjectData(projectId) {
     //   'manual'   -> the stored budget value (edited by hand)
     const g = groupsById[s.id];
     if (g && s.budgetMode !== 'manual') {
-      s.budget = computeEstimateGroupTotalByMode_(g.id, s.budgetMode);
+      // v5 PERF: compute from the estimate rows already loaded above,
+      // instead of re-reading the four estimate sheets per SOW item
+      // (which cost 4 full-sheet reads × every SOW on each page load).
+      if (s.budgetMode === 'indirect') {
+        s.budget = allInd.filter(function (i) { return i.groupId === g.id; })
+          .reduce(function (sum, i) { return sum + (parseFloat(i.amount) || 0); }, 0);
+      } else {
+        s.budget =
+          allMat.filter(function (m) { return m.groupId === g.id; })
+            .reduce(function (sum, m) { return sum + (parseFloat(m.cost) || 0); }, 0) +
+          allLabor.filter(function (l) { return l.groupId === g.id; })
+            .reduce(function (sum, l) { return sum + (parseFloat(l.cost) || 0); }, 0) +
+          allEq.filter(function (e) { return e.groupId === g.id; })
+            .reduce(function (sum, e) { return sum + (parseFloat(e.cost) || 0); }, 0);
+      }
     }
 
     // Actual = sum of Reviewed cash releases tagged with this SOW item.

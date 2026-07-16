@@ -196,7 +196,7 @@ const HomePage = {
                 queueHtml += `<table><thead><tr><th>Request</th><th>Project</th><th style="text-align:right">Amount</th><th>Status</th></tr></thead><tbody>`;
                 activePending.slice(0, 10).forEach(r => {
                     const projectDisplay = r.projectId || r.project || '—';
-                    queueHtml += `<tr><td><span class="req-id">${r.id}</span><br><span style="color:var(--ink-soft);font-size:11px">${r.requestor}</span></td><td>${projectDisplay}</td><td class="amt">₱${(r.amount || 0).toFixed(2)}</td><td><span class="stamp pending">${r.status}</span></td></tr>`;
+                    queueHtml += `<tr><td><span class="req-id">${r.id}</span><br><span style="color:var(--ink-soft);font-size:11px">${r.requestor}</span></td><td>${projectDisplay}</td><td class="amt">₱${fmtMoney((r.amount || 0))}</td><td><span class="stamp pending">${r.status}</span></td></tr>`;
                 });
                 queueHtml += `</tbody></table>`;
             }
@@ -279,9 +279,9 @@ const HomePage = {
                         <span class="stamp ${statusClass}">${p.status || 'Ongoing'}</span>
                     </div>
                     <div class="pc-stats">
-                        <div class="pc-stat"><div class="k">Revenue</div><div class="v">₱${(p.revenue || 0).toFixed(2)}</div></div>
-                        <div class="pc-stat"><div class="k">Expenses</div><div class="v">₱${(p.expenses || 0).toFixed(2)}</div></div>
-                        <div class="pc-stat"><div class="k">Cash Position</div><div class="v">₱${(p.cashPosition || 0).toFixed(2)}</div></div>
+                        <div class="pc-stat"><div class="k">Revenue</div><div class="v">₱${fmtMoney((p.revenue || 0))}</div></div>
+                        <div class="pc-stat"><div class="k">Expenses</div><div class="v">₱${fmtMoney((p.expenses || 0))}</div></div>
+                        <div class="pc-stat"><div class="k">Cash Position</div><div class="v">₱${fmtMoney((p.cashPosition || 0))}</div></div>
                     </div>
                 </button>`;
         });

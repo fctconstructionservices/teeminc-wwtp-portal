@@ -228,7 +228,7 @@ Object.assign(ProjectPage, {
 
             const variance = budget - actual;
             const varianceClass = variance >= 0 ? 'positive' : 'negative';
-            const varianceLabel = variance >= 0 ? `+₱${variance.toFixed(2)}` : `-₱${Math.abs(variance).toFixed(2)}`;
+            const varianceLabel = variance >= 0 ? `+₱${fmtMoney(variance)}` : `-₱${fmtMoney(Math.abs(variance))}`;
 
             let estimateNote = '';
             if (estimateStatus === 'pending') {
@@ -255,7 +255,7 @@ Object.assign(ProjectPage, {
                     <div class="sow-numbers">
                         <div class="sow-number-group estimate">
                             <span class="sn-label">Estimate</span>
-                            <span class="sn-value">₱${itemEstimate.toFixed(2)}</span>
+                            <span class="sn-value">₱${fmtMoney(itemEstimate)}</span>
                             <span class="budget-source" style="font-size:8px;color:${estimateStatus === 'approved' ? 'var(--green)' : 'var(--ink-soft)'};">${estimateNote}</span>
                         </div>
                         
@@ -264,13 +264,13 @@ Object.assign(ProjectPage, {
                                 <button class="btn-sm" style="padding:0 5px;font-size:9px;margin-left:4px;" title="Edit how this budget is computed"
                                     onclick="event.stopPropagation();ProjectPage.editSOWBudget('${item.id}')">✎</button>
                             </span>
-                            <span class="sn-value">₱${budget.toFixed(2)}</span>
+                            <span class="sn-value">₱${fmtMoney(budget)}</span>
                             ${budgetSourceLabel}
                         </div>
                         
                         <div class="sow-number-group actual">
                             <span class="sn-label">Actual</span>
-                            <span class="sn-value">₱${actual.toFixed(2)}</span>
+                            <span class="sn-value">₱${fmtMoney(actual)}</span>
                             <span class="actual-status">${pct.toFixed(1)}% used</span>
                         </div>
                         
@@ -388,7 +388,7 @@ Object.assign(ProjectPage, {
                 </div>
                 <div class="field" id="sowManualWrap" style="display:${mode==='manual'?'block':'none'};">
                     <label>Manual Budget (₱)</label>
-                    <input type="number" id="sow-budget-manual" step="0.01" min="0" value="${(item.budget||0).toFixed(2)}" />
+                    <input type="number" id="sow-budget-manual" step="0.01" min="0" value="${fmtMoney((item.budget||0))}" />
                 </div>
                 <p style="font-size:11px;color:var(--ink-soft);">Auto and Indirect recompute live from the estimate; approving an estimate also writes back using this setting. Manual is never overwritten.</p>
                 <div class="submit-row">
@@ -404,7 +404,7 @@ Object.assign(ProjectPage, {
         const manual = parseFloat(document.getElementById('sow-budget-manual').value) || 0;
         try {
             const result = await DataService.updateSOWBudget(this._currentProjectId, sowId, mode, manual);
-            UI.toast(`Budget for ${sowId} set to ₱${(result.budget||0).toFixed(2)} (${mode}).`, 'success');
+            UI.toast(`Budget for ${sowId} set to ₱${fmtMoney((result.budget||0))} (${mode}).`, 'success');
             document.getElementById('sowBudgetModal').remove();
             this.refreshSOWData();
         } catch (err) {
@@ -436,7 +436,7 @@ Object.assign(ProjectPage, {
                     maintainAspectRatio: false,
                     plugins: {
                         legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8 } },
-                        tooltip: { callbacks: { label: c => `${c.dataset.label}: ₱${c.parsed.y.toFixed(2)}` } }
+                        tooltip: { callbacks: { label: c => `${c.dataset.label}: ₱${fmtMoney(c.parsed.y)}` } }
                     },
                     scales: {
                         y: { ticks: { callback: v => '₱' + (v / 1000) + 'k' }, grid: { color: '#EEEBE0' } },

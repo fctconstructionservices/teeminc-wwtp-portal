@@ -58,10 +58,16 @@ const SCHEMAS = {
   // v3: submittedBy appended — who sent the estimate for approval,
   // so the Approve button can be hidden from the submitter.
   EstimateGroups: ['id', 'projectId', 'sowId', 'sowDescription', 'status', 'submittedBy'],
-  EstimateMaterials: ['id', 'groupId', 'material', 'materialName', 'desc', 'qty', 'rate', 'cost'],
+  // v5: unit appended — auto-filled from the selected material's unit
+  EstimateMaterials: ['id', 'groupId', 'material', 'materialName', 'desc', 'qty', 'rate', 'cost', 'unit'],
   EstimateLabor: ['id', 'groupId', 'role', 'desc', 'qty', 'duration', 'rate', 'cost'],
-  EstimateEquipment: ['id', 'groupId', 'equipment', 'equipName', 'desc', 'qty', 'duration', 'rate', 'cost'],
-  EstimateIndirect: ['id', 'groupId', 'desc', 'type', 'amount'],
+  // v5: unit appended — auto-filled from the selected equipment's unit
+  EstimateEquipment: ['id', 'groupId', 'equipment', 'equipName', 'desc', 'qty', 'duration', 'rate', 'cost', 'unit'],
+  // v5: multiplier appended — indirect cost = direct total × multiplier
+  // (VAT: (direct + non-VAT indirect) × multiplier, default 0.12). The
+  // computed peso value is still persisted in 'amount' so every existing
+  // total/rollup keeps working unchanged.
+  EstimateIndirect: ['id', 'groupId', 'desc', 'type', 'amount', 'multiplier'],
   Materials: ['id', 'code', 'name', 'desc', 'category', 'subcategory', 'unit', 'rate', 'brand', 'supplier',
     'model', 'specs', 'grade', 'size', 'length', 'thickness', 'weight', 'standardCode', 'application',
     'image', 'docsJSON', 'notes', 'status', 'requestedBy', 'createdAt'],

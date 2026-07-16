@@ -109,3 +109,18 @@ function fmtDate_(v) {
   var m = s.match(/^(\d{4}-\d{2}-\d{2})/);
   return m ? m[1] : s;
 }
+
+/**
+ * fmtMoney_ (v5) - Backend money formatting with comma grouping and two
+ * decimals ("12,345.60"), for any peso string composed server-side (KPI
+ * cards, gauges). Manual grouping — Apps Script's toLocaleString is not
+ * reliable for this.
+ */
+function fmtMoney_(n) {
+  var v = Number(n) || 0;
+  var neg = v < 0 ? '-' : '';
+  v = Math.abs(v);
+  var parts = v.toFixed(2).split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return neg + parts[0] + '.' + parts[1];
+}

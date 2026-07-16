@@ -95,11 +95,11 @@ const ProjectPage = {
             let html = `
             <div class="section-head"><h2>Project Snapshot</h2><div class="rule"></div></div>
             <div class="kpi-strip kpi-strip-5">
-                <div class="kpi-card good"><div class="k-label">Revenue</div><div class="k-val mono">₱${(p.revenue || 0).toFixed(2)}</div></div>
-                <div class="kpi-card"><div class="k-label">Expenses</div><div class="k-val mono">₱${(p.expenses || 0).toFixed(2)}</div></div>
-                <div class="kpi-card good"><div class="k-label">Cash Position</div><div class="k-val mono">₱${(p.cashPosition || 0).toFixed(2)}</div></div>
+                <div class="kpi-card good"><div class="k-label">Revenue</div><div class="k-val mono">₱${fmtMoney((p.revenue || 0))}</div></div>
+                <div class="kpi-card"><div class="k-label">Expenses</div><div class="k-val mono">₱${fmtMoney((p.expenses || 0))}</div></div>
+                <div class="kpi-card good"><div class="k-label">Cash Position</div><div class="k-val mono">₱${fmtMoney((p.cashPosition || 0))}</div></div>
                 <div class="kpi-card"><div class="k-label">Requests</div><div class="k-val">${(p.requests || []).length}</div></div>
-                <div class="kpi-card warn"><div class="k-label">Pending / Unliquidated</div><div class="k-val mono">₱${pendingTotal.toFixed(2)}</div></div>
+                <div class="kpi-card warn"><div class="k-label">Pending / Unliquidated</div><div class="k-val mono">₱${fmtMoney(pendingTotal)}</div></div>
             </div>
 
             <div class="project-tabs">
@@ -118,7 +118,7 @@ const ProjectPage = {
             <div id="proj-tab-sow" class="project-tab-content"></div>
             <div id="proj-tab-estimates" class="project-tab-content"></div>
 
-            <div class="data-source-note"><strong>Simulated data.</strong> Estimates are grouped by SOW with draft / pending / approved states.</div>`;
+            <div class="data-source-note">Estimates are grouped by SOW with draft / pending / approved states.</div>`;
 
             UI.setContent(container, html);
             this.renderOverview(p);
@@ -405,7 +405,7 @@ const ProjectPage = {
                 const cls = r.status === 'Approved for Release' || r.status === 'Released' || r.status ===
                     'Approved' ? 'approved' : r.status === 'Pending' ? 'pending' : 'rejected';
                 html +=
-                    `<tr><td><span class="req-id">${r.id}</span></td><td>${r.requestor}</td><td>${r.description || r.purpose || '—'}</td><td class="amt">₱${(r.amount || 0).toFixed(2)}</td><td><span class="stamp ${cls}">${r.status}</span></td></tr>`;
+                    `<tr><td><span class="req-id">${r.id}</span></td><td>${r.requestor}</td><td>${r.description || r.purpose || '—'}</td><td class="amt">₱${fmtMoney((r.amount || 0))}</td><td><span class="stamp ${cls}">${r.status}</span></td></tr>`;
             });
         }
         html += `</tbody></table></div>
@@ -417,7 +417,7 @@ const ProjectPage = {
         else {
             incomingCash.forEach(c => {
                 html +=
-                    `<tr><td class="mono" style="font-size:11.5px">${c.date}</td><td>${c.name}</td><td>${c.desc}</td><td class="amt">₱${(c.amount || 0).toFixed(2)}</td></tr>`;
+                    `<tr><td class="mono" style="font-size:11.5px">${c.date}</td><td>${c.name}</td><td>${c.desc}</td><td class="amt">₱${fmtMoney((c.amount || 0))}</td></tr>`;
             });
         }
         html += `</tbody></table></div>`;
@@ -467,7 +467,7 @@ const ProjectPage = {
                         responsive: true,
                         maintainAspectRatio: false,
                         plugins: { legend: { display: false }, tooltip: { callbacks: { label: c =>
-                                        '₱' + c.parsed.y.toFixed(2) } } },
+                                        '₱' + fmtMoney(c.parsed.y) } } },
                         scales: { y: { ticks: { callback: v => '₱' + (v / 1000) + 'k' },
                                 grid: { color: '#EEEBE0' } }, x: { grid: { display: false } } }
                     }

@@ -38,7 +38,7 @@ async function performSearch() {
         results.forEach(r => {
             const cls = r.status === 'Approved' || r.status === 'Reviewed' ? 'approved' : 
                        r.status === 'Pending' || r.status === 'For Review' ? 'pending' : 'rejected';
-            rows += `<tr><td><span class="req-id">${r.id}</span></td><td>${r.requestor || r.name || '—'}</td><td>${r.projectId || '—'}</td><td class="amt">₱${(r.amount || 0).toFixed(2)}</td><td><span class="stamp ${cls}">${r.status || '—'}</span></td></tr>`;
+            rows += `<tr><td><span class="req-id">${r.id}</span></td><td>${r.requestor || r.name || '—'}</td><td>${r.projectId || '—'}</td><td class="amt">₱${fmtMoney((r.amount || 0))}</td><td><span class="stamp ${cls}">${r.status || '—'}</span></td></tr>`;
         });
         tbody.innerHTML = rows;
     } catch (err) {
