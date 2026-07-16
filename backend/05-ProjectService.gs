@@ -131,8 +131,8 @@ function getProjectData(projectId) {
         description: s.description,
         budget: parseFloat(s.budget || 0),
         actual: parseFloat(s.actual || 0),
-        startDate: s.startDate || '',
-        endDate: s.endDate || '',
+        startDate: fmtDate_(s.startDate),
+        endDate: fmtDate_(s.endDate),
         status: s.status || 'On Track',
         qty: parseFloat(s.qty || 0),
         unit: s.unit || '',
@@ -140,8 +140,8 @@ function getProjectData(projectId) {
         budgetMode: s.budgetMode || 'auto',
         predecessors: String(s.predecessors || ''),
         isMilestone: String(s.isMilestone).toUpperCase() === 'TRUE',
-        baselineStart: s.baselineStart || '',
-        baselineEnd: s.baselineEnd || ''
+        baselineStart: fmtDate_(s.baselineStart),
+        baselineEnd: fmtDate_(s.baselineEnd)
       };
     });
 
@@ -247,8 +247,8 @@ function getProjectData(projectId) {
     clientId: proj.clientId || '',
     clientName: client ? client.name : '',
     location: proj.location || '',
-    startDate: proj.startDate || '',
-    endDate: proj.endDate || '',
+    startDate: fmtDate_(proj.startDate),
+    endDate: fmtDate_(proj.endDate),
     totalProgress: Math.round(totalProgress * 10) / 10,
     revenue: revenue,
     expenses: expenses,

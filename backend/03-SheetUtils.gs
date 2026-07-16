@@ -85,3 +85,27 @@ function nextId_(prefix) {
 function safeParse_(str, fallback) {
   try { return str ? JSON.parse(str) : fallback; } catch (e) { return fallback; }
 }
+
+/**
+ * fmtDate_ (v3) - Normalizes a date-ish cell value to a plain
+ * 'yyyy-MM-dd' string in the SCRIPT timezone.
+ *
+ * WHY: readAll_ uses Range.getValues(), which returns a JavaScript
+ * Date object for any cell Google Sheets has auto-formatted as a
+ * date. When such a Date is sent to the browser it serializes to a
+ * UTC ISO string (e.g. Manila midnight -> "...T16:00:00.000Z"), and
+ * the frontend's date math then fails ("No dates" on the Gantt).
+ * Converting here — with the script timezone — keeps the calendar
+ * day correct and gives every client a clean, unambiguous string.
+ * Plain string cells (already 'yyyy-MM-dd') pass through unchanged.
+ */
+function fmtDate_(v) {
+  if (v === '' || v === null || v === undefined) return '';
+  if (Object.prototype.toString.call(v) === '[object Date]') {
+    if (isNaN(v.getTime())) return '';
+    return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+  var s = String(v).trim();
+  var m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : s;
+}

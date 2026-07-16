@@ -27,10 +27,34 @@ Object.assign(ProjectPage, {
     _ganttMeta: null,   // computed schedule kept for event handlers
 
     // ─── date helpers (all math in whole days, local time) ───────
-    _gDay(dateStr) { const d = new Date(dateStr + 'T00:00:00'); return isNaN(d) ? null : d; },
+    // _gDay parses to LOCAL midnight. It accepts a clean 'yyyy-MM-dd'
+    // (the normal case now that the backend formats dates) and also
+    // tolerates a full ISO string by taking its date prefix, so a
+    // stray Date-serialized value never shows up as "No dates".
+    _gDay(dateStr) {
+        if (!dateStr) return null;
+        const s = String(dateStr).trim();
+        const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        let d;
+        if (m) {
+            d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+        } else {
+            d = new Date(s);
+            if (!isNaN(d)) d = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        }
+        return isNaN(d) ? null : d;
+    },
     _gDiffDays(a, b) { return Math.round((b - a) / 86400000); },
     _gAddDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; },
-    _gFmt(d) { return d.toISOString().split('T')[0]; },
+    // _gFmt formats from LOCAL components. Using toISOString() here
+    // would convert local midnight to UTC and could shift the day
+    // back by one (Manila is GMT+8), silently corrupting saved dates.
+    _gFmt(d) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    },
 
     renderGantt(p) {
         const container = document.getElementById('proj-tab-gantt');
@@ -212,7 +236,7 @@ Object.assign(ProjectPage, {
             }
 
             if (!s || !e) {
-                trackInner += `<span style="font-size:10px;color:var(--ink-soft);padding-left:10px;">No dates</span>`;
+                trackInner += `<span class="gantt-nodates" data-idx="${idx}" style="font-size:10px;color:var(--red);padding-left:10px;cursor:pointer;text-decoration:underline;" title="Click to set start & end dates">No dates — click to set</span>`;
             } else if (item.isMilestone) {
                 const left = (this._gDiffDays(minDate, s) / totalDays) * 100;
                 trackInner += `
@@ -390,6 +414,14 @@ Object.assign(ProjectPage, {
         document.querySelectorAll('#ganttBody .gantt-milestone').forEach(ms => {
             ms.style.pointerEvents = 'auto';
             ms.addEventListener('click', function () {
+                const idx = parseInt(this.dataset.idx);
+                if (!isNaN(idx) && items[idx]) self.openTaskModal(items[idx].id);
+            });
+        });
+        // "No dates" labels open the task modal so pre-v3 items (which
+        // have no bar to drag) can still be given a schedule.
+        document.querySelectorAll('#ganttBody .gantt-nodates').forEach(el => {
+            el.addEventListener('click', function () {
                 const idx = parseInt(this.dataset.idx);
                 if (!isNaN(idx) && items[idx]) self.openTaskModal(items[idx].id);
             });
