@@ -15,6 +15,10 @@
  */
 
 function requestVariationOrder(projectId, data) {
+  // v6.3 gate: a VO modifies the contract, so the base contract must be
+  // fully defined first (all estimates approved, all budgets set).
+  assertContractReady_(projectId, 'submit a variation order');
+
   var sowId = String(data && data.sowId || '').trim();
   var description = String(data && data.description || '').trim();
   var amount = parseFloat(data && data.amount);

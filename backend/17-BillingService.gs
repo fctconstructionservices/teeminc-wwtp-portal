@@ -12,6 +12,57 @@
  * (project setting, default 10%); net = gross − retention.
  */
 
+/**
+ * contractReadiness_ (v6.3) - The contract basis is COMPLETE only when
+ * every non-milestone SOW item has (a) an APPROVED estimate with a
+ * non-zero total, and (b) a non-zero budget (internal control set).
+ * Billing and variation orders are gated on this, since both bill or
+ * modify a contract that must first be fully defined.
+ */
+function contractReadiness_(projectId) {
+  var sows = readAll_('SOWItems').filter(function (s) {
+    return s.projectId === projectId && String(s.isMilestone) !== 'true';
+  });
+  var groups = readAll_('EstimateGroups').filter(function (g) { return g.projectId === projectId; });
+  var bySow = {};
+  groups.forEach(function (g) { bySow[g.sowId] = g; });
+  var allMat = readAll_('EstimateMaterials');
+  var allLabor = readAll_('EstimateLabor');
+  var allEq = readAll_('EstimateEquipment');
+  var allInd = readAll_('EstimateIndirect');
+  var groupTotal_ = function (gid) {
+    var sum = 0;
+    allMat.forEach(function (m) { if (m.groupId === gid) sum += parseFloat(m.cost) || 0; });
+    allLabor.forEach(function (l) { if (l.groupId === gid) sum += parseFloat(l.cost) || 0; });
+    allEq.forEach(function (e) { if (e.groupId === gid) sum += parseFloat(e.cost) || 0; });
+    allInd.forEach(function (i) { if (i.groupId === gid) sum += parseFloat(i.amount) || 0; });
+    return sum;
+  };
+  var unapproved = [], zeroBudget = [];
+  sows.forEach(function (s) {
+    var g = bySow[s.id];
+    if (!g || g.status !== 'approved' || groupTotal_(g.id) <= 0) unapproved.push(s.id);
+    if (!(parseFloat(s.budget) > 0)) zeroBudget.push(s.id);
+  });
+  return {
+    ready: sows.length > 0 && unapproved.length === 0 && zeroBudget.length === 0,
+    hasItems: sows.length > 0,
+    unapproved: unapproved,
+    zeroBudget: zeroBudget
+  };
+}
+
+/** assertContractReady_ - throws a readable error when the gate is closed. */
+function assertContractReady_(projectId, actionLabel) {
+  var r = contractReadiness_(projectId);
+  if (r.ready) return;
+  var parts = [];
+  if (!r.hasItems) parts.push('no SOW items yet');
+  if (r.unapproved.length) parts.push(r.unapproved.length + ' estimate(s) not yet approved or empty (' + r.unapproved.slice(0, 4).join(', ') + (r.unapproved.length > 4 ? '…' : '') + ')');
+  if (r.zeroBudget.length) parts.push(r.zeroBudget.length + ' SOW item(s) without budget (' + r.zeroBudget.slice(0, 4).join(', ') + (r.zeroBudget.length > 4 ? '…' : '') + ')');
+  throw new Error('Cannot ' + actionLabel + ' — the contract basis is incomplete: ' + parts.join('; ') + '. Approve all estimates and set every SOW budget first.');
+}
+
 function updateProjectContract(projectId, contractValue, retentionPct) {
   var user = readAll_('Users').find(function (u) {
     return u.email.toLowerCase() === currentUserEmail_().toLowerCase();
@@ -47,6 +98,7 @@ function revisedContractValue_(projectId, proj, vos) {
 function createBilling(projectId, currentPct, period) {
   var proj = readAll_('Projects').find(function (p) { return p.id === projectId; });
   if (!proj) throw new Error('Project not found.');
+  assertContractReady_(projectId, 'generate a billing');   // v6.3 gate
 
   var pct = parseFloat(currentPct);
   if (isNaN(pct) || pct <= 0 || pct > 100) throw new Error('Invalid accomplishment %.');
@@ -149,6 +201,8 @@ function reviseBilling(id, clientPct) {
   if (!b) throw new Error('Billing not found.');
   if (b.status === 'Paid') throw new Error('A paid billing can no longer be revised.');
   if (b.status === 'Rejected') throw new Error('This billing is already rejected/superseded.');
+
+  assertContractReady_(b.projectId, 'revise a billing');   // v6.3 gate
 
   var pct = parseFloat(clientPct);
   var prevPct = parseFloat(b.prevPct) || 0;

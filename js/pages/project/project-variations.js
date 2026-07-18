@@ -26,7 +26,16 @@ Object.assign(ProjectPage, {
         const sowOpts = (p.sowItems || []).map(s =>
             `<option value="${s.id}">${s.id} — ${(s.description || '').slice(0, 40)}</option>`).join('');
 
+        // v6.3: a VO modifies the contract — the base contract must be
+        // fully defined first (server-gated too).
+        const cr = p.contractReady || { ready: true, unapproved: [], zeroBudget: [] };
+        const crMsg = [
+            cr.unapproved.length ? `${cr.unapproved.length} estimate(s) not yet approved or empty (${cr.unapproved.slice(0, 5).join(', ')}${cr.unapproved.length > 5 ? '…' : ''})` : '',
+            cr.zeroBudget.length ? `${cr.zeroBudget.length} SOW item(s) without budget (${cr.zeroBudget.slice(0, 5).join(', ')}${cr.zeroBudget.length > 5 ? '…' : ''})` : ''
+        ].filter(Boolean).join(' · ');
+
         let html = `
+            ${!cr.ready ? `<div style="background:#FBF1DE;border:1px solid var(--amber);border-left:3px solid var(--amber);border-radius:8px;padding:11px 14px;font-size:12.5px;color:var(--ink);margin-bottom:14px;"><b>⚠ Variation orders locked — contract basis incomplete.</b> ${crMsg}. Approve all estimates and set every SOW budget first.</div>` : ''}
             <div class="kpi-strip" style="margin-bottom:14px;">
                 <div class="kpi-card"><div class="k-label">Original Contract</div><div class="k-val mono">₱${fmtMoney(p.contractValue || 0)}</div><div class="k-sub">set in the Billings tab</div></div>
                 <div class="kpi-card warn"><div class="k-label">Approved VOs</div><div class="k-val mono">${approvedSum >= 0 ? '+' : ''}₱${fmtMoney(approvedSum)}</div><div class="k-sub">${approved.length} client-approved</div></div>
@@ -42,7 +51,7 @@ Object.assign(ProjectPage, {
                         <input type="text" id="vo-desc" placeholder="e.g. Additional loading bay ramp" style="width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);" /></div>
                     <div><label style="display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:3px;">Amount (₱)</label>
                         <input type="number" id="vo-amount" placeholder="520000" style="width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);" /></div>
-                    <button class="btn-sm primary" onclick="ProjectPage.submitVO()">Submit for Client</button>
+                    ${cr.ready ? `<button class="btn-sm primary" onclick="ProjectPage.submitVO()">Submit for Client</button>` : `<span style="font-size:11px;color:var(--amber);align-self:center;">Locked — complete the contract basis first</span>`}
                 </div>
             </div>
 

@@ -122,6 +122,9 @@ const API_ACTIONS = {
   createBilling: createBilling,
   markBillingPaid: markBillingPaid,
   reviseBilling: reviseBilling,
+  // v6.4: draft daily record edit/delete
+  updateDailyRecord: updateDailyRecord,
+  deleteDailyRecord: deleteDailyRecord,
   requestVariationOrder: requestVariationOrder,
   approveVariationOrder: approveVariationOrder,
   rejectVariationOrder: rejectVariationOrder

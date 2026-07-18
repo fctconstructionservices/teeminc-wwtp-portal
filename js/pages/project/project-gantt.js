@@ -58,14 +58,49 @@ Object.assign(ProjectPage, {
 
     renderGantt(p) {
         const container = document.getElementById('proj-tab-gantt');
-        const total = (p && typeof p.totalProgress === 'number') ? p.totalProgress : 0;
+        // v6.2 (option B): CONTRACT-BASIS weighting — each SOW's weight
+        // is its APPROVED estimate total plus its client-approved VOs
+        // (the same basis the client is billed on). The working budget
+        // stays purely internal cost control. Falls back to the backend
+        // budget-weighted figure while no estimates are approved yet.
+        const itemsW = (this._sowItems || []).filter(s => !s.isMilestone);
+        const wOf = x => (x.estimateTotal || 0) + (x.voAdjustment || 0);
+        const estSum = itemsW.reduce((s, x) => s + wOf(x), 0);
+        const total = estSum > 0
+            ? itemsW.reduce((s, x) => s + wOf(x) * ((parseFloat(x.progress) || 0) / 100), 0) / estSum * 100
+            : ((p && typeof p.totalProgress === 'number') ? p.totalProgress : 0);
+        if (!this._gScale) this._gScale = 'week';
+        if (!this._gZoom) this._gZoom = 1;
+        // v6.3 (#3): while the contract basis is incomplete, the badge
+        // shows WHAT is missing (with counts) instead of a total that
+        // would be computed on a wrong base.
+        const cr = (p && p.contractReady) || { ready: true, unapproved: [], zeroBudget: [] };
+        const badgeHtml = cr.ready
+            ? `<span class="badge">Total: ${total.toFixed(1)}% complete (contract-basis: approved estimates + VOs)</span>`
+            : `<span class="badge" style="color:var(--amber);border-color:var(--amber);" title="${[
+                    cr.unapproved.length ? 'Estimates not approved/empty: ' + cr.unapproved.join(', ') : '',
+                    cr.zeroBudget.length ? 'No budget: ' + cr.zeroBudget.join(', ') : ''
+                ].filter(Boolean).join(' | ')}">⚠ Setup incomplete — ${[
+                    cr.unapproved.length ? cr.unapproved.length + ' estimate(s) not approved' : '',
+                    cr.zeroBudget.length ? cr.zeroBudget.length + ' SOW without budget' : ''
+                ].filter(Boolean).join(' · ')}</span>`;
         container.innerHTML = `
             <div class="section-head">
                 <h2>Project Timeline (Gantt Chart)</h2>
                 <div class="rule"></div>
-                <span class="badge">Total: ${total.toFixed(1)}% complete (budget-weighted)</span>
+                ${badgeHtml}
                 <button class="btn-sm" style="margin-left:8px;" title="Snapshot current dates as the baseline"
                     onclick="ProjectPage.saveGanttBaseline()">📌 Save Baseline</button>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 10px;">
+                <span style="font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);">Scale:</span>
+                <button class="btn-sm ${this._gScale === 'day' ? 'primary' : ''}" onclick="ProjectPage.setGanttScale('day')">Day</button>
+                <button class="btn-sm ${this._gScale === 'week' ? 'primary' : ''}" onclick="ProjectPage.setGanttScale('week')">Week</button>
+                <button class="btn-sm ${this._gScale === 'month' ? 'primary' : ''}" onclick="ProjectPage.setGanttScale('month')">Month</button>
+                <span style="width:10px;"></span>
+                <button class="btn-sm" title="Zoom out" onclick="ProjectPage.ganttZoom(0.8)">−</button>
+                <button class="btn-sm" title="Zoom in" onclick="ProjectPage.ganttZoom(1.25)">+</button>
+                <button class="btn-sm" title="Fit the whole timeline in view" onclick="ProjectPage.ganttFit()">Fit All</button>
             </div>
             <div class="gantt-wrapper" id="ganttWrapper">
                 <div class="gantt-container" id="ganttContainer" style="position:relative;">
@@ -86,6 +121,34 @@ Object.assign(ProjectPage, {
             <div class="gantt-tooltip" id="ganttTooltip"></div>`;
         this._ganttData = this._sowItems;
         setTimeout(() => this._renderGanttChart(p), 100);
+    },
+
+
+
+    // v6.2: px-per-day for each scale; zoom multiplies it.
+    _gBaseDayW: { day: 26, week: 9, month: 3 },
+    _gDayWidth() {
+        const base = this._gBaseDayW[this._gScale || 'week'] || 9;
+        return Math.min(60, Math.max(1.5, base * (this._gZoom || 1)));
+    },
+    setGanttScale(scale) {
+        this._gScale = scale;
+        this._gZoom = 1;
+        this.renderGantt(this._data);   // rebuild toolbar active states + chart
+    },
+    ganttZoom(factor) {
+        this._gZoom = (this._gZoom || 1) * factor;
+        this._renderGanttChart(this._data);
+    },
+    ganttFit() {
+        const wrap = document.getElementById('ganttWrapper');
+        const meta = this._ganttMeta;
+        if (!wrap || !meta || !meta.totalDays) { this._renderGanttChart(this._data); return; }
+        const labelW = meta.labelW || 220;
+        const avail = Math.max(wrap.clientWidth - labelW - 24, 100);
+        const base = this._gBaseDayW[this._gScale || 'week'] || 9;
+        this._gZoom = Math.max(1.5, avail / meta.totalDays) / base;
+        this._renderGanttChart(this._data);
     },
 
     /**
@@ -206,12 +269,49 @@ Object.assign(ProjectPage, {
         this._ganttMeta.minDate = minDate;
         this._ganttMeta.totalDays = totalDays;
 
-        // header timeline
-        const LABEL_W = 220;
+        // ── v6.2: auto-fit label column to the longest SOW name ──
+        const longest = items.reduce((mx, it) => Math.max(mx, (`${it.id} — ${it.description || ''}`).length), 0);
+        const LABEL_W = Math.min(420, Math.max(220, Math.round(longest * 6.3) + 70));
+        this._ganttMeta.labelW = LABEL_W;
+
+        // ── v6.2: pixel-based day width (scale × zoom) so long ranges
+        //    scroll horizontally instead of squeezing every day into
+        //    the visible width (the old flex:1 clipped the coverage). ──
+        const DAY_W = this._gDayWidth();
+        const trackW = Math.ceil(totalDays * DAY_W);
+        const containerEl = document.getElementById('ganttContainer');
+        if (containerEl) containerEl.style.width = (LABEL_W + trackW + 4) + 'px';
+
+        // header timeline — ticks depend on the selected scale
+        const MN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const scale = this._gScale || 'week';
         let tlHtml = `<div style="width:${LABEL_W}px;flex-shrink:0;font-size:9px;font-weight:600;color:var(--ink-soft);">SOW Item</div>`;
-        for (let d = new Date(minDate); d <= maxDate; d.setDate(d.getDate() + 1)) {
-            const isToday = d.getTime() === today.getTime();
-            tlHtml += `<div class="gt-day" style="${isToday ? 'color:var(--red);font-weight:700;' : ''}">${d.getDate()}/${d.getMonth() + 1}</div>`;
+        const tick = (w, label, hot) =>
+            `<div class="gt-day" style="flex:0 0 ${w}px;width:${w}px;overflow:hidden;white-space:nowrap;${hot ? 'color:var(--red);font-weight:700;' : ''}">${label}</div>`;
+        if (scale === 'day') {
+            for (let d = new Date(minDate); d <= maxDate; d.setDate(d.getDate() + 1)) {
+                tlHtml += tick(DAY_W, DAY_W >= 16 ? `${d.getDate()}/${d.getMonth() + 1}` : (d.getDate() === 1 || d.getDay() === 1 ? d.getDate() : ''), d.getTime() === today.getTime());
+            }
+        } else if (scale === 'week') {
+            let d = new Date(minDate);
+            while (d <= maxDate) {
+                const weekEnd = this._gAddDays(d, 6 - ((d.getDay() + 6) % 7));   // upcoming Sunday
+                const segEnd = weekEnd < maxDate ? weekEnd : maxDate;
+                const days = this._gDiffDays(d, segEnd) + 1;
+                const hot = today >= d && today <= segEnd;
+                tlHtml += tick(days * DAY_W, days * DAY_W >= 34 ? `${d.getDate()}/${d.getMonth() + 1}` : '', hot);
+                d = this._gAddDays(segEnd, 1);
+            }
+        } else {
+            let d = new Date(minDate);
+            while (d <= maxDate) {
+                const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+                const segEnd = monthEnd < maxDate ? monthEnd : maxDate;
+                const days = this._gDiffDays(d, segEnd) + 1;
+                const hot = today >= d && today <= segEnd;
+                tlHtml += tick(days * DAY_W, days * DAY_W >= 30 ? `${MN[d.getMonth()]} ${String(d.getFullYear()).slice(2)}` : '', hot);
+                d = this._gAddDays(segEnd, 1);
+            }
         }
         document.getElementById('ganttTimeline').innerHTML = tlHtml;
 
@@ -424,6 +524,16 @@ Object.assign(ProjectPage, {
             el.addEventListener('click', function () {
                 const idx = parseInt(this.dataset.idx);
                 if (!isNaN(idx) && items[idx]) self.openTaskModal(items[idx].id);
+            });
+        });
+
+        // v6.2: clicking the SOW label opens the same task modal as the bar
+        document.querySelectorAll('#ganttBody .gantt-row-label').forEach(el => {
+            el.style.cursor = 'pointer';
+            el.addEventListener('click', function () {
+                const row = this.closest('.gantt-row');
+                const id = row && row.dataset.taskid;
+                if (id) self.openTaskModal(id);
             });
         });
     },

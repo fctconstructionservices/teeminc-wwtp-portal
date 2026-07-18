@@ -28,7 +28,15 @@ Object.assign(ProjectPage, {
         const revised = p.contractValueRevised || 0;
         const voSum = revised - (p.contractValue || 0);
 
+        // v6.3: contract-basis readiness (billing is server-gated too)
+        const cr = p.contractReady || { ready: true, unapproved: [], zeroBudget: [] };
+        const crMsg = [
+            cr.unapproved.length ? `${cr.unapproved.length} estimate(s) not yet approved or empty (${cr.unapproved.slice(0, 5).join(', ')}${cr.unapproved.length > 5 ? '…' : ''})` : '',
+            cr.zeroBudget.length ? `${cr.zeroBudget.length} SOW item(s) without budget (${cr.zeroBudget.slice(0, 5).join(', ')}${cr.zeroBudget.length > 5 ? '…' : ''})` : ''
+        ].filter(Boolean).join(' · ');
+
         let html = `
+            ${!cr.ready ? `<div style="background:#FBF1DE;border:1px solid var(--amber);border-left:3px solid var(--amber);border-radius:8px;padding:11px 14px;font-size:12.5px;color:var(--ink);margin-bottom:14px;"><b>⚠ Billing locked — contract basis incomplete.</b> ${crMsg}. Approve all estimates and set every SOW budget to unlock billing.</div>` : ''}
             <div class="kpi-strip" style="margin-bottom:14px;">
                 <div class="kpi-card"><div class="k-label">Contract Value (revised)</div><div class="k-val mono">₱${fmtMoney(revised)}</div><div class="k-sub">base ₱${fmtMoney(p.contractValue || 0)}${voSum ? ' + VOs ₱' + fmtMoney(voSum) : ''} · retention ${Math.round((p.retentionPct || 0.10) * 100)}%</div></div>
                 <div class="kpi-card good"><div class="k-label">Billed to Date</div><div class="k-val mono">₱${fmtMoney(billedGross)}</div><div class="k-sub">${lastPct}% of contract billed</div></div>
@@ -52,7 +60,7 @@ Object.assign(ProjectPage, {
 
         html += `
             <div class="section-head"><h2>Billing Register</h2><div class="rule"></div>
-                ${isAdmin ? `<button class="btn-sm primary" onclick="ProjectPage.generateBilling()">+ Generate from Progress (${p.totalProgress || 0}%)</button>` : ''}
+                ${isAdmin && cr.ready ? `<button class="btn-sm primary" onclick="ProjectPage.generateBilling()">+ Generate from Progress (${p.totalProgress || 0}%)</button>` : ''}
             </div>
             <div class="panel"><table><thead><tr>
                 <th>Billing #</th><th>Period</th>
@@ -77,7 +85,8 @@ Object.assign(ProjectPage, {
                     actions = `<button class="btn-sm success" onclick="ProjectPage.payBilling('${b.id}')">Mark Paid</button>`;
                 }
                 // v6.1: client evaluated a different % — revise while unpaid
-                if ((b.status === 'Pending' || b.status === 'Approved') && isAdmin) {
+                // (v6.3: also gated on contract readiness, like Generate)
+                if ((b.status === 'Pending' || b.status === 'Approved') && isAdmin && cr.ready) {
                     actions += ` <button class="btn-sm" title="Client approved a different %" onclick="ProjectPage.reviseBillingPrompt('${b.id}', ${b.prevPct})">Revise %</button>`;
                 }
                 html += `<tr>
@@ -203,13 +212,18 @@ Object.assign(ProjectPage, {
             .sort((a, c) => String(c.createdAt).localeCompare(String(a.createdAt)))[0] || null;
         const prevCut = prevBilling ? prevBilling.createdAt : null;
 
+        // v6.2 (option B): SWA amounts = the CONTRACT BASIS per item —
+        // its APPROVED estimate total plus client-approved VOs. Matches
+        // the Gantt weighting and what the client is billed against;
+        // the working budget stays internal.
         const items = (p.sowItems || []).filter(s => !s.isMilestone);
-        const totalAmt = items.reduce((s, x) => s + (x.budget || 0), 0) || 1;
+        const amtOf = x => ((x.estimateTotal || 0) + (x.voAdjustment || 0)) || (x.estimateTotal !== undefined ? 0 : (x.budget || 0));
+        const totalAmt = items.reduce((s, x) => s + amtOf(x), 0) || 1;
 
         let sumAmt = 0, sumWt = 0, sumPrevWt = 0, sumPrevAmt = 0, sumThisWt = 0, sumThisAmt = 0, sumToWt = 0, sumToAmt = 0;
         let rowsHtml = '';
         items.forEach(s => {
-            const amt = s.budget || 0;
+            const amt = amtOf(s);
             const wt = amt / totalAmt * 100;
             const prevPct = prevCut ? this._progressAsOf(s.id, prevCut) : 0;
             const curPct = this._progressAsOf(s.id, thisCut);

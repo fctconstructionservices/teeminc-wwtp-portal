@@ -124,3 +124,14 @@ function fmtMoney_(n) {
   parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   return neg + parts[0] + '.' + parts[1];
 }
+
+/**
+ * deleteRow_ (v6.4) - Physically removes the row whose idField matches.
+ * Returns true when a row was deleted.
+ */
+function deleteRow_(name, idField, idValue) {
+  const rowNum = findRowNum_(name, idField, idValue);
+  if (rowNum === -1) return false;
+  sheet_(name).deleteRow(rowNum);
+  return true;
+}

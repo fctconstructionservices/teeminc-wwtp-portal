@@ -190,6 +190,13 @@ const DataService = {
     },
 
     // ─── DAILY RECORDS ────────────────────────────────────────
+    // v6.4: draft daily record edit/delete
+    async updateDailyRecord(recordId, data) {
+        return await gasCall('updateDailyRecord', recordId, data);
+    },
+    async deleteDailyRecord(recordId) {
+        return await gasCall('deleteDailyRecord', recordId);
+    },
     async addDailyRecord(projectId, data) {
         return await gasCall('addDailyRecord', projectId, data);
     },

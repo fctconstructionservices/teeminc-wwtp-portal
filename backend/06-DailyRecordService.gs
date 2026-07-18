@@ -150,3 +150,110 @@ function rejectDailyRecord(recordId) {
 function getPendingDailyRecords() {
   return readAll_('DailyRecords').filter(function (d) { return d.status === 'pending'; });
 }
+
+/**
+ * updateDailyRecord (v6.4) - Edits a DRAFT record in place. Only the
+ * creator (or the Super Admin) may edit, and only while still a draft —
+ * once submitted, the record is frozen for the approval trail.
+ * The duplicate-date and site-stock guards both run again, excluding
+ * this record's own previous entries. Newly uploaded photos are APPENDED
+ * to the ones already saved (existing photos are never lost on edit).
+ */
+function updateDailyRecord(recordId, data) {
+  const rec = readAll_('DailyRecords').find(function (d) { return d.id === recordId; });
+  if (!rec) throw new Error('Daily record not found.');
+  if (rec.status !== 'draft') throw new Error('Only draft records can be edited.');
+
+  const me = currentUserEmail_().toLowerCase();
+  const user = readAll_('Users').find(function (u) { return u.email.toLowerCase() === me; });
+  const isSuper = user && user.role === 'superadmin';
+  if (String(rec.createdBy || '').toLowerCase() !== me && !isSuper) {
+    throw new Error('Only the creator can edit this draft.');
+  }
+
+  const projectId = rec.projectId;
+
+  // duplicate-date guard, excluding this record itself
+  const wanted = fmtDate_(data.date);
+  const dup = readAll_('DailyRecords').find(function (d) {
+    return d.id !== recordId && d.projectId === projectId &&
+      fmtDate_(d.date) === wanted && d.status !== 'rejected';
+  });
+  if (dup) throw new Error('There is already a record for ' + wanted + '.');
+
+  // site-stock guard, with this record's own old rows excluded
+  const usedRows = data.materialsUsed || [];
+  if (usedRows.length) {
+    const stock = {};
+    readAll_('DailyRecords').forEach(function (d) {
+      if (d.id === recordId) return;   // exclude self — its new rows are validated below
+      if (d.projectId !== projectId || d.status === 'rejected') return;
+      safeParse_(d.materialsDeliveredJSON, []).forEach(function (m) {
+        if (!m.material) return;
+        stock[m.material] = (stock[m.material] || 0) + (parseFloat(m.qty) || 0);
+      });
+      safeParse_(d.materialsUsedJSON, []).forEach(function (m) {
+        if (!m.material) return;
+        stock[m.material] = (stock[m.material] || 0) - (parseFloat(m.qty) || 0);
+      });
+    });
+    (data.materialsDelivered || []).forEach(function (m) {
+      if (!m.material) return;
+      stock[m.material] = (stock[m.material] || 0) + (parseFloat(m.qty) || 0);
+    });
+    const wantedUse = {};
+    usedRows.forEach(function (m) {
+      if (!m.material) return;
+      wantedUse[m.material] = (wantedUse[m.material] || 0) + (parseFloat(m.qty) || 0);
+    });
+    Object.keys(wantedUse).forEach(function (mat) {
+      const avail = stock[mat] || 0;
+      if (wantedUse[mat] > avail + 0.0001) {
+        throw new Error('Materials Used exceeds site stock for "' + mat + '": only ' + avail + ' remaining.');
+      }
+    });
+  }
+
+  // new photo uploads are appended to what the draft already holds
+  const existingPhotos = safeParse_(rec.photosJSON, []);
+  const mergedPhotos = existingPhotos.concat((data.photos || []).filter(function (u) {
+    return u && existingPhotos.indexOf(u) === -1;
+  }));
+
+  updateRow_('DailyRecords', 'id', recordId, {
+    date: data.date,
+    weatherAM: data.weatherAM || '',
+    weatherPM: data.weatherPM || '',
+    manpowerJSON: JSON.stringify(data.manpower || []),
+    equipmentJSON: JSON.stringify(data.equipment || []),
+    workAccomplishedJSON: JSON.stringify(data.workAccomplished || []),
+    materialsDeliveredJSON: JSON.stringify(data.materialsDelivered || []),
+    materialsUsedJSON: JSON.stringify(data.materialsUsed || []),
+    issuesJSON: JSON.stringify(data.issues || []),
+    visitorsJSON: JSON.stringify(data.visitors || []),
+    photosJSON: JSON.stringify(mergedPhotos)
+  });
+  logActivity_('Daily record ' + recordId + ' (draft) updated', 'blue', recordId);
+  return { success: true };
+}
+
+/**
+ * deleteDailyRecord (v6.4) - Deletes a DRAFT record. Only the creator or
+ * the Super Admin; submitted/approved records are permanent.
+ */
+function deleteDailyRecord(recordId) {
+  const rec = readAll_('DailyRecords').find(function (d) { return d.id === recordId; });
+  if (!rec) throw new Error('Daily record not found.');
+  if (rec.status !== 'draft') throw new Error('Only draft records can be deleted.');
+
+  const me = currentUserEmail_().toLowerCase();
+  const user = readAll_('Users').find(function (u) { return u.email.toLowerCase() === me; });
+  const isSuper = user && user.role === 'superadmin';
+  if (String(rec.createdBy || '').toLowerCase() !== me && !isSuper) {
+    throw new Error('Only the creator can delete this draft.');
+  }
+
+  deleteRow_('DailyRecords', 'id', recordId);
+  logActivity_('Daily record ' + recordId + ' (draft, ' + fmtDate_(rec.date) + ') deleted', 'a', recordId);
+  return { success: true };
+}

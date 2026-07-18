@@ -259,6 +259,26 @@ function getProjectData(projectId) {
       s.voAdjustment = voAdjustBySow[s.id];
       s.budget = (s.budget || 0) + voAdjustBySow[s.id];
     }
+
+    // v6.2: the CONTRACT-BASIS estimate total of this SOW — materials +
+    // labor + equipment + indirect from its estimate group, counted ONLY
+    // once the estimate is APPROVED (approved estimates are what the
+    // client signed off as the contract price; drafts must not move the
+    // Gantt total or the SWA while they're still being edited). The
+    // working `budget` stays untouched as the internal cost control.
+    // Gantt weights and SWA amounts use estimateTotal + approved VOs.
+    s.estimateTotal = 0;
+    if (g && g.status === 'approved') {
+      s.estimateTotal =
+        allMat.filter(function (m) { return m.groupId === g.id; })
+          .reduce(function (sum, m) { return sum + (parseFloat(m.cost) || 0); }, 0) +
+        allLabor.filter(function (l) { return l.groupId === g.id; })
+          .reduce(function (sum, l) { return sum + (parseFloat(l.cost) || 0); }, 0) +
+        allEq.filter(function (e) { return e.groupId === g.id; })
+          .reduce(function (sum, e) { return sum + (parseFloat(e.cost) || 0); }, 0) +
+        allInd.filter(function (i) { return i.groupId === g.id; })
+          .reduce(function (sum, i) { return sum + (parseFloat(i.amount) || 0); }, 0);
+    }
   });
 
   // Budget-weighted total project completion (user-selected weighting).
@@ -482,6 +502,20 @@ function getProjectData(projectId) {
   })();
   const contractValueRevised = revisedContractValue_(projectId, proj, projectVOs);
 
+  // v6.3: contract-basis readiness for the UI (computed from the already
+  // enriched items — same rules as the backend gate in 17-BillingService).
+  const crUnapproved = [], crZeroBudget = [];
+  sowItems.forEach(function (s) {
+    if (s.isMilestone) return;
+    if (!((s.estimateTotal || 0) > 0)) crUnapproved.push(s.id);
+    if (!((parseFloat(s.budget) || 0) > 0)) crZeroBudget.push(s.id);
+  });
+  const contractReady = {
+    ready: sowItems.some(function (s) { return !s.isMilestone; }) && crUnapproved.length === 0 && crZeroBudget.length === 0,
+    unapproved: crUnapproved,
+    zeroBudget: crZeroBudget
+  };
+
   const allPhotos = [];
   dailyRecords.forEach(function (d) {
     if (d.photos && d.photos.length) {
@@ -514,6 +548,7 @@ function getProjectData(projectId) {
     contractValue: parseFloat(proj.contractValue) || 0,
     retentionPct: retentionPctVal,
     contractValueRevised: contractValueRevised,
+    contractReady: contractReady,
     revenue: revenue,
     expenses: expenses,
     cashPosition: cashPosition,
