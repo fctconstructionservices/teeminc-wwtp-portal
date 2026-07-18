@@ -465,12 +465,20 @@ function getFinanceData() {
     })
   };
 
+  // v6 (item 3): breakdown now groups every Reviewed release by the
+  // TYPE OF REQUEST on its originating cash advance (same options as the
+  // request form) — showing where the money actually goes company-wide.
   const typeGroups = {};
-  allIncoming.filter(function (c) { return c.status === 'Approved'; }).forEach(function (c) {
-    typeGroups['Incoming'] = (typeGroups['Incoming'] || 0) + Number(c.amount || 0);
-  });
+  const caByIdBd = {};
+  readAll_('CashAdvanceRequests').forEach(function (c) { caByIdBd[c.id] = c; });
   allReleases.filter(function (r) { return r.status === 'Reviewed'; }).forEach(function (r) {
-    typeGroups['Release'] = (typeGroups['Release'] || 0) + Number(r.amount || 0);
+    var rtype = 'Other';
+    var ca = caByIdBd[r.originalRequestId];
+    if (ca) {
+      var pl = safeParse_(ca.payloadJSON, {});
+      rtype = pl.requestType || 'Other';
+    }
+    typeGroups[rtype] = (typeGroups[rtype] || 0) + Number(r.amount || 0);
   });
   const breakdownKeys = Object.keys(typeGroups);
   const breakdownTotal = Object.values(typeGroups).reduce(function (s, v) { return s + v; }, 0) || 1;

@@ -116,5 +116,12 @@ const API_ACTIONS = {
   updateSOWBudget: updateSOWBudget,
   saveBaseline: saveBaseline,
   // v4 liquidation flow
-  getReleasesToLiquidate: getReleasesToLiquidate
+  getReleasesToLiquidate: getReleasesToLiquidate,
+  // v6: billings + variation orders + contract
+  updateProjectContract: updateProjectContract,
+  createBilling: createBilling,
+  markBillingPaid: markBillingPaid,
+  requestVariationOrder: requestVariationOrder,
+  approveVariationOrder: approveVariationOrder,
+  rejectVariationOrder: rejectVariationOrder
 };

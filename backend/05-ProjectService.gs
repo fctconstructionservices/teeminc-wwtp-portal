@@ -162,6 +162,7 @@ function getProjectData(projectId) {
         equipment: safeParse_(d.equipmentJSON, []),
         workAccomplished: safeParse_(d.workAccomplishedJSON, []),
         materialsDelivered: safeParse_(d.materialsDeliveredJSON, []),
+        materialsUsed: safeParse_(d.materialsUsedJSON, []),   // v6
         issues: safeParse_(d.issuesJSON, []),
         visitors: safeParse_(d.visitorsJSON, []),
         photos: safeParse_(d.photosJSON, []),
@@ -207,6 +208,16 @@ function getProjectData(projectId) {
   const groupsById = {};
   groups.forEach(function (g) { groupsById[g.sowId] = g; });
 
+  // v6: Client-Approved variation orders raise (or cut, if deductive)
+  // the affected SOW's budget — computed here, never written back, so
+  // budgetMode recomputes can't clobber the adjustment.
+  const projectVOs = readAll_('VariationOrders').filter(function (v) { return v.projectId === projectId; });
+  const voAdjustBySow = {};
+  projectVOs.forEach(function (v) {
+    if (v.status !== 'Client-Approved') return;
+    voAdjustBySow[v.sowId] = (voAdjustBySow[v.sowId] || 0) + (parseFloat(v.amount) || 0);
+  });
+
   sowItems.forEach(function (s) {
     // Effective budget by budgetMode:
     //   'auto'     -> materials + labor + equipment from the estimate group
@@ -242,6 +253,12 @@ function getProjectData(projectId) {
     // date wins; within that date the highest % is taken. Mirrors how
     // MS Project treats the most recent status update as truth.
     s.progress = computeSOWProgress_(s.id, dailyRecords);
+
+    // v6: apply approved variation orders to the working budget
+    if (voAdjustBySow[s.id]) {
+      s.voAdjustment = voAdjustBySow[s.id];
+      s.budget = (s.budget || 0) + voAdjustBySow[s.id];
+    }
   });
 
   // Budget-weighted total project completion (user-selected weighting).
@@ -255,6 +272,185 @@ function getProjectData(projectId) {
   const client = proj.clientId
     ? readAll_('ClientLists').find(function (c) { return c.id === proj.clientId; })
     : null;
+
+  // ════════ v6: SITE MATERIALS · COST BY TYPE · CASHFLOW · EVM ════════
+
+  // ── Site material balance: delivered − used, from daily reports ──
+  const siteMap = {};
+  dailyRecords.forEach(function (d) {
+    if (d.status === 'rejected') return;
+    (d.materialsDelivered || []).forEach(function (m) {
+      if (!m.material) return;
+      const key = m.material;
+      if (!siteMap[key]) siteMap[key] = { material: key, unit: m.unit || '', delivered: 0, used: 0, lastMovement: '' };
+      siteMap[key].delivered += parseFloat(m.qty) || 0;
+      if (!siteMap[key].unit && m.unit) siteMap[key].unit = m.unit;
+      if (String(d.date) > String(siteMap[key].lastMovement)) siteMap[key].lastMovement = d.date;
+    });
+    (d.materialsUsed || []).forEach(function (m) {
+      if (!m.material) return;
+      const key = m.material;
+      if (!siteMap[key]) siteMap[key] = { material: key, unit: m.unit || '', delivered: 0, used: 0, lastMovement: '' };
+      siteMap[key].used += parseFloat(m.qty) || 0;
+      if (String(d.date) > String(siteMap[key].lastMovement)) siteMap[key].lastMovement = d.date;
+    });
+  });
+  const siteMaterials = Object.keys(siteMap).map(function (k) {
+    const row = siteMap[k];
+    row.remaining = Math.max(row.delivered - row.used, 0);
+    return row;
+  }).sort(function (a, b) { return a.material < b.material ? -1 : 1; });
+
+  // ── Cost breakdown by REQUEST TYPE (from the originating CA) ──
+  const allCAs = readAll_('CashAdvanceRequests');
+  const caById = {};
+  allCAs.forEach(function (c) { caById[c.id] = c; });
+  const costByTypeMap = {};
+  cashReleases.forEach(function (r) {
+    if (r.status !== 'Reviewed') return;
+    let rtype = 'Other';
+    const ca = caById[r.originalRequestId];
+    if (ca) {
+      const pl = safeParse_(ca.payloadJSON, {});
+      rtype = pl.requestType || 'Other';
+    }
+    costByTypeMap[rtype] = (costByTypeMap[rtype] || 0) + (parseFloat(r.amount) || 0);
+  });
+  const costByType = Object.keys(costByTypeMap)
+    .map(function (k) { return { type: k, amount: costByTypeMap[k] }; })
+    .sort(function (a, b) { return b.amount - a.amount; });
+
+  // ── Month window: project/SOW date span (≤ 24 months, includes today) ──
+  const spanDates = [];
+  [proj.startDate, proj.endDate].forEach(function (x) { const d = new Date(fmtDate_(x)); if (!isNaN(d)) spanDates.push(d); });
+  sowItems.forEach(function (s) {
+    [s.startDate, s.endDate].forEach(function (x) { const d = new Date(x); if (!isNaN(d)) spanDates.push(d); });
+  });
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  spanDates.push(today);
+  let mStart = new Date(Math.min.apply(null, spanDates.map(function (d) { return d.getTime(); })));
+  let mEnd = new Date(Math.max.apply(null, spanDates.map(function (d) { return d.getTime(); })));
+  mStart = new Date(mStart.getFullYear(), mStart.getMonth(), 1);
+  mEnd = new Date(mEnd.getFullYear(), mEnd.getMonth(), 1);
+  const monthsArr = [];
+  for (let d = new Date(mStart); d <= mEnd && monthsArr.length < 24; d.setMonth(d.getMonth() + 1)) {
+    monthsArr.push({ y: d.getFullYear(), m: d.getMonth() });
+  }
+  const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const monthLabels = monthsArr.map(function (mm) { return MONTH_NAMES[mm.m] + ' ' + String(mm.y).slice(2); });
+  const monthKey_ = function (dt) { return dt.getFullYear() * 12 + dt.getMonth(); };
+  const monthEnd_ = function (mm) { return new Date(mm.y, mm.m + 1, 0); };
+  const nowKey = monthKey_(today);
+
+  // ── Cashflow (actuals) ──
+  const inflowActual = monthsArr.map(function () { return 0; });
+  const outflowActual = monthsArr.map(function () { return 0; });
+  const incomingForProject = readAll_('IncomingCashRequests').filter(function (c) {
+    return c.projectId === projectId && c.status === 'Approved';
+  });
+  incomingForProject.forEach(function (c) {
+    const dt = new Date(fmtDate_(c.transactionDate || c.createdAt));
+    if (isNaN(dt)) return;
+    const idx = monthsArr.findIndex(function (mm) { return mm.y === dt.getFullYear() && mm.m === dt.getMonth(); });
+    if (idx > -1) inflowActual[idx] += parseFloat(c.amount) || 0;
+  });
+  cashReleases.forEach(function (r) {
+    if (r.status !== 'Reviewed') return;
+    const dt = new Date(fmtDate_(r.releasedAt || r.createdAt));
+    if (isNaN(dt)) return;
+    const idx = monthsArr.findIndex(function (mm) { return mm.y === dt.getFullYear() && mm.m === dt.getMonth(); });
+    if (idx > -1) outflowActual[idx] += parseFloat(r.amount) || 0;
+  });
+
+  // ── Projected outflow, driven by the Gantt: each SOW's remaining
+  //    spend (budget − actual, floor 0) spread by day across its
+  //    remaining schedule (today → endDate). Overdue tasks land in the
+  //    current month. Recomputes whenever bars move on the Timeline. ──
+  const outflowProjected = monthsArr.map(function () { return 0; });
+  sowItems.forEach(function (s) {
+    if (s.isMilestone) return;
+    const remainingSpend = Math.max((s.budget || 0) - (s.actual || 0), 0);
+    if (remainingSpend <= 0) return;
+    const sEnd = new Date(s.endDate);
+    if (isNaN(sEnd)) return;
+    let from = new Date(Math.max(today.getTime(), new Date(s.startDate).getTime() || today.getTime()));
+    if (sEnd < today) {
+      const idx = monthsArr.findIndex(function (mm) { return monthKey_(today) === mm.y * 12 + mm.m; });
+      if (idx > -1) outflowProjected[idx] += remainingSpend;
+      return;
+    }
+    const totalDays = Math.max(Math.round((sEnd - from) / 86400000) + 1, 1);
+    const perDay = remainingSpend / totalDays;
+    monthsArr.forEach(function (mm, idx) {
+      const mFirst = new Date(mm.y, mm.m, 1);
+      const mLast = monthEnd_(mm);
+      const a = Math.max(from.getTime(), mFirst.getTime());
+      const b = Math.min(sEnd.getTime(), mLast.getTime());
+      if (b < a) return;
+      const days = Math.round((b - a) / 86400000) + 1;
+      outflowProjected[idx] += perDay * days;
+    });
+  });
+
+  // ── EVM: PV curve from the Gantt; EV/AC as of today. AC series is
+  //    real (cumulative reviewed releases by month). ──
+  const pvSeries = monthsArr.map(function (mm) {
+    const cut = monthEnd_(mm);
+    let pv = 0;
+    sowItems.forEach(function (s) {
+      const b = s.budget || 0;
+      if (!b) return;
+      const sS = new Date(s.startDate), sE = new Date(s.endDate);
+      if (isNaN(sS) || isNaN(sE)) return;
+      if (cut < sS) return;
+      if (cut >= sE || s.isMilestone) { pv += b; return; }
+      const frac = (cut - sS) / Math.max(sE - sS, 1);
+      pv += b * Math.min(Math.max(frac, 0), 1);
+    });
+    return Math.round(pv);
+  });
+  const acSeries = monthsArr.map(function (mm, idx) {
+    if (mm.y * 12 + mm.m > nowKey) return null;
+    let cum = 0;
+    for (let i = 0; i <= idx; i++) cum += outflowActual[i];
+    return Math.round(cum);
+  });
+  const totalBudgetAll = sowItems.reduce(function (s, x) { return s + (x.isMilestone ? 0 : (x.budget || 0)); }, 0);
+  const evNow = sowItems.reduce(function (s, x) {
+    return s + (x.isMilestone ? 0 : (x.budget || 0) * ((x.progress || 0) / 100));
+  }, 0);
+  const nowIdx = monthsArr.findIndex(function (mm) { return mm.y * 12 + mm.m === nowKey; });
+  const pvNow = nowIdx > -1 ? pvSeries[nowIdx] : (pvSeries[pvSeries.length - 1] || 0);
+  const acNow = acSeries.reduce(function (mx, v) { return v === null ? mx : v; }, 0);
+  const evm = {
+    labels: monthLabels,
+    pvSeries: pvSeries,
+    acSeries: acSeries,
+    nowIndex: nowIdx,
+    pv: Math.round(pvNow),
+    ev: Math.round(evNow),
+    ac: Math.round(acNow),
+    bac: Math.round(totalBudgetAll),
+    spi: pvNow > 0 ? Math.round(evNow / pvNow * 100) / 100 : null,
+    cpi: acNow > 0 ? Math.round(evNow / acNow * 100) / 100 : null
+  };
+
+  const projectCashflow = {
+    labels: monthLabels,
+    inflow: inflowActual.map(function (v) { return Math.round(v); }),
+    outflow: outflowActual.map(function (v) { return Math.round(v); }),
+    projectedOutflow: outflowProjected.map(function (v, i) {
+      return (monthsArr[i].y * 12 + monthsArr[i].m) >= nowKey ? Math.round(v) : null;
+    })
+  };
+
+  // ── Billings + contract ──
+  const billings = readAll_('Billings').filter(function (b) { return b.projectId === projectId; }).reverse();
+  const retentionPctVal = (function () {
+    const rp = parseFloat(proj.retentionPct);
+    return (isNaN(rp) || rp < 0 || rp > 0.5) ? 0.10 : rp;
+  })();
+  const contractValueRevised = revisedContractValue_(projectId, proj, projectVOs);
 
   const allPhotos = [];
   dailyRecords.forEach(function (d) {
@@ -278,6 +474,16 @@ function getProjectData(projectId) {
     startDate: fmtDate_(proj.startDate),
     endDate: fmtDate_(proj.endDate),
     totalProgress: Math.round(totalProgress * 10) / 10,
+    // v6
+    siteMaterials: siteMaterials,
+    costByType: costByType,
+    projectCashflow: projectCashflow,
+    evm: evm,
+    billings: billings,
+    variationOrders: projectVOs.slice().reverse(),
+    contractValue: parseFloat(proj.contractValue) || 0,
+    retentionPct: retentionPctVal,
+    contractValueRevised: contractValueRevised,
     revenue: revenue,
     expenses: expenses,
     cashPosition: cashPosition,

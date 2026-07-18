@@ -72,6 +72,41 @@ function addDailyRecord(projectId, data) {
   });
 
   const recordId = nextId_('DR');
+  // ── v6: materials-used cannot exceed what remains on site ──
+  // Site stock per material = Σ delivered − Σ used across every
+  // non-rejected record of this project (this new record excluded).
+  const usedRows = data.materialsUsed || [];
+  if (usedRows.length) {
+    const stock = {};
+    readAll_('DailyRecords').forEach(function (d) {
+      if (d.projectId !== projectId || d.status === 'rejected') return;
+      safeParse_(d.materialsDeliveredJSON, []).forEach(function (m) {
+        if (!m.material) return;
+        stock[m.material] = (stock[m.material] || 0) + (parseFloat(m.qty) || 0);
+      });
+      safeParse_(d.materialsUsedJSON, []).forEach(function (m) {
+        if (!m.material) return;
+        stock[m.material] = (stock[m.material] || 0) - (parseFloat(m.qty) || 0);
+      });
+    });
+    // deliveries on THIS record add to what may be consumed today
+    (data.materialsDelivered || []).forEach(function (m) {
+      if (!m.material) return;
+      stock[m.material] = (stock[m.material] || 0) + (parseFloat(m.qty) || 0);
+    });
+    const wantedUse = {};
+    usedRows.forEach(function (m) {
+      if (!m.material) return;
+      wantedUse[m.material] = (wantedUse[m.material] || 0) + (parseFloat(m.qty) || 0);
+    });
+    Object.keys(wantedUse).forEach(function (mat) {
+      const avail = stock[mat] || 0;
+      if (wantedUse[mat] > avail + 0.0001) {
+        throw new Error('Materials Used exceeds site stock for "' + mat + '": only ' + avail + ' remaining.');
+      }
+    });
+  }
+
   appendRow_('DailyRecords', {
     id: recordId,
     projectId: projectId,
@@ -83,6 +118,7 @@ function addDailyRecord(projectId, data) {
     equipmentJSON: JSON.stringify(data.equipment || []),
     workAccomplishedJSON: JSON.stringify(workAccomplishedWithUrls),
     materialsDeliveredJSON: JSON.stringify(data.materialsDelivered || []),
+    materialsUsedJSON: JSON.stringify(data.materialsUsed || []),   // v6
     issuesJSON: JSON.stringify(issuesWithUrls),
     visitorsJSON: JSON.stringify(data.visitors || []),
     photosJSON: JSON.stringify(photoUrls),

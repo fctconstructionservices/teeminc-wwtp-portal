@@ -18,7 +18,7 @@ function requestMaterial(data) {
     id: id, code: data.code || id, name: data.name, desc: data.desc, category: data.category,
     unit: data.unit, rate: data.rate, brand: data.brand, supplier: data.supplier,
     image: data.image || '', docsJSON: JSON.stringify(data.docs || []), notes: data.notes || '',
-    status: 'Pending', requestedBy: currentUserEmail_(), createdAt: new Date()
+    status: 'pending', requestedBy: currentUserEmail_(), createdAt: new Date()
   });
   logActivity_('Material Database Update Request: "' + data.name + '" requested by ' + currentUserName_(), 'blue');
   return { success: true, id: id };

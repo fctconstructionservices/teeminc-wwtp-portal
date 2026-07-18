@@ -109,6 +109,9 @@ const ProjectPage = {
                 <button data-tab="gantt" onclick="ProjectPage.switchTab('gantt')">${Icon.barChart({size:14})} Timeline</button>
                 <button data-tab="sow" onclick="ProjectPage.switchTab('sow')">SOW Budget</button>
                 <button data-tab="estimates" onclick="ProjectPage.switchTab('estimates')">${Icon.ruler({size:14})} Estimates</button>
+                <button data-tab="materials" onclick="ProjectPage.switchTab('materials')">Site Materials</button>
+                <button data-tab="billings" onclick="ProjectPage.switchTab('billings')">Billings</button>
+                <button data-tab="variations" onclick="ProjectPage.switchTab('variations')">Variations</button>
             </div>
 
             <div id="proj-tab-overview" class="project-tab-content active"></div>
@@ -117,6 +120,9 @@ const ProjectPage = {
             <div id="proj-tab-gantt" class="project-tab-content"></div>
             <div id="proj-tab-sow" class="project-tab-content"></div>
             <div id="proj-tab-estimates" class="project-tab-content"></div>
+            <div id="proj-tab-materials" class="project-tab-content"></div>
+            <div id="proj-tab-billings" class="project-tab-content"></div>
+            <div id="proj-tab-variations" class="project-tab-content"></div>
 
             <div class="data-source-note">Estimates are grouped by SOW with draft / pending / approved states.</div>`;
 
@@ -127,6 +133,9 @@ const ProjectPage = {
             this.renderGantt(p);
             this.renderSOWBudget(p);
             this.renderEstimates(p);
+            this.renderSiteMaterials(p);
+            this.renderBillings(p);
+            this.renderVariations(p);
             this.switchTab('overview');
 
         } catch (err) {
@@ -390,7 +399,34 @@ const ProjectPage = {
      */
     renderOverview(p) {
         const container = document.getElementById('proj-tab-overview');
+        const evm = p.evm || {};
+        const spiTxt = evm.spi === null || evm.spi === undefined ? '—' : evm.spi.toFixed(2);
+        const cpiTxt = evm.cpi === null || evm.cpi === undefined ? '—' : evm.cpi.toFixed(2);
+        const spiState = evm.spi === null || evm.spi === undefined ? '' : (evm.spi >= 1 ? 'Ahead / On Time' : evm.spi >= 0.9 ? 'Slightly Behind' : 'Behind Schedule');
+        const cpiState = evm.cpi === null || evm.cpi === undefined ? '' : (evm.cpi >= 1 ? 'Within Cost' : evm.cpi >= 0.9 ? 'Slightly Over Cost' : 'Over Cost');
+        const healthCls = (evm.spi !== null && evm.spi < 0.9) || (evm.cpi !== null && evm.cpi < 0.9) ? 'bad'
+            : (evm.spi !== null && evm.spi < 1) || (evm.cpi !== null && evm.cpi < 1) ? 'warn' : 'good';
         let html = `
+                <div class="section-head"><h2>Project Cashflow</h2><div class="rule"></div><span class="cc-note">solid = actual · dotted = projected from Gantt</span></div>
+                <div class="chart-card" style="margin-bottom:16px;"><div class="canvas-wrap"><canvas id="projCfChart"></canvas></div></div>
+
+                <div class="section-head"><h2>Project Health — Earned Value</h2><div class="rule"></div></div>
+                <div class="kpi-strip" style="margin-bottom:12px;">
+                    <div class="kpi-card"><div class="k-label">PV · Planned Value</div><div class="k-val mono">₱${fmtMoney(evm.pv || 0)}</div><div class="k-sub">dapat na-accomplish by today (Gantt)</div></div>
+                    <div class="kpi-card good"><div class="k-label">EV · Earned Value</div><div class="k-val mono">₱${fmtMoney(evm.ev || 0)}</div><div class="k-sub">halaga ng natapos (progress × budget)</div></div>
+                    <div class="kpi-card warn"><div class="k-label">AC · Actual Cost</div><div class="k-val mono">₱${fmtMoney(evm.ac || 0)}</div><div class="k-sub">tunay na gastos (Reviewed releases)</div></div>
+                    <div class="kpi-card ${healthCls}"><div class="k-label">SPI ${spiTxt} · CPI ${cpiTxt}</div><div class="k-val" style="font-size:14px;">${spiState}${spiState && cpiState ? ' · ' : ''}${cpiState}</div><div class="k-sub">SPI=EV/PV · CPI=EV/AC · 1.00 = on plan</div></div>
+                </div>
+                <div class="chart-card" style="margin-bottom:10px;"><div class="cc-head"><h3>S-Curve — PV vs EV vs AC</h3><span class="cc-note">PV moves with the Gantt · AC is fixed actual</span></div><div class="canvas-wrap"><canvas id="evmChart"></canvas></div></div>
+                <div class="evm-help" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-bottom:18px;">
+                    <div style="background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:11.5px;line-height:1.5;"><b style="font-family:'IBM Plex Mono';color:var(--blueprint);">PV — Planned Value.</b> Kung susundin ang Gantt schedule, magkano na dapat ang na-accomplish hanggang ngayon. Gumagalaw kapag binago ang Timeline.</div>
+                    <div style="background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:11.5px;line-height:1.5;"><b style="font-family:'IBM Plex Mono';color:var(--blueprint);">EV — Earned Value.</b> Halaga ng trabahong tunay na natapos: % complete (Daily Reports) × budget ng bawat SOW.</div>
+                    <div style="background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:11.5px;line-height:1.5;"><b style="font-family:'IBM Plex Mono';color:var(--blueprint);">AC — Actual Cost.</b> Tunay na perang lumabas (Reviewed releases). Fixed ito. EV vs AC = sulit ba; EV vs PV = nasa oras ba.</div>
+                </div>
+
+                <div class="section-head"><h2>Cost Breakdown</h2><div class="rule"></div><span class="cc-note">by request type</span></div>
+                <div class="chart-card" style="margin-bottom:16px;"><div class="canvas-wrap"><canvas id="projTypeChart"></canvas></div></div>
+
                 <div class="chart-grid">
                     <div class="chart-card"><div class="cc-head"><h3>Requests by Status</h3></div><div class="canvas-wrap short"><canvas id="projStatusChart"></canvas></div></div>
                     <div class="chart-card"><div class="cc-head"><h3>Incoming Cash</h3></div><div class="canvas-wrap short"><canvas id="projCashChart"></canvas></div></div>
@@ -427,8 +463,66 @@ const ProjectPage = {
     _buildOverviewCharts(p) {
         if (this._charts.status) this._charts.status.destroy();
         if (this._charts.cash) this._charts.cash.destroy();
+        if (this._charts.projCf) this._charts.projCf.destroy();
+        if (this._charts.evm) this._charts.evm.destroy();
+        if (this._charts.projType) this._charts.projType.destroy();
         try {
             if (typeof Chart === 'undefined') return;
+
+            // ── v6: Project cashflow — actual bars + Gantt-driven projection ──
+            const cf = p.projectCashflow;
+            const cfCtx = document.getElementById('projCfChart');
+            if (cfCtx && cf && cf.labels && cf.labels.length) {
+                let run = 0;
+                const net = cf.inflow.map((v, i) => { run += v - (cf.outflow[i] || 0); return run; });
+                this._charts.projCf = new Chart(cfCtx, {
+                    data: { labels: cf.labels, datasets: [
+                        { type: 'bar', label: 'Inflow', data: cf.inflow, backgroundColor: '#2F7A46', borderRadius: 4 },
+                        { type: 'bar', label: 'Outflow', data: cf.outflow, backgroundColor: '#B23A2E', borderRadius: 4 },
+                        { type: 'line', label: 'Projected outflow (Gantt)', data: cf.projectedOutflow, borderColor: '#C2860F', borderDash: [5, 4], pointRadius: 3, tension: .3, spanGaps: false },
+                        { type: 'line', label: 'Net (running)', data: net, borderColor: '#24455A', tension: .3, pointRadius: 3 }
+                    ]},
+                    options: { responsive: true, maintainAspectRatio: false,
+                        plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, font: { size: 10.5 } } },
+                            tooltip: { callbacks: { label: c => `${c.dataset.label}: ₱${fmtMoney(c.parsed.y ?? 0)}` } } },
+                        scales: { y: { ticks: { callback: v => '₱' + fmtNum(v / 1000) + 'k' }, grid: { color: '#EEEBE0' } }, x: { grid: { display: false } } } }
+                });
+            }
+
+            // ── v6: EVM S-curve — PV full curve, AC to date, EV point now ──
+            const evm = p.evm;
+            const evmCtx = document.getElementById('evmChart');
+            if (evmCtx && evm && evm.labels && evm.labels.length) {
+                const evPoint = evm.labels.map((_, i) => i === evm.nowIndex ? evm.ev : null);
+                this._charts.evm = new Chart(evmCtx, {
+                    type: 'line',
+                    data: { labels: evm.labels, datasets: [
+                        { label: 'PV — Planned (Gantt)', data: evm.pvSeries, borderColor: '#5B6360', borderDash: [6, 4], tension: .35, pointRadius: 2 },
+                        { label: 'AC — Actual Cost', data: evm.acSeries, borderColor: '#B23A2E', tension: .35, pointRadius: 3, spanGaps: false },
+                        { label: 'EV — Earned (today)', data: evPoint, borderColor: '#2F7A46', backgroundColor: '#2F7A46', pointRadius: 6, pointStyle: 'rectRot', showLine: false }
+                    ]},
+                    options: { responsive: true, maintainAspectRatio: false,
+                        plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, font: { size: 10.5 } } },
+                            tooltip: { callbacks: { label: c => `${c.dataset.label}: ₱${fmtMoney(c.parsed.y ?? 0)}` } } },
+                        scales: { y: { ticks: { callback: v => '₱' + fmtNum(v / 1000) + 'k' }, grid: { color: '#EEEBE0' } }, x: { grid: { display: false } } } }
+                });
+            }
+
+            // ── v6: Cost breakdown by request type ──
+            const cbt = p.costByType || [];
+            const typeCtx = document.getElementById('projTypeChart');
+            if (typeCtx) {
+                const palette = ['#24455A', '#2F7A46', '#C2860F', '#E15412', '#5B6360', '#8C3007', '#B23A2E'];
+                this._charts.projType = new Chart(typeCtx, {
+                    type: 'bar',
+                    data: { labels: cbt.length ? cbt.map(x => x.type) : ['No reviewed releases yet'],
+                        datasets: [{ data: cbt.length ? cbt.map(x => x.amount) : [0],
+                            backgroundColor: cbt.length ? cbt.map((_, i) => palette[i % palette.length]) : ['#D6D2C4'], borderRadius: 5 }] },
+                    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                        plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => '₱' + fmtMoney(c.parsed.x) } } },
+                        scales: { x: { ticks: { callback: v => '₱' + fmtNum(v / 1000) + 'k' }, grid: { color: '#EEEBE0' } }, y: { grid: { display: false } } } }
+                });
+            }
             const requests = p.requests || [];
             const statusCounts = {};
             requests.forEach(r => { statusCounts[r.status] = (statusCounts[r.status] || 0) + 1; });

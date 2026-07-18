@@ -57,6 +57,12 @@ Object.assign(ProjectPage, {
                 <div id="materialsEntries"><div class="entry-row"><div class="field"><label>Material</label><select class="mat-name" onchange="ProjectPage.syncMaterialUnit(this)">${this._materialOptionsDaily()}</select></div><div class="field"><label>Qty</label><input type="number" class="mat-qty" min="0" /></div><div class="field"><label>Unit</label><input type="text" class="mat-unit" readonly placeholder="auto" title="Filled automatically from the material database" /></div><div class="field"><label>Supplier / DR No.</label><input type="text" class="mat-supplier" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'materials')">${Icon.close({size:13})}</button></div></div></div>
                 <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('materials')">+ Add Material</button></div>
             </div>
+            <div class="daily-form-section" id="materialsUsedSection">
+                <div class="section-label">Materials Used <span class="rule"></span></div>
+                <div id="materialsUsedEntries"><div class="entry-row"><div class="field"><label>Material (on-site only)</label><select class="mu-name" onchange="ProjectPage.syncUsedMaterialUnit(this)">${this._siteMaterialOptionsDaily()}</select></div><div class="field"><label>Qty Used</label><input type="number" class="mu-qty" min="0" /></div><div class="field"><label>Unit</label><input type="text" class="mu-unit" readonly placeholder="auto" /></div><div class="field"><label>Used For (SOW)</label><select class="mu-sow">${this._sowOptions()}</select></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'materialsUsed')">${Icon.close({size:13})}</button></div></div></div>
+                <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('materialsUsed')">+ Add Usage</button></div>
+                <div class="muted" style="font-size:11px;color:var(--ink-soft);margin-top:4px;">Deducted from site stock (delivered − used). You can't log more than what remains.</div>
+            </div>
             <div class="daily-form-section" id="issuesSection">
                 <div class="section-label">Issues / Delays <span class="rule"></span></div>
                 <div id="issuesEntries"><div class="entry-row"><div class="field"><label>Description</label><input type="text" class="iss-desc" /></div><div class="field"><label>Cause</label><input type="text" class="iss-cause" /></div><div class="field"><label>Time Lost (hrs)</label><input type="number" class="iss-time" min="0" step="0.5" /></div><div class="field"><label>Photo</label><input type="file" accept="image/*" class="iss-image" data-photo onchange="ProjectPage.previewSmallImage(this,'iss-preview-${Date.now()}')" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'issues')">${Icon.close({size:13})}</button></div></div></div>
@@ -145,6 +151,7 @@ Object.assign(ProjectPage, {
             equipment: getRows('equipment', { name: '.eq-name', qty: '.eq-qty', status: '.eq-status', remarks: '.eq-remarks' }),
             workAccomplished: getRows('work', { location: '.wk-location', scope: '.wk-scope', description: '.wk-desc', percentComplete: '.wk-pct', image: '.wk-image' }),
             materialsDelivered: getRows('materials', { material: '.mat-name', qty: '.mat-qty', unit: '.mat-unit', supplier: '.mat-supplier' }),
+            materialsUsed: getRows('materialsUsed', { material: '.mu-name', qty: '.mu-qty', unit: '.mu-unit', sow: '.mu-sow' }),   // v6
             issues: getRows('issues', { description: '.iss-desc', cause: '.iss-cause', timeLost: '.iss-time', image: '.iss-image' }),
             visitors: getRows('visitors', { name: '.vis-name', company: '.vis-company', purpose: '.vis-purpose', timeIn: '.vis-time-in', timeOut: '.vis-time-out', remarks: '.vis-remarks' }),
             photos: []
@@ -153,6 +160,29 @@ Object.assign(ProjectPage, {
 
     async submitDailyRecord(projectId) {
         const data = this.gatherDailyFormData();
+
+        // v6: client-side stock guard (server re-validates). Remaining =
+        // siteMaterials balance + deliveries logged on THIS form.
+        if ((data.materialsUsed || []).length) {
+            const remainingMap = {};
+            (this._data && this._data.siteMaterials || []).forEach(m => { remainingMap[m.material] = m.remaining || 0; });
+            (data.materialsDelivered || []).forEach(m => {
+                if (!m.material) return;
+                remainingMap[m.material] = (remainingMap[m.material] || 0) + (parseFloat(m.qty) || 0);
+            });
+            const useMap = {};
+            (data.materialsUsed || []).forEach(m => {
+                if (!m.material) return;
+                useMap[m.material] = (useMap[m.material] || 0) + (parseFloat(m.qty) || 0);
+            });
+            for (const mat of Object.keys(useMap)) {
+                const avail = remainingMap[mat] || 0;
+                if (useMap[mat] > avail + 0.0001) {
+                    UI.toast(`Materials Used exceeds site stock for "${mat}" — only ${fmtNum(avail)} remaining.`, 'error');
+                    return;
+                }
+            }
+        }
         if (!data.date) { UI.toast('Please select a date.', 'error'); return; }
 
         const existingRecords = this._data ? this._data.dailyRecords : [];
@@ -299,6 +329,31 @@ Object.assign(ProjectPage, {
         html += `</div></div>`;
         container.innerHTML = html;
         this._dailyRecords = dailyRecords;
+    },
+
+    /**
+     * _siteMaterialOptionsDaily (v6) - Options for the Materials Used
+     * dropdown: only materials with remaining stock on site
+     * (delivered − used, from getProjectData.siteMaterials). Each shows
+     * its remaining balance so the crew sees stock before typing.
+     */
+    _siteMaterialOptionsDaily() {
+        const rows = (this._data && this._data.siteMaterials || []).filter(m => (m.remaining || 0) > 0);
+        if (!rows.length) return '<option value="">— No materials on site yet —</option>';
+        return '<option value="">Select...</option>' + rows.map(m =>
+            `<option value="${String(m.material).replace(/"/g, '&quot;')}" data-unit="${m.unit || ''}" data-remaining="${m.remaining}">${m.material} — remaining: ${fmtNum(m.remaining)} ${m.unit || ''}</option>`
+        ).join('');
+    },
+
+    /** syncUsedMaterialUnit (v6) - auto-fill unit + cap qty at remaining. */
+    syncUsedMaterialUnit(selectEl) {
+        const row = selectEl.closest('.entry-row');
+        if (!row) return;
+        const opt = selectEl.selectedOptions[0];
+        const unitEl = row.querySelector('.mu-unit');
+        const qtyEl = row.querySelector('.mu-qty');
+        if (unitEl) unitEl.value = opt ? (opt.dataset.unit || '') : '';
+        if (qtyEl && opt && opt.dataset.remaining) qtyEl.max = opt.dataset.remaining;
     },
 
     addEntry(section) {

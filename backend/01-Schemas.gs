@@ -32,7 +32,9 @@ const TABS = {
   APPROVALS: 'Approvals',
   ACTIVITY_LOG: 'ActivityLog',
   CLIENT_LISTS: 'ClientLists',
-  MANPOWER: 'Manpower'
+  MANPOWER: 'Manpower',
+  BILLINGS: 'Billings',
+  VARIATION_ORDERS: 'VariationOrders'
 };
 
 /**
@@ -42,8 +44,10 @@ const SCHEMAS = {
   Users: ['email', 'name', 'password', 'role', 'roleLabel'],
   // v3: clientId/location/startDate/endDate appended at the END so existing
   // rows keep their column positions. Run migrateSchemas() once after deploy.
+  // v6: contractValue (client-facing contract sum, basis of billings) and
+  // retentionPct (default 0.10) appended.
   Projects: ['id', 'name', 'status', 'revenue', 'expenses', 'cashPosition',
-    'clientId', 'location', 'startDate', 'endDate'],
+    'clientId', 'location', 'startDate', 'endDate', 'contractValue', 'retentionPct'],
   // v3 additions (appended):
   //   budgetMode   -> 'auto' (mat+labor+equip from approved estimate),
   //                   'indirect' (indirect costs only) or 'manual'
@@ -52,9 +56,11 @@ const SCHEMAS = {
   //   baselineStart/baselineEnd -> snapshot saved via saveBaseline()
   SOWItems: ['id', 'projectId', 'description', 'budget', 'actual', 'startDate', 'endDate', 'status', 'qty', 'unit',
     'budgetMode', 'predecessors', 'isMilestone', 'baselineStart', 'baselineEnd'],
+  // v6: materialsUsedJSON appended — consumption rows; site stock =
+  // delivered − used, computed live in getProjectData.
   DailyRecords: ['id', 'projectId', 'date', 'weatherAM', 'weatherPM', 'status',
     'manpowerJSON', 'equipmentJSON', 'workAccomplishedJSON', 'materialsDeliveredJSON',
-    'issuesJSON', 'visitorsJSON', 'photosJSON', 'createdBy', 'createdAt'],
+    'issuesJSON', 'visitorsJSON', 'photosJSON', 'createdBy', 'createdAt', 'materialsUsedJSON'],
   // v3: submittedBy appended — who sent the estimate for approval,
   // so the Approve button can be hidden from the submitter.
   EstimateGroups: ['id', 'projectId', 'sowId', 'sowDescription', 'status', 'submittedBy'],
@@ -96,6 +102,16 @@ const SCHEMAS = {
   // v3 NEW: manpower role catalog (Option A — roles/trades, not individuals).
   // Same request -> Pending -> approved flow as Materials/Equipment.
   Manpower: ['id', 'code', 'role', 'classification', 'notes', 'status', 'requestedBy', 'createdAt'],
+
+  // v6 NEW: progress billings. gross = (currentPct − prevPct) × revised
+  // contract; retention withheld; Paid creates an Approved IncomingCash.
+  Billings: ['id', 'projectId', 'billingNo', 'period', 'prevPct', 'currentPct',
+    'grossAmount', 'retentionAmount', 'netAmount', 'status', 'submittedBy', 'createdAt', 'paidAt'],
+
+  // v6 NEW: variation orders. Client-Approved VOs raise the affected SOW
+  // budget and the revised contract value (computed live, non-destructive).
+  VariationOrders: ['id', 'projectId', 'sowId', 'description', 'amount',
+    'status', 'requestedBy', 'createdAt', 'decidedAt'],
 
   Approvals: ['requestId', 'approver', 'decision', 'timestamp', 'remarks'],
   ActivityLog: ['timestamp', 'text', 'type', 'refId']

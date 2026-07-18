@@ -307,6 +307,28 @@ const DataService = {
     async getReleasesToLiquidate() {
         return await gasCall('getReleasesToLiquidate');
     },
+
+    // ── v6: billings, variation orders, contract ──
+    async updateProjectContract(projectId, contractValue, retentionPct) {
+        return await gasCall('updateProjectContract', projectId, contractValue, retentionPct);
+    },
+    async createBilling(projectId, currentPct, period) {
+        return await gasCall('createBilling', projectId, currentPct, period);
+    },
+    async markBillingPaid(id) {
+        return await gasCall('markBillingPaid', id);
+    },
+    async requestVariationOrder(projectId, data) {
+        return await gasCall('requestVariationOrder', projectId, data);
+    },
+    // VO decisions are the CLIENT's decision recorded by an admin — not
+    // the internal multi-sig engine, so these call their own actions.
+    async approveVariationOrder(id) {
+        return await gasCall('approveVariationOrder', id);
+    },
+    async rejectVariationOrder(id) {
+        return await gasCall('rejectVariationOrder', id);
+    },
     async approveLiquidation(id) {
         return await gasCall('approveLiquidation', id);
     },

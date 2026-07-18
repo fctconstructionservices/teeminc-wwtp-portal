@@ -76,6 +76,9 @@ const PrintModal = {
                 <div class="print-section"><div class="ps-title">Materials Delivered</div>
                     ${r.materialsDelivered && r.materialsDelivered.length ? `<table class="ps-table"><thead><tr><th>Material</th><th>Qty</th><th>Unit</th><th>Supplier / DR No.</th></tr></thead><tbody>${r.materialsDelivered.map(m => `<tr><td>${m.material}</td><td>${m.qty}</td><td>${m.unit || '—'}</td><td>${m.supplier || '—'}</td></tr>`).join('')}</tbody></table>` : `<p style="font-size:12px;color:var(--ink-soft);">No materials delivered recorded.</p>`}
                 </div>
+                <div class="print-section"><div class="ps-title">Materials Used</div>
+                    ${r.materialsUsed && r.materialsUsed.length ? `<table class="ps-table"><thead><tr><th>Material</th><th>Qty Used</th><th>Unit</th><th>Used For (SOW)</th></tr></thead><tbody>${r.materialsUsed.map(m => `<tr><td>${m.material}</td><td>${m.qty}</td><td>${m.unit || '—'}</td><td>${m.sow || '—'}</td></tr>`).join('')}</tbody></table>` : `<p style="font-size:12px;color:var(--ink-soft);">No materials used recorded.</p>`}
+                </div>
                 <div class="print-section"><div class="ps-title">Issues / Delays</div>
                     ${r.issues && r.issues.length ? `<table class="ps-table"><thead><tr><th>Description</th><th>Cause</th><th>Time Lost (hrs)</th></tr></thead><tbody>${r.issues.map(iss => `<tr><td>${iss.description || '—'}</td><td>${iss.cause || '—'}</td><td>${iss.timeLost || 0}</td></tr>`).join('')}</tbody></table>` : `<p style="font-size:12px;color:var(--ink-soft);">No issues recorded.</p>`}
                 </div>

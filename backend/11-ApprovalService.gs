@@ -358,6 +358,10 @@ function resolveApprovalItem_(id, type) {
       r = readAll_('EstimateGroups').find(function (x) { return x.id === id; });
       return r ? { found: true, isPending: r.status === 'pending', submitter: low_(r.submittedBy), obj: r }
                : { found: false, msg: 'Estimate group not found.' };
+    case 'Billing':
+      r = readAll_('Billings').find(function (x) { return x.id === id; });
+      return r ? { found: true, isPending: r.status === 'Pending', submitter: low_(r.submittedBy), obj: r }
+               : { found: false, msg: 'Billing not found.' };
     default:
       return { found: false, msg: 'Invalid type for approval: ' + type };
   }
@@ -403,6 +407,11 @@ function finalizeDecision_(id, type, decision, meta) {
     case 'DailyRecord':
       updateRow_('DailyRecords', 'id', id, { status: approved ? 'approved' : 'rejected' });
       logActivity_('Daily record ' + id + ' ' + (approved ? 'approved' : 'rejected'), approved ? 'g' : 'a', id);
+      return { success: true };
+
+    case 'Billing':
+      updateRow_('Billings', 'id', id, { status: approved ? 'Approved' : 'Rejected' });
+      logActivity_('Billing ' + id + ' ' + (approved ? 'approved — ready to send/collect' : 'rejected'), approved ? 'g' : 'a', id);
       return { success: true };
 
     case 'Estimate':
