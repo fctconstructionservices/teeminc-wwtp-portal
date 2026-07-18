@@ -120,8 +120,7 @@ Object.assign(ProjectPage, {
         try {
             const res = await DataService.reviseBilling(id, pct);
             UI.toast(`Revised as ${res.billingNo} — for admin approval. The original is kept as superseded.`, 'success');
-            await this.open(this._currentProjectId, true);
-            this.switchTab('billings');
+            await this.open(this._currentProjectId, true);   // v6.5: stays on this tab
         } catch (err) { UI.toast('' + err.message, 'error'); }
     },
 
@@ -133,8 +132,7 @@ Object.assign(ProjectPage, {
         try {
             await DataService.updateProjectContract(this._currentProjectId, cv, rp);
             UI.toast('Contract settings saved.', 'success');
-            await this.open(this._currentProjectId, true);
-            this.switchTab('billings');
+            await this.open(this._currentProjectId, true);   // v6.5: stays on this tab
         } catch (err) { UI.toast('' + err.message, 'error'); }
     },
 
@@ -145,8 +143,7 @@ Object.assign(ProjectPage, {
         try {
             const res = await DataService.createBilling(this._currentProjectId, pct, '');
             UI.toast(`${res.billingNo} generated — for admin approval.`, 'success');
-            await this.open(this._currentProjectId, true);
-            this.switchTab('billings');
+            await this.open(this._currentProjectId, true);   // v6.5: stays on this tab
         } catch (err) { UI.toast('' + err.message, 'error'); }
     },
 
@@ -160,8 +157,7 @@ Object.assign(ProjectPage, {
             } else {
                 UI.toast('Billing approved — ready to collect.', 'success');
             }
-            await this.open(this._currentProjectId, true);
-            this.switchTab('billings');
+            await this.open(this._currentProjectId, true);   // v6.5: stays on this tab
         } catch (err) { UI.toast('' + err.message, 'error'); }
     },
 
@@ -170,8 +166,7 @@ Object.assign(ProjectPage, {
         try {
             await DataService.markBillingPaid(id);
             UI.toast('Billing marked Paid — collection posted to revenue.', 'success');
-            await this.open(this._currentProjectId, true);
-            this.switchTab('billings');
+            await this.open(this._currentProjectId, true);   // v6.5: stays on this tab
         } catch (err) { UI.toast('' + err.message, 'error'); }
     },
 

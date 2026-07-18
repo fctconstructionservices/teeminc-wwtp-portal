@@ -25,6 +25,7 @@ function doGet(e) {
 
 function doPost(e) {
   try {
+    _resetReadCache_();   // v6.5: memo is per-request only, never across requests
     const body = JSON.parse(e.postData.contents);
     const action = body.action;
     const params = body.params || [];

@@ -26,11 +26,23 @@ const ProjectPage = {
     /**
      * open - Load and display a project
      */
-    async open(projectId) {
+    /**
+     * open(projectId, quiet) - v6.5
+     *   quiet = true  -> refresh data WITHOUT tearing down the page
+     *                    (used after approve/save/delete so the current
+     *                    tab stays put and doesn't flash a loader)
+     */
+    async open(projectId, quiet) {
         this._currentProjectId = projectId;
         App.navigate('project');
         const container = document.getElementById('projectContent');
-        UI.showLoading(container);
+        // v6.5 (C): show the page's SHAPE immediately instead of a bare
+        // spinner — the wait feels much shorter and nothing jumps later.
+        if (!quiet) UI.showSkeleton(container, 'project');
+
+        const activeTab = quiet
+            ? (document.querySelector('.project-tabs button.active')?.dataset.tab || 'overview')
+            : null;
 
         try {
             const p = await DataService.getProjectData(projectId);
@@ -49,24 +61,21 @@ const ProjectPage = {
             this._estimatesData = p.estimates || {};
             this._estimatesData.groups = Array.isArray(this._estimatesData.groups) ? this._estimatesData.groups : [];
 
-            // Fetch approved materials and equipment for dropdowns
-            try {
-                this._approvedMaterials = await DataService.getMaterials('approved');
-            } catch (e) {
-                console.error('Failed to load approved materials:', e);
-                this._approvedMaterials = [];
-            }
-            try {
-                this._approvedEquipment = await DataService.getEquipment('approved');
-            } catch (e) {
-                console.error('Failed to load approved equipment:', e);
-                this._approvedEquipment = [];
-            }
-            // v3: manpower role catalog for the daily report dropdown
-            try {
-                this._approvedManpower = await DataService.getManpower('approved');
-            } catch (e) {
-                console.error('Failed to load approved manpower:', e);
+            // v6.5 (H): the three catalog fetches used to run one after
+            // another (3 sequential round-trips). Fire them together —
+            // same data, roughly a third of the wall time.
+            const [matRes, eqRes, mpRes] = await Promise.allSettled([
+                DataService.getMaterials('approved'),
+                DataService.getEquipment('approved'),
+                DataService.getManpower('approved')
+            ]);
+            this._approvedMaterials = matRes.status === 'fulfilled' ? matRes.value : [];
+            this._approvedEquipment = eqRes.status === 'fulfilled' ? eqRes.value : [];
+            this._approvedManpower = mpRes.status === 'fulfilled' ? mpRes.value : [];
+            if (matRes.status === 'rejected') console.error('Failed to load approved materials:', matRes.reason);
+            if (eqRes.status === 'rejected') console.error('Failed to load approved equipment:', eqRes.reason);
+            if (mpRes.status === 'rejected') {
+                console.error('Failed to load approved manpower:', mpRes.reason);
                 this._approvedManpower = [];
             }
 
@@ -136,7 +145,9 @@ const ProjectPage = {
             this.renderSiteMaterials(p);
             this.renderBillings(p);
             this.renderVariations(p);
-            this.switchTab('overview');
+            // v6.5 (D): a quiet refresh returns you to the tab you were
+            // on instead of bouncing back to Overview.
+            this.switchTab(activeTab || 'overview');
 
         } catch (err) {
             console.error('Project load error:', err);

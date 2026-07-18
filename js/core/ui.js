@@ -30,6 +30,34 @@ const UI = {
         container.innerHTML =
             `<div class="loading-overlay"><div class="loader"></div><p>Loading data...</p></div>`;
     },
+
+    /**
+     * showSkeleton (v6.5) - Structure-aware placeholder. Instead of a
+     * blank spinner, the page's shape (header, KPI cards, rows) appears
+     * immediately and shimmers until the real data lands, so the wait
+     * feels far shorter and the layout doesn't jump on arrival.
+     */
+    showSkeleton(container, kind) {
+        if (!container) return;
+        const bar = (w, h, mt) =>
+            `<div class="sk-bar" style="width:${w};height:${h || '12px'};margin-top:${mt || '8px'};"></div>`;
+        const card = () =>
+            `<div class="sk-card">${bar('55%', '9px', '0')}${bar('80%', '20px')}${bar('40%', '9px')}</div>`;
+        let body = '';
+        if (kind === 'project') {
+            body = `
+                <div class="sk-head">${bar('38%', '22px', '0')}${bar('22%', '11px')}</div>
+                <div class="sk-tabs">${[1,2,3,4,5,6].map(() => '<div class="sk-tab"></div>').join('')}</div>
+                <div class="sk-kpis">${[1,2,3,4].map(card).join('')}</div>
+                <div class="sk-panel">${[1,2,3,4,5].map(() => bar('100%', '14px', '12px')).join('')}</div>`;
+        } else {
+            body = `
+                <div class="sk-head">${bar('30%', '20px', '0')}</div>
+                <div class="sk-kpis">${[1,2,3,4].map(card).join('')}</div>
+                <div class="sk-panel">${[1,2,3,4].map(() => bar('100%', '14px', '12px')).join('')}</div>`;
+        }
+        container.innerHTML = `<div class="skeleton" aria-busy="true" aria-label="Loading">${body}</div>`;
+    },
     
     setContent(container, html) {
         if (container) container.innerHTML = html;

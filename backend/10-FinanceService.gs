@@ -397,6 +397,10 @@ function rejectLiquidation(id) {
 // ============================================================
 
 function getFinanceData() {
+  // v6.5 PERF: one batched pass for the finance dashboard
+  readMany_(['Projects', 'IncomingCashRequests', 'CashRelease', 'SOWItems',
+    'CashAdvanceRequests', 'Liquidations']);
+
   const projects = readAll_('Projects');
   const allIncoming = readAll_('IncomingCashRequests');
   const allReleases = readAll_('CashRelease');

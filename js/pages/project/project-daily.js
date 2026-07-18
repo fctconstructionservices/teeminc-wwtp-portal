@@ -526,7 +526,7 @@ Object.assign(ProjectPage, {
         try {
             await DataService.deleteDailyRecord(id);
             UI.toast('Draft deleted.', 'success');
-            await this.open(this._currentProjectId);
+            await this.open(this._currentProjectId, true);   // v6.5: quiet refresh
         } catch (err) { UI.toast('' + err.message, 'error'); }
     },
 
@@ -559,7 +559,7 @@ Object.assign(ProjectPage, {
         try {
             await DataService.submitDailyRecordForApproval(recordId);
             UI.toast('Daily record submitted for approval.', 'success');
-            await this.open(this._currentProjectId);
+            await this.open(this._currentProjectId, true);   // v6.5: quiet refresh
         } catch (err) {
             UI.toast('' + err.message, 'error');
         }
@@ -571,7 +571,7 @@ Object.assign(ProjectPage, {
         try {
             await DataService.approveDailyRecord(recordId);
             UI.toast('Daily record approved.', 'success');
-            await this.open(this._currentProjectId);
+            await this.open(this._currentProjectId, true);   // v6.5: quiet refresh
             if (typeof ApprovalsPage !== 'undefined' && ApprovalsPage.load) ApprovalsPage.load();
         } catch (err) {
             UI.toast('' + err.message, 'error');
@@ -584,7 +584,7 @@ Object.assign(ProjectPage, {
         try {
             await DataService.rejectDailyRecord(recordId);
             UI.toast('Daily record rejected.', 'error');
-            await this.open(this._currentProjectId);
+            await this.open(this._currentProjectId, true);   // v6.5: quiet refresh
             if (typeof ApprovalsPage !== 'undefined' && ApprovalsPage.load) ApprovalsPage.load();
         } catch (err) {
             UI.toast('' + err.message, 'error');
@@ -597,7 +597,7 @@ Object.assign(ProjectPage, {
         try {
             await DataService.approveDailyRecord(recordId);
             UI.toast('Daily record force-approved.', 'success');
-            await this.open(this._currentProjectId);
+            await this.open(this._currentProjectId, true);   // v6.5: quiet refresh
             if (typeof ApprovalsPage !== 'undefined' && ApprovalsPage.load) ApprovalsPage.load();
         } catch (err) {
             UI.toast('' + err.message, 'error');
@@ -610,7 +610,7 @@ Object.assign(ProjectPage, {
         try {
             await DataService.rejectDailyRecord(recordId);
             UI.toast('Daily record force-rejected.', 'error');
-            await this.open(this._currentProjectId);
+            await this.open(this._currentProjectId, true);   // v6.5: quiet refresh
             if (typeof ApprovalsPage !== 'undefined' && ApprovalsPage.load) ApprovalsPage.load();
         } catch (err) {
             UI.toast('' + err.message, 'error');

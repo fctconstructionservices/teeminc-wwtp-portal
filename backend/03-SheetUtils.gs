@@ -25,20 +25,96 @@ function sheet_(name) {
 }
 function headers_(name) { return SCHEMAS[name]; }
 
+/**
+ * ══ v6.5 PERFORMANCE: batched reads ══
+ *
+ * Every readAll_ is a separate round-trip to the Sheets service, so a
+ * page that touches 16 sheets pays 16 round-trips before it can render.
+ * readMany_ fetches them together and memoizes the result for the rest
+ * of the request, so repeated reads of the same sheet inside one
+ * execution are free.
+ *
+ * Correctness note: the memo lives ONLY for the current execution (it is
+ * reset by _resetReadCache_ at the start of each API call), so a request
+ * can never serve data written by an earlier request. Any write inside a
+ * request drops that sheet from the memo, so later reads see the change.
+ */
+var _READ_MEMO_ = {};
+
+function _resetReadCache_() { _READ_MEMO_ = {}; }
+function _invalidateRead_(name) { if (_READ_MEMO_) delete _READ_MEMO_[name]; }
+
+/**
+ * readMany_ - Loads several sheets in one pass and returns
+ * { SheetName: [rows] }. Uses a single spreadsheet handle and pulls each
+ * sheet's data range back-to-back, which Apps Script pipelines far more
+ * efficiently than scattered getRange calls across a function body.
+ */
+function readMany_(names) {
+  const out = {};
+  const need = [];
+  names.forEach(function (n) {
+    if (_READ_MEMO_[n]) out[n] = _READ_MEMO_[n];
+    else need.push(n);
+  });
+  if (need.length === 0) return out;
+
+  const ss = ss_();
+  const pending = [];
+  // Phase 1: resolve sheets and queue ranges (no values fetched yet)
+  need.forEach(function (n) {
+    const sh = ss.getSheetByName(n);
+    if (!sh) { out[n] = []; _READ_MEMO_[n] = []; return; }
+    const lastRow = sh.getLastRow();
+    const heads = headers_(n);
+    if (lastRow < 2 || !heads || !heads.length) { out[n] = []; _READ_MEMO_[n] = []; return; }
+    pending.push({ name: n, range: sh.getRange(2, 1, lastRow - 1, heads.length), heads: heads });
+  });
+
+  // Phase 2: fetch values — consecutive getValues on an already-open
+  // spreadsheet are served from one flush instead of one per call.
+  pending.forEach(function (item) {
+    const values = item.range.getValues();
+    const heads = item.heads;
+    const rows = [];
+    for (var r = 0; r < values.length; r++) {
+      const row = values[r];
+      var blank = true;
+      for (var c = 0; c < row.length; c++) { if (row[c] !== '' && row[c] !== null) { blank = false; break; } }
+      if (blank) continue;
+      const obj = {};
+      for (var h = 0; h < heads.length; h++) obj[heads[h]] = row[h];
+      rows.push(obj);
+    }
+    out[item.name] = rows;
+    _READ_MEMO_[item.name] = rows;
+  });
+  return out;
+}
+
 function readAll_(name) {
+  // v6.5: serve from the per-request memo when the sheet was already
+  // loaded by a readMany_ batch (or an earlier readAll_ in this call).
+  if (_READ_MEMO_[name]) return _READ_MEMO_[name];
+  return _readAllUncached_(name);
+}
+
+function _readAllUncached_(name) {
   const sh = sheet_(name);
   const lastRow = sh.getLastRow();
   const cols = headers_(name).length;
-  if (lastRow < 2) return [];
+  if (lastRow < 2) { _READ_MEMO_[name] = []; return []; }
   const values = sh.getRange(2, 1, lastRow - 1, cols).getValues();
   const heads = headers_(name);
-  return values
+  const rows = values
     .filter(function (row) { return row.join('') !== ''; })
     .map(function (row) {
       const obj = {};
       heads.forEach(function (h, i) { obj[h] = row[i]; });
       return obj;
     });
+  _READ_MEMO_[name] = rows;
+  return rows;
 }
 
 function appendRow_(name, obj) {
@@ -46,6 +122,7 @@ function appendRow_(name, obj) {
   const heads = headers_(name);
   const row = heads.map(function (h) { return (obj[h] !== undefined && obj[h] !== null) ? obj[h] : ''; });
   sh.appendRow(row);
+  _invalidateRead_(name);   // v6.5: later reads in this request must see the new row
   return obj;
 }
 
@@ -71,6 +148,7 @@ function updateRow_(name, idField, idValue, patch) {
     const col = heads.indexOf(key);
     if (col > -1) sh.getRange(rowNum, col + 1).setValue(patch[key]);
   });
+  _invalidateRead_(name);   // v6.5
   return true;
 }
 
@@ -133,5 +211,6 @@ function deleteRow_(name, idField, idValue) {
   const rowNum = findRowNum_(name, idField, idValue);
   if (rowNum === -1) return false;
   sheet_(name).deleteRow(rowNum);
+  _invalidateRead_(name);   // v6.5
   return true;
 }

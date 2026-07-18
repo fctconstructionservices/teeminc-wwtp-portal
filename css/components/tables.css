@@ -79,3 +79,33 @@ tbody tr:hover td {
     text-align: right;
     white-space: nowrap;
 }
+
+/* ═══ v6.5: skeleton loading ═══
+   Shows the page's structure immediately while data is in flight, so
+   the wait reads as "almost there" instead of a blank spinner, and the
+   layout doesn't shift when the real content lands. */
+.skeleton { padding: 4px 0 12px; }
+.skeleton .sk-bar,
+.skeleton .sk-tab,
+.skeleton .sk-card,
+.skeleton .sk-panel {
+    background: linear-gradient(90deg, var(--line) 25%, var(--bg) 50%, var(--line) 75%);
+    background-size: 200% 100%;
+    animation: sk-shimmer 1.4s ease-in-out infinite;
+    border-radius: 6px;
+}
+.skeleton .sk-head { margin-bottom: 16px; }
+.skeleton .sk-tabs { display: flex; gap: 8px; margin-bottom: 18px; }
+.skeleton .sk-tab { width: 84px; height: 26px; border-radius: 6px; }
+.skeleton .sk-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+.skeleton .sk-card { padding: 14px; height: 84px; border-radius: 10px; background-size: 200% 100%; }
+.skeleton .sk-card .sk-bar { background: rgba(255, 255, 255, .45); animation: none; }
+.skeleton .sk-panel { height: 190px; border-radius: 10px; }
+@keyframes sk-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+@media (max-width: 900px) { .skeleton .sk-kpis { grid-template-columns: repeat(2, 1fr); } }
+@media (prefers-reduced-motion: reduce) {
+    .skeleton .sk-bar, .skeleton .sk-tab, .skeleton .sk-card, .skeleton .sk-panel { animation: none; }
+}

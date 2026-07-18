@@ -101,8 +101,7 @@ Object.assign(ProjectPage, {
         try {
             const res = await DataService.requestVariationOrder(this._currentProjectId, { sowId, description, amount });
             UI.toast(`${res.id} submitted — awaiting the client's decision.`, 'success');
-            await this.open(this._currentProjectId, true);
-            this.switchTab('variations');
+            await this.open(this._currentProjectId, true);   // v6.5: stays on this tab
         } catch (err) { UI.toast('' + err.message, 'error'); }
     },
 
@@ -113,8 +112,7 @@ Object.assign(ProjectPage, {
             if (approved) await DataService.approveVariationOrder(id);
             else await DataService.rejectVariationOrder(id);
             UI.toast(`Variation order ${verb.toLowerCase()}.`, 'success');
-            await this.open(this._currentProjectId, true);
-            this.switchTab('variations');
+            await this.open(this._currentProjectId, true);   // v6.5: stays on this tab
         } catch (err) { UI.toast('' + err.message, 'error'); }
     }
 

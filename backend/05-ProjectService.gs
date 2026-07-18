@@ -15,6 +15,10 @@
 // ============================================================
 
 function getHomeData() {
+  // v6.5 PERF: one batched pass for the dashboard
+  readMany_(['Projects', 'CashAdvanceRequests', 'CashRelease',
+    'IncomingCashRequests', 'Liquidations', 'ActivityLog']);
+
   const projects = readAll_('Projects').map(function (p) {
     const revenue = getTotalIncomingCashForProject(p.id);
     const expenses = getTotalReleasedCashForProject(p.id);
@@ -115,6 +119,15 @@ function addProject(id, name, clientId, location, startDate, endDate) {
 }
 
 function getProjectData(projectId) {
+  // v6.5 PERF: pull every sheet this page needs in ONE batched pass
+  // instead of ~16 separate round-trips. Subsequent readAll_ calls below
+  // are served from the per-request memo, so the code stays readable and
+  // the duplicate reads that used to cost extra trips are now free.
+  readMany_(['Projects', 'SOWItems', 'EstimateGroups', 'EstimateMaterials',
+    'EstimateLabor', 'EstimateEquipment', 'EstimateIndirect', 'DailyRecords',
+    'CashAdvanceRequests', 'CashRelease', 'IncomingCashRequests', 'Liquidations',
+    'VariationOrders', 'Billings', 'Approvals', 'ClientLists']);
+
   const projects = readAll_('Projects');
   const proj = projects.find(function (p) { return p.id === projectId; });
   if (!proj) return null;

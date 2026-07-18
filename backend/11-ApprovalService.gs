@@ -19,6 +19,12 @@
 // ============================================================
 
 function getPendingApprovals() {
+  // v6.5 PERF: one batched pass — this runs on every page navigation
+  // (approval badge), so it was the most frequent multi-read call.
+  readMany_(['Users', 'Approvals', 'CashAdvanceRequests', 'CashRelease',
+    'IncomingCashRequests', 'Liquidations', 'Materials', 'Equipment',
+    'Manpower', 'DailyRecords', 'EstimateGroups']);
+
   const userEmail = currentUserEmail_().toLowerCase();
   const userRecord = readAll_('Users').find(function (u) { 
     return u.email.toLowerCase() === userEmail; 
