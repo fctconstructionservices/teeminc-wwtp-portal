@@ -121,6 +121,7 @@ const API_ACTIONS = {
   updateProjectContract: updateProjectContract,
   createBilling: createBilling,
   markBillingPaid: markBillingPaid,
+  reviseBilling: reviseBilling,
   requestVariationOrder: requestVariationOrder,
   approveVariationOrder: approveVariationOrder,
   rejectVariationOrder: rejectVariationOrder

@@ -90,10 +90,10 @@ function getPendingApprovals() {
 
   // Materials, Equipment, DailyRecords, Estimates
   const materials = readAll_('Materials').filter(function (m) { 
-    return m.status === 'Pending' && m.requestedBy && m.requestedBy.toLowerCase() !== userEmail; 
+    return low_(m.status) === 'pending' && m.requestedBy && m.requestedBy.toLowerCase() !== userEmail; 
   });
   const equipment = readAll_('Equipment').filter(function (e) { 
-    return e.status === 'Pending' && e.requestedBy && e.requestedBy.toLowerCase() !== userEmail; 
+    return low_(e.status) === 'pending' && e.requestedBy && e.requestedBy.toLowerCase() !== userEmail; 
   });
   const dailyRecords = readAll_('DailyRecords').filter(function (d) { 
     return d.status === 'pending' && d.createdBy && d.createdBy.toLowerCase() !== userEmail; 
@@ -106,7 +106,7 @@ function getPendingApprovals() {
 
   // v3: pending manpower role requests (same flow as materials)
   const manpower = readAll_('Manpower').filter(function (m) {
-    return m.status === 'Pending' && m.requestedBy && m.requestedBy.toLowerCase() !== userEmail;
+    return low_(m.status) === 'pending' && m.requestedBy && m.requestedBy.toLowerCase() !== userEmail;
   });
 
   return {
@@ -141,11 +141,11 @@ function getMyPendingRequests() {
   }).map(function(l) { l.type = 'Liquidation'; return l; });
   
   const materials = readAll_('Materials').filter(function (m) { 
-    return m.requestedBy && m.requestedBy.toLowerCase() === email && m.status === 'Pending'; 
+    return m.requestedBy && m.requestedBy.toLowerCase() === email && low_(m.status) === 'pending'; 
   }).map(function(m) { m.type = 'Material'; return m; });
   
   const equipment = readAll_('Equipment').filter(function (e) { 
-    return e.requestedBy && e.requestedBy.toLowerCase() === email && e.status === 'Pending'; 
+    return e.requestedBy && e.requestedBy.toLowerCase() === email && low_(e.status) === 'pending'; 
   }).map(function(e) { e.type = 'Equipment'; return e; });
   
   const dailyRecords = readAll_('DailyRecords').filter(function (d) { 
@@ -157,7 +157,7 @@ function getMyPendingRequests() {
   }).map(function(g) { g.type = 'Estimate'; return g; });
 
   const manpower = readAll_('Manpower').filter(function (m) {
-    return m.requestedBy && m.requestedBy.toLowerCase() === email && m.status === 'Pending';
+    return m.requestedBy && m.requestedBy.toLowerCase() === email && low_(m.status) === 'pending';
   }).map(function(m) { m.type = 'Manpower'; return m; });
 
   return [].concat(cashAdvances, releases, incoming, liquidations, materials, equipment, manpower, dailyRecords, estimates);
@@ -338,17 +338,20 @@ function resolveApprovalItem_(id, type) {
       r = readAll_('Liquidations').find(function (x) { return x.id === id; });
       return r ? { found: true, isPending: r.status === 'Pending', submitter: low_(r.requestorEmail), obj: r }
                : { found: false, msg: 'Liquidation record not found.' };
+    // v6.1: pending checks are case-insensitive — requestMaterial and
+    // friends now write lowercase 'pending' (matching 'approved' /
+    // 'rejected'), while rows created before the change hold 'Pending'.
     case 'Material':
       r = readAll_('Materials').find(function (x) { return x.id === id; });
-      return r ? { found: true, isPending: r.status === 'Pending', submitter: low_(r.requestedBy), obj: r }
+      return r ? { found: true, isPending: low_(r.status) === 'pending', submitter: low_(r.requestedBy), obj: r }
                : { found: false, msg: 'Material not found.' };
     case 'Equipment':
       r = readAll_('Equipment').find(function (x) { return x.id === id; });
-      return r ? { found: true, isPending: r.status === 'Pending', submitter: low_(r.requestedBy), obj: r }
+      return r ? { found: true, isPending: low_(r.status) === 'pending', submitter: low_(r.requestedBy), obj: r }
                : { found: false, msg: 'Equipment not found.' };
     case 'Manpower':
       r = readAll_('Manpower').find(function (x) { return x.id === id; });
-      return r ? { found: true, isPending: r.status === 'Pending', submitter: low_(r.requestedBy), obj: r }
+      return r ? { found: true, isPending: low_(r.status) === 'pending', submitter: low_(r.requestedBy), obj: r }
                : { found: false, msg: 'Manpower role not found.' };
     case 'DailyRecord':
       r = readAll_('DailyRecords').find(function (x) { return x.id === id; });

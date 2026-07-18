@@ -37,7 +37,7 @@ function requestManpower(data) {
     role: role,
     classification: data.classification || '',
     notes: data.notes || '',
-    status: 'Pending',
+    status: 'pending',   // v6.1: lowercase, consistent with approved/rejected
     requestedBy: currentUserEmail_(),
     createdAt: new Date()
   });

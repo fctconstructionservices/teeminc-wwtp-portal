@@ -20,7 +20,7 @@ const ManpowerPage = {
         const container = document.getElementById('manpowerContent');
         UI.showLoading(container);
         try {
-            this._all = await DataService.getAllManpower();
+            this._all = (await DataService.getAllManpower() || []).map(x => ({ ...x, status: String(x.status || '').toLowerCase() }));   // v6.1: legacy rows hold 'Pending'
             this.render(container);
         } catch (err) {
             console.error('Manpower error:', err);

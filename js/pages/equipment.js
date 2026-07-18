@@ -16,7 +16,7 @@ const EquipmentPage = {
         const container = document.getElementById('equipmentContent');
         UI.showLoading(container);
         try {
-            this._allEquipment = await DataService.getAllEquipment();
+            this._allEquipment = (await DataService.getAllEquipment() || []).map(x => ({ ...x, status: String(x.status || '').toLowerCase() }));   // v6.1: legacy rows hold 'Pending'
             this.render(container);
         } catch (err) { console.error('Equipment error:', err);
             UI.toast('Error loading equipment.', 'error'); }
@@ -193,7 +193,7 @@ const EquipmentPage = {
             document.getElementById('equipForm').reset();
             document.getElementById('equipImagePreview').classList.remove('open');
             this.hideAddForm();
-            this._allEquipment = await DataService.getAllEquipment();
+            this._allEquipment = (await DataService.getAllEquipment() || []).map(x => ({ ...x, status: String(x.status || '').toLowerCase() }));   // v6.1: legacy rows hold 'Pending'
             this._searchResults = null;
             
             // ✅ FIX: Automatically switch to Pending tab after submission (Bug #1)
@@ -207,7 +207,7 @@ const EquipmentPage = {
         if (!confirmed) return;
         try { await DataService.approveEquipment(id);
             UI.toast('Equipment approved!', 'success');
-            this._allEquipment = await DataService.getAllEquipment();
+            this._allEquipment = (await DataService.getAllEquipment() || []).map(x => ({ ...x, status: String(x.status || '').toLowerCase() }));   // v6.1: legacy rows hold 'Pending'
             this._searchResults = null;
             this.load(); } catch (err) { UI.toast('' + err.message, 'error'); }
     },

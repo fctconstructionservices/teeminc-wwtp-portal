@@ -17,7 +17,7 @@ const MaterialsPage = {
         const container = document.getElementById('materialsContent');
         UI.showLoading(container);
         try {
-            this._allMaterials = await DataService.getAllMaterials();
+            this._allMaterials = (await DataService.getAllMaterials() || []).map(x => ({ ...x, status: String(x.status || '').toLowerCase() }));   // v6.1: legacy rows hold 'Pending'
             this.render(container);
         } catch (err) { console.error('Materials error:', err);
             UI.toast('Error loading materials.', 'error'); }
@@ -176,7 +176,7 @@ const MaterialsPage = {
             document.getElementById('matForm').reset();
             document.getElementById('matImagePreview').classList.remove('open');
             this.hideAddForm();
-            this._allMaterials = await DataService.getAllMaterials();
+            this._allMaterials = (await DataService.getAllMaterials() || []).map(x => ({ ...x, status: String(x.status || '').toLowerCase() }));   // v6.1: legacy rows hold 'Pending'
             this._searchResults = null;
             
             // ✅ FIX: Automatically switch to Pending tab after submission (Bug #1)
@@ -190,7 +190,7 @@ const MaterialsPage = {
         if (!confirmed) return;
         try { await DataService.approveMaterial(id);
             UI.toast('Material approved!', 'success');
-            this._allMaterials = await DataService.getAllMaterials();
+            this._allMaterials = (await DataService.getAllMaterials() || []).map(x => ({ ...x, status: String(x.status || '').toLowerCase() }));   // v6.1: legacy rows hold 'Pending'
             this._searchResults = null;
             this.load(); } catch (err) { UI.toast('' + err.message, 'error'); }
     },

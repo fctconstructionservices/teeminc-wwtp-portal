@@ -127,3 +127,63 @@ function markBillingPaid(id) {
   logActivity_('Billing ' + b.billingNo + ' PAID — ₱' + fmtMoney_(b.netAmount) + ' posted to ' + b.projectId + ' revenue (' + icId + ')', 'g', id);
   return { success: true, incomingCashId: icId };
 }
+
+
+/**
+ * reviseBilling (v6.1) - The client evaluated a DIFFERENT accomplishment
+ * than what was billed (usually lower). The original billing is marked
+ * Rejected (kept for the audit trail, tagged as superseded) and a fresh
+ * billing is created at the client-approved %, same period, billingNo +
+ * '-R', with amounts recomputed against the same previous baseline. The
+ * new billing starts Pending so it goes through the full admin
+ * multi-signature again — the amounts changed, so the signatures must too.
+ */
+function reviseBilling(id, clientPct) {
+  var user = readAll_('Users').find(function (u) {
+    return u.email.toLowerCase() === currentUserEmail_().toLowerCase();
+  });
+  if (!user || (user.role !== 'superadmin' && user.role !== 'admin')) {
+    throw new Error('Only admins can revise a billing.');
+  }
+  var b = readAll_('Billings').find(function (x) { return x.id === id; });
+  if (!b) throw new Error('Billing not found.');
+  if (b.status === 'Paid') throw new Error('A paid billing can no longer be revised.');
+  if (b.status === 'Rejected') throw new Error('This billing is already rejected/superseded.');
+
+  var pct = parseFloat(clientPct);
+  var prevPct = parseFloat(b.prevPct) || 0;
+  if (isNaN(pct) || pct <= prevPct || pct > 100) {
+    throw new Error('Client-approved % must be above the previous billed ' + prevPct + '% and at most 100%.');
+  }
+
+  var proj = readAll_('Projects').find(function (p) { return p.id === b.projectId; });
+  if (!proj) throw new Error('Project not found.');
+  var revised = revisedContractValue_(b.projectId, proj, null);
+  var rp = parseFloat(proj.retentionPct);
+  if (isNaN(rp) || rp < 0 || rp > 0.5) rp = 0.10;
+
+  // supersede the original
+  updateRow_('Billings', 'id', id, { status: 'Rejected' });
+
+  var gross = (pct - prevPct) / 100 * revised;
+  var retention = gross * rp;
+  var net = gross - retention;
+  var newId = nextId_('BIL');
+  appendRow_('Billings', {
+    id: newId,
+    projectId: b.projectId,
+    billingNo: b.billingNo + '-R',
+    period: b.period,
+    prevPct: prevPct,
+    currentPct: pct,
+    grossAmount: Math.round(gross * 100) / 100,
+    retentionAmount: Math.round(retention * 100) / 100,
+    netAmount: Math.round(net * 100) / 100,
+    status: 'Pending',
+    submittedBy: currentUserEmail_(),
+    createdAt: new Date(),
+    paidAt: ''
+  });
+  logActivity_('Billing ' + b.billingNo + ' superseded by client evaluation — revised to ' + pct + '% as ' + b.billingNo + '-R (₱' + fmtMoney_(net) + ' net), for approval', 'blue', newId);
+  return { success: true, id: newId, billingNo: b.billingNo + '-R' };
+}

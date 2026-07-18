@@ -318,6 +318,10 @@ const DataService = {
     async markBillingPaid(id) {
         return await gasCall('markBillingPaid', id);
     },
+    // v6.1: client evaluated a different % — supersede + regenerate
+    async reviseBilling(id, clientPct) {
+        return await gasCall('reviseBilling', id, clientPct);
+    },
     async requestVariationOrder(projectId, data) {
         return await gasCall('requestVariationOrder', projectId, data);
     },

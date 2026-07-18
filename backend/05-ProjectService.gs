@@ -445,7 +445,37 @@ function getProjectData(projectId) {
   };
 
   // ── Billings + contract ──
-  const billings = readAll_('Billings').filter(function (b) { return b.projectId === projectId; }).reverse();
+  // v6.1: Sheets auto-parses period strings like "Jul 2026" into Date
+  // cells, which serialize back as long ISO strings. Normalize every
+  // date-ish field before it reaches the UI.
+  const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const fmtPeriod_ = function (v) {
+    if (v instanceof Date) return MONTH_SHORT[v.getMonth()] + ' ' + v.getFullYear();
+    const s = String(v || '');
+    if (/^\d{4}-\d{2}-\d{2}T/.test(s)) {
+      const d = new Date(s);
+      if (!isNaN(d)) return MONTH_SHORT[d.getMonth()] + ' ' + d.getFullYear();
+    }
+    return s;
+  };
+  const billings = readAll_('Billings')
+    .filter(function (b) { return b.projectId === projectId; })
+    .map(function (b) {
+      return {
+        id: b.id, projectId: b.projectId, billingNo: b.billingNo,
+        period: fmtPeriod_(b.period),
+        prevPct: parseFloat(b.prevPct) || 0,
+        currentPct: parseFloat(b.currentPct) || 0,
+        grossAmount: parseFloat(b.grossAmount) || 0,
+        retentionAmount: parseFloat(b.retentionAmount) || 0,
+        netAmount: parseFloat(b.netAmount) || 0,
+        status: b.status,
+        submittedBy: b.submittedBy || '',
+        createdAt: fmtDate_(b.createdAt),
+        paidAt: b.paidAt ? fmtDate_(b.paidAt) : ''
+      };
+    })
+    .reverse();
   const retentionPctVal = (function () {
     const rp = parseFloat(proj.retentionPct);
     return (isNaN(rp) || rp < 0 || rp > 0.5) ? 0.10 : rp;

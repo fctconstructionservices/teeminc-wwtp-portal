@@ -13,7 +13,7 @@ function requestEquipment(data) {
     id: id, code: data.code || id, name: data.name, desc: data.desc, category: data.category,
     unit: data.unit, rate: data.rate, brand: data.brand, supplier: data.supplier,
     image: data.image || '', docsJSON: JSON.stringify(data.docs || []), notes: data.notes || '',
-    status: 'Pending', requestedBy: currentUserEmail_(), createdAt: new Date()
+    status: 'pending', requestedBy: currentUserEmail_(), createdAt: new Date()   // v6.1: lowercase, consistent with approved/rejected
   });
   logActivity_('Equipment "' + data.name + '" requested by ' + currentUserName_(), 'blue');
   return { success: true, id: id };
