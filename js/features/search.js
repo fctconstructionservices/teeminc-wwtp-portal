@@ -26,7 +26,7 @@ async function performSearch() {
         
         if (results.length === 0) {
             emptyEl.style.display = 'block';
-            emptyEl.querySelector('p').textContent = 'Walang match.';
+            emptyEl.querySelector('p').textContent = 'No matches found.';
             tableWrap.style.display = 'none';
             return;
         }

@@ -51,7 +51,7 @@ Object.assign(ProjectPage, {
                         <input type="text" id="vo-desc" placeholder="e.g. Additional loading bay ramp" style="width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);" /></div>
                     <div><label style="display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:3px;">Amount (₱)</label>
                         <input type="number" id="vo-amount" placeholder="520000" style="width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);" /></div>
-                    ${cr.ready && this._canEdit !== false ? `<button class="btn-sm primary" onclick="ProjectPage.submitVO()">Submit for Client</button>` : `<span style="font-size:11px;color:var(--amber);align-self:center;">${this._canEdit === false ? 'View-only — editors lang ang maka-susubmit' : 'Locked — complete the contract basis first'}</span>`}
+                    ${cr.ready && this._canEdit !== false ? `<button class="btn-sm primary" onclick="ProjectPage.submitVO()">Submit for Client</button>` : `<span style="font-size:11px;color:var(--amber);align-self:center;">${this._canEdit === false ? 'View-only - only assigned editors can submit' : 'Locked — complete the contract basis first'}</span>`}
                 </div>
             </div>
 

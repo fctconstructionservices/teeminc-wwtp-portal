@@ -55,8 +55,8 @@ function handleSessionExpired() {
     setSessionToken('');
     try { localStorage.removeItem('fctc_user'); } catch (e) {}
     const msg = hasDraft
-        ? 'Nag-expire ang session mo (8 oras na walang aktibidad). May bukas kang form — kopyahin muna ang anumang hindi pa na-save bago mag-OK, dahil babalik tayo sa login.'
-        : 'Nag-expire ang session mo (8 oras na walang aktibidad). Mag-login ulit para magpatuloy.';
+        ? 'Your session expired after 8 hours of inactivity. You have an open form - please copy any unsaved work before continuing, as you will be returned to the login page.'
+        : 'Your session expired after 8 hours of inactivity. Please log in again to continue.';
     setTimeout(() => { alert(msg); window.location.reload(); }, 50);
 }
 

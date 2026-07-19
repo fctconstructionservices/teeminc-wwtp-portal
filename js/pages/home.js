@@ -243,7 +243,7 @@ const HomePage = {
                 return p.status && p.status.toLowerCase() === 'completed';
             });
         } else {
-            // 'ongoing' - lahat ng hindi completed
+            // 'ongoing' - everything that is not completed
             filteredProjects = this._allProjects.filter(function(p) {
                 return p.status && p.status.toLowerCase() !== 'completed';
             });

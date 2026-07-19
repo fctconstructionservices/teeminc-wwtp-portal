@@ -216,7 +216,7 @@ const ProjectPage = {
                             </label>`;
                         }).join('')}
                     </div>
-                    <div style="font-size:10.5px;color:var(--ink-soft);margin-top:6px;">Walang naka-check = bukas sa lahat (default). Ang Super Admin ay laging may access.</div>
+                    <div style="font-size:10.5px;color:var(--ink-soft);margin-top:6px;">No selection = open to all users (default). The Super Admin always has access.</div>
                 </div>
                 <div style="padding:12px 18px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px;">
                     <button class="btn-ghost" onclick="document.getElementById('editorsModal').remove()">Cancel</button>
@@ -510,16 +510,16 @@ const ProjectPage = {
 
                 <div class="section-head"><h2>Project Health — Earned Value</h2><div class="rule"></div></div>
                 <div class="kpi-strip" style="margin-bottom:12px;">
-                    <div class="kpi-card"><div class="k-label">PV · Planned Value</div><div class="k-val mono">₱${fmtMoney(evm.pv || 0)}</div><div class="k-sub">planong gastos by today (budget × Gantt)</div></div>
-                    <div class="kpi-card good"><div class="k-label">EV · Earned Value</div><div class="k-val mono">₱${fmtMoney(evm.ev || 0)}</div><div class="k-sub">halaga ng natapos (progress × estimate + VOs)</div></div>
-                    <div class="kpi-card warn"><div class="k-label">AC · Actual Cost</div><div class="k-val mono">₱${fmtMoney(evm.ac || 0)}</div><div class="k-sub">tunay na gastos (Reviewed releases)</div></div>
+                    <div class="kpi-card"><div class="k-label">PV · Planned Value</div><div class="k-val mono">₱${fmtMoney(evm.pv || 0)}</div><div class="k-sub">planned spend to date (budget × schedule)</div></div>
+                    <div class="kpi-card good"><div class="k-label">EV · Earned Value</div><div class="k-val mono">₱${fmtMoney(evm.ev || 0)}</div><div class="k-sub">value earned (progress × approved estimate + VOs)</div></div>
+                    <div class="kpi-card warn"><div class="k-label">AC · Actual Cost</div><div class="k-val mono">₱${fmtMoney(evm.ac || 0)}</div><div class="k-sub">actual cost (reviewed releases)</div></div>
                     <div class="kpi-card ${healthCls}"><div class="k-label">SPI ${spiTxt} · CPI ${cpiTxt}</div><div class="k-val" style="font-size:14px;">${spiState}${spiState && cpiState ? ' · ' : ''}${cpiState}</div><div class="k-sub">SPI=EV/PV · CPI=EV/AC · 1.00 = on plan</div></div>
                 </div>
-                <div class="chart-card" style="margin-bottom:10px;"><div class="cc-head"><h3>S-Curve — PV vs EV vs AC</h3><span class="cc-note">PV moves with the Gantt · AC is fixed actual</span></div><div class="canvas-wrap"><canvas id="evmChart"></canvas></div></div>
+                <div class="chart-card" style="margin-bottom:10px;"><div class="cc-head"><h3>S-Curve — PV vs EV vs AC</h3><span class="cc-note">PV moves with the schedule · AC is actual spend</span></div><div class="canvas-wrap"><canvas id="evmChart"></canvas></div></div>
                 <div class="evm-help" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-bottom:18px;">
-                    <div style="background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:11.5px;line-height:1.5;"><b style="font-family:'IBM Plex Mono';color:var(--blueprint);">PV — Planned Value.</b> Kung susundin ang Gantt schedule, magkano na dapat ang na-accomplish hanggang ngayon. Gumagalaw kapag binago ang Timeline.</div>
-                    <div style="background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:11.5px;line-height:1.5;"><b style="font-family:'IBM Plex Mono';color:var(--blueprint);">EV — Earned Value.</b> Halaga ng trabahong tunay na natapos sa CONTRACT basis: % complete (Daily Reports) × approved estimate (+ VOs) ng bawat SOW.</div>
-                    <div style="background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:11.5px;line-height:1.5;"><b style="font-family:'IBM Plex Mono';color:var(--blueprint);">AC — Actual Cost.</b> Tunay na perang lumabas (Reviewed releases). Fixed ito. EV vs AC = sulit ba; EV vs PV = nasa oras ba.</div>
+                    <div style="background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:11.5px;line-height:1.5;"><b style="font-family:'IBM Plex Mono';color:var(--blueprint);">PV — Planned Value.</b> What should have been spent by now if the schedule is followed. Recalculates whenever the Timeline changes.</div>
+                    <div style="background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:11.5px;line-height:1.5;"><b style="font-family:'IBM Plex Mono';color:var(--blueprint);">EV — Earned Value.</b> The value of work actually completed, on the contract basis: % complete (from Daily Reports) × approved estimate (+ VOs) for each SOW item.</div>
+                    <div style="background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:11.5px;line-height:1.5;"><b style="font-family:'IBM Plex Mono';color:var(--blueprint);">AC — Actual Cost.</b> Cash actually disbursed (reviewed releases). This does not move with the schedule. EV vs AC shows cost efficiency; EV vs PV shows schedule performance.</div>
                 </div>
 
                 <div class="section-head"><h2>Cost Breakdown</h2><div class="rule"></div><span class="cc-note">by request type</span></div>
@@ -592,7 +592,7 @@ const ProjectPage = {
             const evmCtx = document.getElementById('evmChart');
             if (evmCtx && evm && evm.labels && evm.labels.length) {
                 // v6.8: EV is a full historical line (reconstructed from
-                // the daily reports per month-end), hindi na single point.
+                // the daily reports per month-end), not a single point.
                 const evData = evm.evSeries || evm.labels.map((_, i) => i === evm.nowIndex ? evm.ev : null);
                 this._charts.evm = new Chart(evmCtx, {
                     type: 'line',

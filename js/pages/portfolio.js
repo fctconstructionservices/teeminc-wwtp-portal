@@ -28,7 +28,7 @@ const PortfolioPage = {
         } catch (err) {
             container.innerHTML = `<div class="empty">
                 <div class="empty-ico">📊</div>
-                <h4>Hindi ma-load ang portfolio</h4>
+                <h4>Unable to load portfolio</h4>
                 <p>${err.message}</p>
             </div>`;
             return;
@@ -49,7 +49,7 @@ const PortfolioPage = {
                     <div class="k-sub">${s.totalProjects} total</div></div>
                 <div class="kpi-card good"><div class="k-label">Contract Value</div>
                     <div class="k-val mono">₱${fmtMoney(s.totalContract)}</div>
-                    <div class="k-sub">${s.totalVO ? '+₱' + fmtMoney(s.totalVO) + ' sa VOs' : 'walang VO'}</div></div>
+                    <div class="k-sub">${s.totalVO ? '+₱' + fmtMoney(s.totalVO) + ' from variation orders' : 'no variation orders'}</div></div>
                 <div class="kpi-card ${s.uncollected > 0 ? 'warn' : 'good'}"><div class="k-label">Uncollected</div>
                     <div class="k-val mono">₱${fmtMoney(s.uncollected)}</div>
                     <div class="k-sub">₱${fmtMoney(s.totalBilled)} billed · ₱${fmtMoney(s.totalCollected)} collected</div></div>
@@ -61,12 +61,12 @@ const PortfolioPage = {
 
         // ── Needs Attention ──
         html += `<div class="section-head"><h2>Needs Attention</h2><div class="rule"></div>
-            <span class="cc-note">nauuna ang pinakamabigat</span></div>`;
+            <span class="cc-note">highest severity first</span></div>`;
         if (!d.attention.length) {
             html += `<div class="panel"><div class="empty" style="padding:26px;">
                 <div class="empty-ico">✓</div>
-                <h4>Walang nangangailangan ng agarang aksyon</h4>
-                <p>Lahat ng proyekto ay nasa iskedyul at budget, at walang overdue na billing.</p>
+                <h4>Nothing needs attention</h4>
+                <p>All projects are on schedule and within budget, with no overdue billings.</p>
             </div></div>`;
         } else {
             html += `<div class="attention-list">`;
@@ -75,7 +75,7 @@ const PortfolioPage = {
                 html += `<div class="attention-row ${sev}">
                     <span class="attn-ico">${a.icon}</span>
                     <span class="attn-text"><b>${a.projectName}</b> — ${a.text}</span>
-                    <button class="btn-sm" onclick="PortfolioPage.goToProject('${a.projectId}','${a.tab}')">Tingnan</button>
+                    <button class="btn-sm" onclick="PortfolioPage.goToProject('${a.projectId}','${a.tab}')">View</button>
                 </div>`;
             });
             html += `</div>`;
@@ -88,7 +88,7 @@ const PortfolioPage = {
 
         html += `<div class="section-head"><h2>All Projects</h2><div class="rule"></div>
             <button class="btn-sm ${this._filter === 'active' ? 'primary' : ''}" onclick="PortfolioPage.setFilter('active')">Active</button>
-            <button class="btn-sm ${this._filter === 'all' ? 'primary' : ''}" onclick="PortfolioPage.setFilter('all')">Lahat</button>
+            <button class="btn-sm ${this._filter === 'all' ? 'primary' : ''}" onclick="PortfolioPage.setFilter('all')">All</button>
         </div>
         <div class="panel"><table><thead><tr>
             <th>Project</th><th style="min-width:92px">Progress</th>
@@ -101,7 +101,7 @@ const PortfolioPage = {
         </tr></thead><tbody>`;
 
         if (!rows.length) {
-            html += `<tr><td colspan="9" style="text-align:center;color:var(--ink-soft);padding:24px">Walang proyekto.</td></tr>`;
+            html += `<tr><td colspan="9" style="text-align:center;color:var(--ink-soft);padding:24px">No projects.</td></tr>`;
         } else {
             rows.forEach(p => {
                 const stampCls = p.healthClass === 'ok' ? 'approved'
@@ -130,7 +130,7 @@ const PortfolioPage = {
             });
         }
         html += `</tbody></table></div>
-            <div class="data-source-note">SPI = nakuha ÷ planado (nasa oras ba). CPI = nakuha ÷ nagastos (sulit ba). Ang 1.00 ay tumpak sa plano. Ang lahat ay galing sa parehong datos na ginagamit ng bawat project page.</div>`;
+            <div class="data-source-note">SPI = earned ÷ planned (schedule performance). CPI = earned ÷ spent (cost performance). 1.00 means exactly on plan. All figures come from the same data each project page uses.</div>`;
 
         // ── charts ──
         html += `<div class="chart-grid" style="margin-top:16px;">

@@ -8,7 +8,7 @@
 // ================================================================
 
 /**
- * setDateNeededMin - I-set ang minimum date para sa Date Needed field
+ * setDateNeededMin - Sets the minimum selectable date for Date Needed
  * PURPOSE: Ang pinakamaagang pwedeng piliin ay 3 days after today
  */
 function setDateNeededMin() {
@@ -145,7 +145,7 @@ async function loadIncomingProjectsDropdown() {
 
 /**
  * loadSOWItemsForRequest - Punoan ang SOW dropdown base sa napiling project
- * PURPOSE: I-load ang SOW items ng napiling project para sa scope of work dropdown
+ * PURPOSE: Loads the selected project's SOW items into the scope-of-work dropdown
  */
 async function loadSOWItemsForRequest() {
     const projectSelect = document.getElementById('req-project');

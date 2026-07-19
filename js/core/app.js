@@ -134,7 +134,7 @@ const App = {
                 </div>
                 <div style="padding:14px 18px;overflow:auto;">
                     <div style="font-size:11.5px;color:var(--ink-soft);margin-bottom:10px;line-height:1.5;">
-                        Makikita mo ang sistema gaya ng nakikita nila. Ang bawat aksyon ay naka-log pa rin sa tunay mong pangalan.
+                        You will see the system exactly as they do. Every action is still recorded under your real identity.
                     </div>
                     ${users.map(u => `
                         <button onclick="App.applyViewAs('${u.email}')" style="width:100%;text-align:left;display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;background:var(--surface);cursor:pointer;">
@@ -191,7 +191,7 @@ const App = {
             document.body.prepend(bar);
         }
         bar.innerHTML = `👁 <b>Viewing as ${(this.currentUser || {}).email || ''}</b>
-            <span style="opacity:.8;">— hindi ito ang tunay mong account (${(this._realUser || {}).email || ''}). Naka-log pa rin ang lahat sa pangalan mo.</span>
+            <span style="opacity:.8;">— this is not your own account (${(this._realUser || {}).email || ''}). All actions remain logged under your real identity.</span>
             <button onclick="App.stopViewAs()" style="margin-left:auto;background:#1C2321;color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:11px;cursor:pointer;">Stop</button>`;
     },
 

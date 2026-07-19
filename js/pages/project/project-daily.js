@@ -68,7 +68,7 @@ Object.assign(ProjectPage, {
                 <div class="section-label">Materials Used <span class="rule"></span></div>
                 <div id="materialsUsedEntries"><div class="entry-row"><div class="field"><label>Material (on-site only)</label><select class="mu-name" onchange="ProjectPage.syncUsedMaterialUnit(this)">${this._siteMaterialOptionsDaily()}</select></div><div class="field"><label>Qty Used</label><input type="number" class="mu-qty" min="0" /></div><div class="field"><label>Unit</label><input type="text" class="mu-unit" readonly placeholder="auto" /></div><div class="field"><label>Used For (SOW)</label><select class="mu-sow">${this._sowOptions()}</select></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'materialsUsed')">${Icon.close({size:13})}</button></div></div></div>
                 <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('materialsUsed')">+ Add Usage</button></div>
-                <div class="muted" style="font-size:11px;color:var(--ink-soft);margin-top:4px;">Deducted from site stock (delivered − used). You can't log more than what remains.</div>
+                <div class="muted" style="font-size:11px;color:var(--ink-soft);margin-top:4px;">Deducted from site stock (delivered - used). You cannot log more than the quantity remaining.</div>
             </div>
             <div class="daily-form-section" id="issuesSection">
                 <div class="section-label">Issues / Delays <span class="rule"></span></div>
@@ -86,8 +86,8 @@ Object.assign(ProjectPage, {
                 <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('photos')">+ Add Photo</button></div>
             </div>
             <div class="submit-row" id="dailyStepNav" hidden>
-                <button class="btn-ghost" id="dsbPrev" onclick="ProjectPage.dailyStep(-1)">← Balik</button>
-                <button class="btn-primary" id="dsbNext" onclick="ProjectPage.dailyStep(1)">Susunod →</button>
+                <button class="btn-ghost" id="dsbPrev" onclick="ProjectPage.dailyStep(-1)">← Back</button>
+                <button class="btn-primary" id="dsbNext" onclick="ProjectPage.dailyStep(1)">Next →</button>
             </div>
             <div class="submit-row" id="dailySubmitRow">
                 <button class="btn-primary" onclick="ProjectPage.submitDailyRecord('${this._currentProjectId || ''}')">Save Record (Draft)</button>
@@ -462,15 +462,15 @@ Object.assign(ProjectPage, {
     // about what was captured.
 
     _DAILY_STEPS: [
-        { id: 'dateWeatherSection',    label: 'Petsa at Panahon' },
+        { id: 'dateWeatherSection',    label: 'Date and Weather' },
         { id: 'manpowerSection',       label: 'Manpower' },
         { id: 'equipmentSection',      label: 'Equipment' },
-        { id: 'workSection',           label: 'Natapos na Trabaho' },
+        { id: 'workSection',           label: 'Work Accomplished' },
         { id: 'materialsSection',      label: 'Materials Delivered' },
         { id: 'materialsUsedSection',  label: 'Materials Used' },
-        { id: 'issuesSection',         label: 'Isyu at Pagka-antala' },
-        { id: 'visitorsSection',       label: 'Bisita' },
-        { id: 'photosSection',         label: 'Mga Litrato' }
+        { id: 'issuesSection',         label: 'Issues and Delays' },
+        { id: 'visitorsSection',       label: 'Visitors' },
+        { id: 'photosSection',         label: 'Photos' }
     ],
 
     /** isMobileView - phone-sized viewport (matches the CSS breakpoint). */
@@ -526,14 +526,14 @@ Object.assign(ProjectPage, {
         const title = document.getElementById('dsbTitle');
         if (title) title.textContent = (idx + 1) + ' · ' + steps[idx].label;
         const count = document.getElementById('dsbCount');
-        if (count) count.textContent = (idx + 1) + ' sa ' + steps.length;
+        if (count) count.textContent = (idx + 1) + ' of ' + steps.length;
 
         const prev = document.getElementById('dsbPrev');
         const next = document.getElementById('dsbNext');
         const submitRow = document.getElementById('dailySubmitRow');
         const isLast = idx === steps.length - 1;
         if (prev) prev.style.visibility = idx === 0 ? 'hidden' : 'visible';
-        if (next) next.textContent = isLast ? 'Suriin at I-save' : 'Susunod →';
+        if (next) next.textContent = isLast ? 'Review and Save' : 'Next →';
         // On the final step, show the real save controls instead of "next"
         if (submitRow) submitRow.hidden = !isLast;
         const nav = document.getElementById('dailyStepNav');
@@ -552,7 +552,7 @@ Object.assign(ProjectPage, {
         // one field the whole record depends on.
         if (delta > 0 && this._dailyStepIdx === 0) {
             const d = document.getElementById('dr-date');
-            if (d && !d.value) { UI.toast('Pumili muna ng petsa.', 'error'); return; }
+            if (d && !d.value) { UI.toast('Please select a date first.', 'error'); return; }
         }
         this._dailyStepIdx = next;
         this._renderDailyStep();

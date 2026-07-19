@@ -69,21 +69,21 @@ Object.assign(ProjectPage, {
         // ── v6.9: transfer log for this project ──
         const trs = p.transfers || [];
         html += `
-            <div class="section-head"><h2>Transfers</h2><div class="rule"></div><span class="cc-note">papasok at palabas ng site na ito</span></div>
+            <div class="section-head"><h2>Transfers</h2><div class="rule"></div><span class="cc-note">into and out of this site</span></div>
             <div class="panel"><table><thead><tr>
-                <th>Ref</th><th>Petsa</th><th>Direksyon</th><th>Item</th>
-                <th style="text-align:right">Qty</th><th>Dahilan</th><th>Status</th><th></th>
+                <th>Ref</th><th>Date</th><th>Direksyon</th><th>Item</th>
+                <th style="text-align:right">Qty</th><th>Reason</th><th>Status</th><th></th>
             </tr></thead><tbody>`;
         if (!trs.length) {
-            html += `<tr><td colspan="8" style="text-align:center;color:var(--ink-soft);padding:20px">Wala pang transfer para sa project na ito.</td></tr>`;
+            html += `<tr><td colspan="8" style="text-align:center;color:var(--ink-soft);padding:20px">No transfers recorded for this project.</td></tr>`;
         } else {
             const user = App.getUser();
             const isAdmin = user && (user.role === 'admin' || user.role === 'superadmin');
             trs.forEach(tr => {
                 const cls = tr.status === 'Completed' ? 'approved' : tr.status === 'Pending' ? 'pending' : 'rejected';
                 const arrow = tr.direction === 'in'
-                    ? `<span class="mono" style="font-size:11px">${tr.fromLabel}</span> <span style="color:var(--safety);font-weight:700">→</span> <b>dito</b>`
-                    : `<b>dito</b> <span style="color:var(--safety);font-weight:700">→</span> <span class="mono" style="font-size:11px">${tr.toLabel}</span>`;
+                    ? `<span class="mono" style="font-size:11px">${tr.fromLabel}</span> <span style="color:var(--safety);font-weight:700">→</span> <b>here</b>`
+                    : `<b>here</b> <span style="color:var(--safety);font-weight:700">→</span> <span class="mono" style="font-size:11px">${tr.toLabel}</span>`;
                 const actions = (tr.status === 'Pending' && isAdmin)
                     ? `<button class="btn-sm success" onclick="ProjectPage.decideTransfer('${tr.id}', true)">Approve</button>
                        <button class="btn-sm danger" onclick="ProjectPage.decideTransfer('${tr.id}', false)">Reject</button>`
@@ -101,7 +101,7 @@ Object.assign(ProjectPage, {
             });
         }
         html += `</tbody></table></div>
-            <div class="data-source-note">Ang transfer ay lumilipat mula lokasyon patungong lokasyon (project o Warehouse). Kapag na-approve, sabay na bumababa ang stock ng pinanggalingan at tumataas ang pupuntahan — kaya hindi puwedeng malimutan ang kabilang panig. Ang cost ay hindi lumilipat.</div>`;
+            <div class="data-source-note">Transfers move stock between locations (a project or the Warehouse). On approval the source is decremented and the destination incremented in the same action, so the two sides can never fall out of step. Cost does not transfer - it stays with the project that purchased the item.</div>`;
 
         container.innerHTML = html;
     },
@@ -145,25 +145,25 @@ Object.assign(ProjectPage, {
                 `<option value="${l.id}" ${l.id === sel ? 'selected' : ''}>${l.isWarehouse ? '🏭 ' : '🏗 '}${l.label}</option>`).join('');
             body.innerHTML = `
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                    <div style="margin-bottom:11px;"><label style="display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:3px;">Mula (From)</label>
+                    <div style="margin-bottom:11px;"><label style="display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:3px;">From</label>
                         <select id="trf-from" onchange="ProjectPage.reloadTransferItems()" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--surface);color:var(--ink);">${locOpts(this._currentProjectId)}</select></div>
-                    <div style="margin-bottom:11px;"><label style="display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:3px;">Papunta (To)</label>
+                    <div style="margin-bottom:11px;"><label style="display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:3px;">To</label>
                         <select id="trf-to" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--surface);color:var(--ink);">${locOpts('WAREHOUSE')}</select></div>
                 </div>
-                <div style="margin-bottom:11px;"><label style="display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:3px;">Uri</label>
+                <div style="margin-bottom:11px;"><label style="display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:3px;">Type</label>
                     <select id="trf-type" onchange="ProjectPage.reloadTransferItems()" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--surface);color:var(--ink);">
                         <option value="Material">Material</option><option value="Equipment">Equipment</option></select></div>
-                <div style="margin-bottom:11px;"><label style="display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:3px;">Item (may stock lang sa pinanggalingan)</label>
+                <div style="margin-bottom:11px;"><label style="display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:3px;">Item (only items available at the source)</label>
                     <select id="trf-item" onchange="ProjectPage.syncTransferMax()" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--surface);color:var(--ink);">${this._transferItemOptions(opts.items)}</select></div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
                     <div style="margin-bottom:11px;"><label style="display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:3px;">Qty</label>
                         <input type="number" id="trf-qty" min="0" step="any" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--surface);color:var(--ink);" />
                         <div id="trf-max" style="font-size:10px;color:var(--ink-soft);margin-top:3px;"></div></div>
-                    <div style="margin-bottom:11px;"><label style="display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:3px;">Petsa</label>
+                    <div style="margin-bottom:11px;"><label style="display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:3px;">Date</label>
                         <input type="date" id="trf-date" value="${new Date().toISOString().slice(0, 10)}" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--surface);color:var(--ink);" /></div>
                 </div>
-                <div style="margin-bottom:4px;"><label style="display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:3px;">Dahilan</label>
-                    <input type="text" id="trf-reason" placeholder="e.g. Natirang stock, kailangan sa kabilang site" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--surface);color:var(--ink);" /></div>`;
+                <div style="margin-bottom:4px;"><label style="display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:3px;">Reason</label>
+                    <input type="text" id="trf-reason" placeholder="e.g. Surplus stock needed at another site" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--surface);color:var(--ink);" /></div>`;
             this.syncTransferMax();
         } catch (err) {
             const body = document.getElementById('trfBody');
@@ -172,7 +172,7 @@ Object.assign(ProjectPage, {
     },
 
     _transferItemOptions(items) {
-        if (!items || !items.length) return '<option value="">— Walang available na item dito —</option>';
+        if (!items || !items.length) return '<option value="">- No items available at this location -</option>';
         return items.map(i =>
             `<option value="${String(i.item).replace(/"/g, '&quot;')}" data-max="${i.qty}" data-unit="${i.unit || ''}">${i.item} — available: ${fmtNum(i.qty)} ${i.unit || ''}</option>`
         ).join('');
@@ -200,7 +200,7 @@ Object.assign(ProjectPage, {
         const max = opt ? parseFloat(opt.dataset.max) : NaN;
         if (!isNaN(max)) {
             qty.max = max;
-            if (note) note.textContent = `Max ${fmtNum(max)} ${opt.dataset.unit || ''} — hindi puwedeng lumampas`;
+            if (note) note.textContent = `Max ${fmtNum(max)} ${opt.dataset.unit || ''} - cannot be exceeded`;
         } else if (note) note.textContent = '';
     },
 
@@ -214,12 +214,12 @@ Object.assign(ProjectPage, {
             transferDate: document.getElementById('trf-date')?.value,
             reason: document.getElementById('trf-reason')?.value
         };
-        if (!data.item) { UI.toast('Pumili ng item.', 'error'); return; }
-        if (isNaN(data.qty) || data.qty <= 0) { UI.toast('Maglagay ng wastong qty.', 'error'); return; }
-        if (data.fromLoc === data.toLoc) { UI.toast('Magkaiba dapat ang pinanggalingan at pupuntahan.', 'error'); return; }
+        if (!data.item) { UI.toast('Select an item.', 'error'); return; }
+        if (isNaN(data.qty) || data.qty <= 0) { UI.toast('Enter a valid quantity.', 'error'); return; }
+        if (data.fromLoc === data.toLoc) { UI.toast('Source and destination must be different.', 'error'); return; }
         try {
             const res = await DataService.requestTransfer(data);
-            UI.toast(`${res.id} submitted — naghihintay ng admin approval.`, 'success');
+            UI.toast(`${res.id} submitted — awaiting admin approval.`, 'success');
             const m = document.getElementById('transferModal');
             if (m) m.remove();
             await this.open(this._currentProjectId, true);
@@ -227,7 +227,7 @@ Object.assign(ProjectPage, {
     },
 
     async decideTransfer(id, approve) {
-        if (!confirm(approve ? 'Approve this transfer? Ililipat na ang stock sa magkabilang panig.' : 'Reject this transfer?')) return;
+        if (!confirm(approve ? 'Approve this transfer? Stock will be moved on both sides.' : 'Reject this transfer?')) return;
         try {
             if (approve) await DataService.approveTransfer(id);
             else await DataService.rejectTransfer(id);

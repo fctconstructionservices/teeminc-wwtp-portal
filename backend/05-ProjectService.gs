@@ -640,7 +640,7 @@ function getProjectData(projectId) {
   // spent, so CPI reads earned contract value per peso spent.
   // v6.8: EV as a monthly series — for each past month-end, reconstruct
   // every SOW's % complete from the daily reports and value it on the
-  // contract basis. Future months are null (walang mahuhulaang EV).
+  // contract basis. Future months are null - EV cannot be forecast.
   const evSeries = monthsArr.map(function (mm) {
     if (mm.y * 12 + mm.m > nowKey) return null;
     const cutD = monthEnd_(mm) < today ? monthEnd_(mm) : today;

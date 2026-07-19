@@ -140,16 +140,16 @@ const MaterialsPage = {
             </div>
 
             <div class="kpi-strip" style="margin:14px 0;">
-                <div class="kpi-card"><div class="k-label">Material Items</div><div class="k-val">${mats.length}</div><div class="k-sub">may natitirang stock</div></div>
-                <div class="kpi-card"><div class="k-label">Equipment Units</div><div class="k-val">${fmtNum(eqs.reduce((s, e) => s + e.qty, 0))}</div><div class="k-sub">idle sa warehouse</div></div>
-                <div class="kpi-card warn"><div class="k-label">Pending Transfers</div><div class="k-val">${wh.pendingCount || 0}</div><div class="k-sub">naghihintay ng approval</div></div>
+                <div class="kpi-card"><div class="k-label">Material Items</div><div class="k-val">${mats.length}</div><div class="k-sub">with stock remaining</div></div>
+                <div class="kpi-card"><div class="k-label">Equipment Units</div><div class="k-val">${fmtNum(eqs.reduce((s, e) => s + e.qty, 0))}</div><div class="k-sub">idle in warehouse</div></div>
+                <div class="kpi-card warn"><div class="k-label">Pending Transfers</div><div class="k-val">${wh.pendingCount || 0}</div><div class="k-sub">awaiting approval</div></div>
                 <div class="kpi-card good"><div class="k-label">Est. Value</div><div class="k-val">₱${fmtMoney(wh.estValue || 0)}</div><div class="k-sub">sa DB rate</div></div>
             </div>
 
             <div class="panel"><div class="panel-head"><h3>Materials</h3></div>
-            <table><thead><tr><th>Material</th><th>Unit</th><th style="text-align:right">On Hand</th><th>Huling Galing</th><th>Petsa</th></tr></thead><tbody>`;
+            <table><thead><tr><th>Material</th><th>Unit</th><th style="text-align:right">On Hand</th><th>Last From</th><th>Date</th></tr></thead><tbody>`;
         if (!mats.length) {
-            html += `<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:22px">Walang laman ang warehouse. Ang stock dito ay galing sa mga completed transfer mula sa mga proyekto.</td></tr>`;
+            html += `<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:22px">The warehouse is empty. Stock here comes from completed transfers out of projects.</td></tr>`;
         } else {
             mats.forEach(m => {
                 html += `<tr>
@@ -164,9 +164,9 @@ const MaterialsPage = {
         html += `</tbody></table></div>`;
 
         html += `<div class="panel"><div class="panel-head"><h3>Equipment</h3></div>
-            <table><thead><tr><th>Equipment</th><th style="text-align:right">Qty</th><th>Huling Galing</th><th>Petsa</th></tr></thead><tbody>`;
+            <table><thead><tr><th>Equipment</th><th style="text-align:right">Qty</th><th>Last From</th><th>Date</th></tr></thead><tbody>`;
         if (!eqs.length) {
-            html += `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);padding:22px">Walang equipment sa warehouse.</td></tr>`;
+            html += `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);padding:22px">No equipment in the warehouse.</td></tr>`;
         } else {
             eqs.forEach(e => {
                 html += `<tr>
@@ -178,7 +178,7 @@ const MaterialsPage = {
             });
         }
         html += `</tbody></table></div>
-            <div class="data-source-note">Ang laman ng warehouse ay puro galing sa <b>completed transfers</b> — walang manual na encoding. Para mag-isyu sa isang proyekto, gumawa ng transfer (Warehouse → Project) mula sa Site Materials tab ng proyektong iyon. Bago bumili ng bago, tingnan muna dito kung may natira pa.</div>`;
+            <div class="data-source-note">Warehouse contents are derived entirely from <b>completed transfers</b> - there is no manual encoding. To issue stock to a project, create a transfer (Warehouse → Project) from that project's Site Materials tab. Check here for surplus before purchasing new stock.</div>`;
         container.innerHTML = html;
     },
 

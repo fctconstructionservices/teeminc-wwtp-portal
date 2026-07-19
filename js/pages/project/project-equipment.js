@@ -36,26 +36,26 @@ Object.assign(ProjectPage, {
 
         let html = `
             <div class="kpi-strip" style="margin-bottom:14px;">
-                <div class="kpi-card"><div class="k-label">Units on Site</div><div class="k-val">${fmtNum(sum.unitsOnSite || 0)}</div><div class="k-sub">${sum.types || 0} uri ng equipment</div></div>
-                <div class="kpi-card good"><div class="k-label">Operational Now</div><div class="k-val">${sum.operationalNow || 0}</div><div class="k-sub">huling status kada unit</div></div>
-                <div class="kpi-card bad"><div class="k-label">Repair / Breakdown</div><div class="k-val">${sum.downNow || 0}</div><div class="k-sub">kasalukuyang hindi magamit</div></div>
+                <div class="kpi-card"><div class="k-label">Units on Site</div><div class="k-val">${fmtNum(sum.unitsOnSite || 0)}</div><div class="k-sub">${sum.types || 0} equipment types</div></div>
+                <div class="kpi-card good"><div class="k-label">Operational Now</div><div class="k-val">${sum.operationalNow || 0}</div><div class="k-sub">latest status per unit</div></div>
+                <div class="kpi-card bad"><div class="k-label">Repair / Breakdown</div><div class="k-val">${sum.downNow || 0}</div><div class="k-sub">currently unavailable</div></div>
                 <div class="kpi-card warn"><div class="k-label">Avg Utilization</div><div class="k-val">${sum.avgUtilization || 0}%</div><div class="k-sub">operational ÷ days on site</div></div>
             </div>
 
-            <div class="section-head"><h2>Equipment on Site</h2><div class="rule"></div><span class="cc-note">status mula sa pinakahuling daily report</span></div>
+            <div class="section-head"><h2>Equipment on Site</h2><div class="rule"></div><span class="cc-note">status from the most recent daily report</span></div>
             <div class="panel"><table><thead><tr>
-                <th>Equipment</th><th style="text-align:right">Qty</th><th>Status Ngayon</th>
+                <th>Equipment</th><th style="text-align:right">Qty</th><th>Current Status</th>
                 <th style="text-align:right">Days on Site</th><th style="text-align:right">Operational</th>
                 <th style="min-width:110px">Utilization</th><th>Last Logged</th>
             </tr></thead><tbody>`;
 
         if (!rows.length) {
-            html += `<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);padding:24px">Wala pang equipment na na-log sa daily site reports.</td></tr>`;
+            html += `<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);padding:24px">No equipment has been logged in the daily site reports yet.</td></tr>`;
         } else {
             rows.forEach(e => {
                 const barColor = e.utilization >= 70 ? 'var(--green)' : e.utilization >= 45 ? 'var(--amber)' : 'var(--red)';
                 const stale = e.staleDays >= 3
-                    ? ` <span style="font-size:10px;color:var(--amber);font-family:'IBM Plex Mono';" title="Walang bagong log — maaaring hindi lang na-update ang report">⚠ ${e.staleDays}d stale</span>`
+                    ? ` <span style="font-size:10px;color:var(--amber);font-family:'IBM Plex Mono';" title="No recent log entry - the report may simply not have been updated">⚠ ${e.staleDays}d stale</span>`
                     : '';
                 html += `<tr>
                     <td><b>${e.name}</b>${e.brand ? `<div class="mono" style="font-size:10.5px;color:var(--ink-soft)">${e.brand}</div>` : ''}</td>
@@ -77,10 +77,10 @@ Object.assign(ProjectPage, {
         html += `
             <div class="section-head"><h2>Downtime Log</h2><div class="rule"></div><span class="cc-note">Under Repair + Breakdown</span></div>
             <div class="panel"><table><thead><tr>
-                <th>Petsa</th><th>Equipment</th><th>Status</th><th>Remarks</th>
+                <th>Date</th><th>Equipment</th><th>Status</th><th>Remarks</th>
             </tr></thead><tbody>`;
         if (!downtime.length) {
-            html += `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);padding:20px">Walang naitalang downtime — maganda iyon.</td></tr>`;
+            html += `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);padding:20px">No downtime recorded.</td></tr>`;
         } else {
             downtime.forEach(d => {
                 html += `<tr>
@@ -98,10 +98,10 @@ Object.assign(ProjectPage, {
             html += `
                 <div class="section-head"><h2>Cost vs Usage</h2><div class="rule"></div><span class="cc-note">Equipment Rental releases ÷ operational days</span></div>
                 <div class="chart-card"><div class="canvas-wrap"><canvas id="eqCostChart"></canvas></div></div>
-                <div class="data-source-note">Ang kabuuang Equipment Rental ng project (₱${fmtMoney(sum.rentalTotal)}) ay hinati sa mga unit ayon sa operational days — tantiya ito, dahil hindi naka-itemize kada unit ang releases. Ginagamit ito para makita kung aling makina ang mahal kada araw na tunay na gumagana.</div>`;
+                <div class="data-source-note">Total Equipment Rental cost for this project (₱${fmtMoney(sum.rentalTotal)}) is apportioned across units by operational days. This is an estimate, since releases are not itemised per unit; it shows which machines cost most per day of actual use.</div>`;
         }
 
-        html += `<div class="data-source-note">Lahat ng datos dito ay galing sa equipment rows ng Daily Site Reports. Ang unang log ng isang unit ay itinuturing na check-in — nananatili itong "on site" kahit may nalaktawang araw ng pag-log, at ang nalaktawang report ay lumalabas bilang ⚠ stale na babala.</div>`;
+        html += `<div class="data-source-note">All data here comes from the equipment rows of the Daily Site Reports. A unit's first log entry is treated as its check-in: it stays on site even if a day of logging is missed, and a missed report surfaces as a stale warning rather than a false departure.</div>`;
 
         container.innerHTML = html;
         if ((sum.rentalTotal || 0) > 0 && rows.length) setTimeout(() => this._buildEquipmentChart(rows), 60);
@@ -128,7 +128,7 @@ Object.assign(ProjectPage, {
                 indexAxis: 'y', responsive: true, maintainAspectRatio: false,
                 plugins: {
                     legend: { display: false },
-                    tooltip: { callbacks: { label: c => '₱' + fmtMoney(c.parsed.x) + ' kada operational day' } }
+                    tooltip: { callbacks: { label: c => '₱' + fmtMoney(c.parsed.x) + ' per operational day' } }
                 },
                 scales: { x: { ticks: { callback: fmtAxisMoney }, grid: { color: '#EEEBE0' } }, y: { grid: { display: false } } }
             }

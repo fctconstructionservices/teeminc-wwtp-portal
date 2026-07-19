@@ -132,14 +132,14 @@ function getPortfolioData() {
     if (cpi !== null && cpi < 0.9) {
       attention.push({
         severity: cpi < 0.8 ? 1 : 2, icon: '⚠', projectId: p.id, projectName: p.name,
-        text: 'CPI ' + cpi.toFixed(2) + ' — lampas ng ₱' + fmtMoney_(Math.round(actualCost - earned)) + ' ang gastos sa nakuha',
+        text: 'CPI ' + cpi.toFixed(2) + ' - over by ₱' + fmtMoney_(Math.round(actualCost - earned)) + ' against value earned',
         tab: 'overview'
       });
     }
     if (spi !== null && spi < 0.9) {
       attention.push({
         severity: spi < 0.8 ? 1 : 2, icon: '🕐', projectId: p.id, projectName: p.name,
-        text: 'SPI ' + spi.toFixed(2) + ' — huli sa iskedyul',
+        text: 'SPI ' + spi.toFixed(2) + ' - behind schedule',
         tab: 'gantt'
       });
     }
@@ -151,7 +151,7 @@ function getPortfolioData() {
       if (age >= PORTFOLIO_OVERDUE_DAYS) {
         attention.push({
           severity: age >= 60 ? 1 : 2, icon: '₱', projectId: p.id, projectName: p.name,
-          text: b.billingNo + ' — ' + age + ' araw nang hindi nababayaran (₱' + fmtMoney_(b.netAmount) + ')',
+          text: b.billingNo + ' — ' + age + ' days overdue (₱' + fmtMoney_(b.netAmount) + ')',
           tab: 'billings'
         });
       }
@@ -159,14 +159,14 @@ function getPortfolioData() {
     if (unapproved.length) {
       attention.push({
         severity: 3, icon: '📋', projectId: p.id, projectName: p.name,
-        text: unapproved.length + ' estimate(s) hindi pa approved — naka-lock ang billing',
+        text: unapproved.length + ' estimate(s) not yet approved - billing is locked',
         tab: 'estimates'
       });
     }
     if (zeroBudget.length) {
       attention.push({
         severity: 3, icon: '📋', projectId: p.id, projectName: p.name,
-        text: zeroBudget.length + ' SOW item(s) walang budget',
+        text: zeroBudget.length + ' SOW item(s) without a budget',
         tab: 'sow'
       });
     }
@@ -180,7 +180,7 @@ function getPortfolioData() {
         if (gap >= PORTFOLIO_STALE_DAYS) {
           attention.push({
             severity: gap >= 10 ? 2 : 3, icon: '📅', projectId: p.id, projectName: p.name,
-            text: 'Walang daily report sa loob ng ' + gap + ' araw',
+            text: 'No daily report for ' + gap + ' days',
             tab: 'daily'
           });
         }
