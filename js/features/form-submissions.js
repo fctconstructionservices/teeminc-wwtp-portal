@@ -36,6 +36,10 @@ function setDateNeededMin() {
  * PURPOSE: I-filter ang projects para Ongoing lang ang lumabas sa dropdown
  */
 async function loadProjectsDropdown() {
+    // v7.0.2: guard at the source. This also runs from DOMContentLoaded,
+    // which fires before anyone has logged in, so checking only at the
+    // navigate() call sites was not enough.
+    if (!getSessionToken()) return;
     try {
         const data = await DataService.getHomeData();
         const select = document.getElementById('req-project');
@@ -93,6 +97,7 @@ async function loadProjectsDropdown() {
  * PURPOSE: Same as loadProjectsDropdown but for record-cash form
  */
 async function loadIncomingProjectsDropdown() {
+    if (!getSessionToken()) return;   // v7.0.2: same reason as above
     try {
         const data = await DataService.getHomeData();
         const select = document.getElementById('rc-project');
@@ -770,14 +775,17 @@ async function submitReleaseForm(e) {
 // ─── DOM EVENT LISTENERS ───────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', function() {
+    // v7.0.2: only wire up listeners here. The dropdowns are populated by
+    // App.navigate() once a session exists — fetching on page load ran
+    // before login and produced "Session expired" errors.
     const projectSelect = document.getElementById('req-project');
     if (projectSelect) {
-        loadProjectsDropdown();
         projectSelect.addEventListener('change', loadSOWItemsForRequest);
+        if (getSessionToken()) loadProjectsDropdown();
     }
-    
+
     const rcProjectSelect = document.getElementById('rc-project');
-    if (rcProjectSelect) {
+    if (rcProjectSelect && getSessionToken()) {
         loadIncomingProjectsDropdown();
     }
 });
