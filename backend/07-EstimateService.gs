@@ -17,71 +17,89 @@
 
 function saveEstimates(projectId, groups) {
   assertProjectEditor_(projectId);   // v6.6
-  // v6.6 PERF: read the group index ONCE for the whole save
+  // ══ v6.7 PERF REWRITE ══
+  // The old version looped per GROUP, and each group rewrote all four
+  // child sheets — submitting on a 10-group project meant ~120 whole-
+  // sheet operations. Now the batching is per SHEET across every group
+  // in the payload: each of the four child sheets gets exactly ONE read,
+  // ONE clear, ONE write, no matter how many groups are being saved.
+  // Locked groups (pending/approved) are skipped entirely — their line
+  // items are frozen by the approval flow and must not be rewritten.
   const allGroups = readAll_('EstimateGroups');
   const bySow = {};
   allGroups.forEach(function (row) {
     if (row.projectId === projectId) bySow[row.sowId] = row;
   });
-  groups.forEach(function (g) {
-    let groupRow = bySow[g.sowId];
+
+  const gHeads = headers_('EstimateGroups');
+  const targets = [];
+  const newGroupRows = [];
+  (groups || []).forEach(function (g) {
+    const row = bySow[g.sowId];
+    if (row && (row.status === 'approved' || row.status === 'pending')) return;   // locked
     let groupId;
-    if (groupRow) {
-      groupId = groupRow.id;
-      updateRow_('EstimateGroups', 'id', groupId, { sowDescription: g.sowDescription });
+    if (row) {
+      groupId = row.id;
+      if (String(row.sowDescription || '') !== String(g.sowDescription || '')) {
+        updateRow_('EstimateGroups', 'id', groupId, { sowDescription: g.sowDescription });
+      }
     } else {
       groupId = nextId_('EG');
-      appendRow_('EstimateGroups', {
-        id: groupId, projectId: projectId, sowId: g.sowId,
-        sowDescription: g.sowDescription, status: 'draft'
+      const obj = { id: groupId, projectId: projectId, sowId: g.sowId, sowDescription: g.sowDescription, status: 'draft' };
+      newGroupRows.push(gHeads.map(function (h) {
+        return (obj[h] !== undefined && obj[h] !== null) ? obj[h] : '';
+      }));
+    }
+    targets.push({ groupId: groupId, g: g });
+  });
+
+  if (newGroupRows.length) {
+    const gsh = sheet_('EstimateGroups');
+    gsh.getRange(gsh.getLastRow() + 1, 1, newGroupRows.length, gHeads.length).setValues(newGroupRows);
+    _invalidateRead_('EstimateGroups');
+  }
+  if (!targets.length) return { success: true, saved: 0 };
+
+  const targetIds = {};
+  targets.forEach(function (t) { targetIds[String(t.groupId)] = true; });
+
+  const SPECS = [
+    ['EstimateMaterials', 'materials', ['material', 'materialName', 'desc', 'qty', 'rate', 'cost', 'unit']],
+    ['EstimateLabor', 'labor', ['role', 'desc', 'qty', 'duration', 'rate', 'cost']],
+    ['EstimateEquipment', 'equipment', ['equipment', 'equipName', 'desc', 'qty', 'duration', 'rate', 'cost', 'unit']],
+    ['EstimateIndirect', 'indirect', ['desc', 'type', 'amount', 'multiplier']]
+  ];
+  SPECS.forEach(function (spec) {
+    const sheetName = spec[0], key = spec[1], fields = spec[2];
+    const sh = sheet_(sheetName);
+    const heads = headers_(sheetName);
+    const gi = heads.indexOf('groupId');
+    const lastRow = sh.getLastRow();
+
+    let kept = [];
+    if (lastRow >= 2) {
+      kept = sh.getRange(2, 1, lastRow - 1, heads.length).getValues().filter(function (r) {
+        return !targetIds[String(r[gi])] && r.join('') !== '';
       });
     }
-    replaceGroupChildren_('EstimateMaterials', groupId, g.materials || [], ['material', 'materialName', 'desc', 'qty', 'rate', 'cost', 'unit']);
-    replaceGroupChildren_('EstimateLabor', groupId, g.labor || [], ['role', 'desc', 'qty', 'duration', 'rate', 'cost']);
-    replaceGroupChildren_('EstimateEquipment', groupId, g.equipment || [], ['equipment', 'equipName', 'desc', 'qty', 'duration', 'rate', 'cost', 'unit']);
-    replaceGroupChildren_('EstimateIndirect', groupId, g.indirect || [], ['desc', 'type', 'amount', 'multiplier']);
+    const fresh = [];
+    targets.forEach(function (t) {
+      (t.g[key] || []).forEach(function (item) {
+        const obj = { id: item.id || nextId_('EI'), groupId: t.groupId };
+        fields.forEach(function (f) { obj[f] = item[f]; });
+        fresh.push(heads.map(function (h) {
+          return (obj[h] !== undefined && obj[h] !== null) ? obj[h] : '';
+        }));
+      });
+    });
+    const all = kept.concat(fresh);
+    if (lastRow >= 2) sh.getRange(2, 1, lastRow - 1, heads.length).clearContent();
+    if (all.length) sh.getRange(2, 1, all.length, heads.length).setValues(all);
+    _invalidateRead_(sheetName);
   });
-  return { success: true };
+  return { success: true, saved: targets.length };
 }
 
-/**
- * replaceGroupChildren_ (rewritten v6.6 for speed) - The old version
- * issued one deleteRow per removed line and one appendRow per new line —
- * a 30-item estimate cost ~40 separate write round-trips, which is why
- * submitting felt slow (and slow saves invite double-clicks and errors).
- * Now: ONE read of the sheet, rebuild in memory (drop this group's rows,
- * append the new ones), ONE clear + ONE setValues. Three calls total per
- * sheet regardless of item count.
- */
-function replaceGroupChildren_(sheetName, groupId, items, fields) {
-  const sh = sheet_(sheetName);
-  const heads = headers_(sheetName);
-  const groupIdx = heads.indexOf('groupId');
-  const lastRow = sh.getLastRow();
-
-  // read once; keep every row that is NOT this group's
-  let kept = [];
-  if (lastRow >= 2) {
-    const values = sh.getRange(2, 1, lastRow - 1, heads.length).getValues();
-    kept = values.filter(function (row) {
-      return String(row[groupIdx]) !== String(groupId) && row.join('') !== '';
-    });
-  }
-
-  // build the group's new rows in memory
-  const fresh = (items || []).map(function (item) {
-    const obj = { id: item.id || nextId_('EI'), groupId: groupId };
-    fields.forEach(function (f) { obj[f] = item[f]; });
-    return heads.map(function (h) {
-      return (obj[h] !== undefined && obj[h] !== null) ? obj[h] : '';
-    });
-  });
-
-  const all = kept.concat(fresh);
-  if (lastRow >= 2) sh.getRange(2, 1, lastRow - 1, heads.length).clearContent();
-  if (all.length) sh.getRange(2, 1, all.length, heads.length).setValues(all);
-  _invalidateRead_(sheetName);   // bypassed appendRow_, so invalidate manually
-}
 
 function submitEstimatesForApproval(projectId, sowId) {
   assertProjectEditor_(projectId);   // v6.6

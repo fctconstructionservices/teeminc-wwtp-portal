@@ -511,6 +511,22 @@ function getProjectData(projectId) {
   // work; budget = the internal spending plan. PV stays budget-based —
   // "how much did we PLAN to spend by now" — and AC is what was actually
   // spent, so CPI reads earned contract value per peso spent.
+  // v6.8: EV as a monthly series — for each past month-end, reconstruct
+  // every SOW's % complete from the daily reports and value it on the
+  // contract basis. Future months are null (walang mahuhulaang EV).
+  const evSeries = monthsArr.map(function (mm) {
+    if (mm.y * 12 + mm.m > nowKey) return null;
+    const cut = monthEnd_(mm) < today ? monthEnd_(mm) : today;
+    let ev = 0;
+    sowItems.forEach(function (x) {
+      if (x.isMilestone) return;
+      const basis = (x.estimateTotal || 0) + (x.voAdjustment || 0);
+      if (!basis) return;
+      ev += basis * (computeSOWProgressAsOf_(x.id, dailyRecords, cut) / 100);
+    });
+    return Math.round(ev);
+  });
+
   const evNow = sowItems.reduce(function (s, x) {
     if (x.isMilestone) return s;
     const basis = (x.estimateTotal || 0) + (x.voAdjustment || 0);
@@ -523,6 +539,7 @@ function getProjectData(projectId) {
     labels: monthLabels,
     pvSeries: pvSeries,
     acSeries: acSeries,
+    evSeries: evSeries,
     nowIndex: nowIdx,
     pv: Math.round(pvNow),
     ev: Math.round(evNow),
@@ -741,6 +758,35 @@ function getSOWItemsForProject(projectId) {
  * if that date has several rows for the same SOW, the highest % is
  * used. Returns 0-100.
  */
+/**
+ * computeSOWProgressAsOf_ (v6.8) - Same "latest report date wins" rule
+ * as computeSOWProgress_, but only counting reports dated on/before the
+ * cutoff. Reconstructs a SOW's % complete at any past date, which lets
+ * the EVM chart draw EV as a full HISTORICAL line instead of a single
+ * point at today.
+ */
+function computeSOWProgressAsOf_(sowId, dailyRecords, cutoff) {
+  let bestDate = null;
+  let best = 0;
+  (dailyRecords || []).forEach(function (d) {
+    if (d.status === 'rejected') return;
+    const dt = new Date(d.date);
+    if (isNaN(dt) || dt > cutoff) return;
+    const rows = (d.workAccomplished || []).filter(function (w) {
+      return String(w.scope) === String(sowId);
+    });
+    if (!rows.length) return;
+    const pct = rows.reduce(function (mx, w) {
+      return Math.max(mx, parseFloat(w.percentComplete) || 0);
+    }, 0);
+    if (bestDate === null || dt > bestDate || (dt.getTime() === bestDate.getTime() && pct > best)) {
+      bestDate = dt;
+      best = pct;
+    }
+  });
+  return Math.min(100, Math.max(0, best));
+}
+
 function computeSOWProgress_(sowId, dailyRecords) {
   let bestDate = null;
   let best = 0;

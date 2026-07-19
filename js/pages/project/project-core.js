@@ -588,13 +588,15 @@ const ProjectPage = {
             const evm = p.evm;
             const evmCtx = document.getElementById('evmChart');
             if (evmCtx && evm && evm.labels && evm.labels.length) {
-                const evPoint = evm.labels.map((_, i) => i === evm.nowIndex ? evm.ev : null);
+                // v6.8: EV is a full historical line (reconstructed from
+                // the daily reports per month-end), hindi na single point.
+                const evData = evm.evSeries || evm.labels.map((_, i) => i === evm.nowIndex ? evm.ev : null);
                 this._charts.evm = new Chart(evmCtx, {
                     type: 'line',
                     data: { labels: evm.labels, datasets: [
                         { label: 'PV — Planned (Gantt)', data: evm.pvSeries, borderColor: '#5B6360', borderDash: [6, 4], tension: .35, pointRadius: 2 },
                         { label: 'AC — Actual Cost', data: evm.acSeries, borderColor: '#B23A2E', tension: .35, pointRadius: 3, spanGaps: false },
-                        { label: 'EV — Earned, contract basis (today)', data: evPoint, borderColor: '#2F7A46', backgroundColor: '#2F7A46', pointRadius: 6, pointStyle: 'rectRot', showLine: false }
+                        { label: 'EV — Earned, contract basis', data: evData, borderColor: '#2F7A46', tension: .35, pointRadius: 3, spanGaps: false }
                     ]},
                     options: { responsive: true, maintainAspectRatio: false,
                         plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, font: { size: 10.5 } } },

@@ -511,7 +511,10 @@ Object.assign(ProjectPage, {
         if (submitBtn) { submitBtn.textContent = 'Submitting...'; submitBtn.disabled = true; }
 
         try {
-            await DataService.saveEstimates(this._currentProjectId, est.groups);
+            // v6.7 PERF: save ONLY the group being submitted — the old code
+            // pushed EVERY group's line items on each submit, so a 10-group
+            // project rewrote all four estimate sheets ten times over.
+            await DataService.saveEstimates(this._currentProjectId, [group]);
             await DataService.submitEstimatesForApproval(this._currentProjectId, group.sowId);
             group.status = 'pending';
             // v5 (item 3 FIX): mark the submitter locally too. Without this,
