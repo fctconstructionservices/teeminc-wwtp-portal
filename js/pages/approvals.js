@@ -373,9 +373,10 @@ const ApprovalsPage = {
                 <div class="approval-request-item" style="cursor:pointer;">
                     <div class="ar-icon">${Icon.package({size:16})}</div>
                     <div class="ar-body" onclick="MaterialsPage.viewMaterial('${m.id}')">
-                        <div class="ar-title">${m.brand || m.name || 'Unnamed'} — ${m.specs || m.desc || m.category}</div>
+                        <div class="ar-title">${m.name || m.brand || 'Unnamed'}</div>
                         <div class="ar-meta">
                             <span class="ar-id">${m.id}</span>
+                            ${m.brand ? `<span>${m.brand}</span>` : ''}
                             <span>${m.category}</span>
                             <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${m.status}</span>
                         </div>

@@ -83,15 +83,16 @@ const MaterialsPage = {
                 if (list.length === 0) html += `<div class="empty"><p>No materials found.</p></div>`;
                 else {
                     list.forEach(m => {
-                        const imgHtml = m.image ? `<img src="${m.image}" alt="${m.brand}" />` :
+                        const imgHtml = m.image ? `<img src="${m.image}" alt="${m.name || m.brand || ''}" />` :
                             `<span>${Icon.package({size:24})}</span>`;
                         html += `
                         <div class="mat-card" onclick="MaterialsPage.viewMaterial('${m.id}')">
                             <div class="mc-thumb">${imgHtml}</div>
                             <div class="mc-body">
-                                <div class="mc-title">${m.brand || 'Unnamed'} — ${m.specs || ''}</div>
+                                <div class="mc-title">${m.name || m.brand || 'Unnamed'}</div>
                                 <div class="mc-meta">
                                     <span class="req-id">${m.id}</span>
+                                    ${m.brand ? `<span>${m.brand}</span>` : ''}
                                     <span>${m.category || ''} ${m.subcategory ? '→ ' + m.subcategory : ''}</span>
                                     <span>${m.unit || ''}</span>
                                     ${m.status === 'pending' ? '<span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">Pending</span>' : ''}

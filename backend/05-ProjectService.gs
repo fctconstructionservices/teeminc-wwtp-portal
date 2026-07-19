@@ -516,7 +516,8 @@ function getProjectData(projectId) {
   // contract basis. Future months are null (walang mahuhulaang EV).
   const evSeries = monthsArr.map(function (mm) {
     if (mm.y * 12 + mm.m > nowKey) return null;
-    const cut = monthEnd_(mm) < today ? monthEnd_(mm) : today;
+    const cutD = monthEnd_(mm) < today ? monthEnd_(mm) : today;
+    const cut = fmtDate_(cutD);   // v6.8.1: string cutoff, inclusive
     let ev = 0;
     sowItems.forEach(function (x) {
       if (x.isMilestone) return;
@@ -765,13 +766,21 @@ function getSOWItemsForProject(projectId) {
  * the EVM chart draw EV as a full HISTORICAL line instead of a single
  * point at today.
  */
-function computeSOWProgressAsOf_(sowId, dailyRecords, cutoff) {
-  let bestDate = null;
+function computeSOWProgressAsOf_(sowId, dailyRecords, cutoffStr) {
+  // v6.8.1 FIX: compare dates as 'yyyy-MM-dd' STRINGS (the format
+  // fmtDate_ guarantees on the mapped records), not as parsed Dates.
+  // Date-object comparison silently dropped (a) records whose stored
+  // date didn't parse cleanly and (b) records on the cutoff day itself
+  // (UTC-vs-local off-by-hours), which zeroed the EV line even while
+  // the EV KPI — computed by the tolerant computeSOWProgress_ — showed
+  // the right number. Lexicographic compare on zero-padded ISO dates is
+  // exact and timezone-proof.
+  let bestKey = '';
   let best = 0;
   (dailyRecords || []).forEach(function (d) {
     if (d.status === 'rejected') return;
-    const dt = new Date(d.date);
-    if (isNaN(dt) || dt > cutoff) return;
+    const key = String(d.date || '');
+    if (!key || key > cutoffStr) return;
     const rows = (d.workAccomplished || []).filter(function (w) {
       return String(w.scope) === String(sowId);
     });
@@ -779,8 +788,8 @@ function computeSOWProgressAsOf_(sowId, dailyRecords, cutoff) {
     const pct = rows.reduce(function (mx, w) {
       return Math.max(mx, parseFloat(w.percentComplete) || 0);
     }, 0);
-    if (bestDate === null || dt > bestDate || (dt.getTime() === bestDate.getTime() && pct > best)) {
-      bestDate = dt;
+    if (bestKey === '' || key > bestKey || (key === bestKey && pct > best)) {
+      bestKey = key;
       best = pct;
     }
   });
