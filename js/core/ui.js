@@ -139,6 +139,21 @@ const Lightbox = {
  * fmtNum(12345.6)   -> "12,345.6"    (comma-grouped, no forced decimals)
  * Every peso figure in the UI should render as ₱${fmtMoney(x)}.
  */
+/**
+ * fmtAxisMoney (v6.6) - THE money formatter for chart axes, system-wide.
+ * Under a million: ₱850k. From a million up: ₱1M, ₱1.15M, ₱20.6M —
+ * never "1,000k". Every chart's money axis must use this.
+ */
+function fmtAxisMoney(v) {
+    const a = Math.abs(v);
+    if (a >= 1000000) {
+        const m = v / 1000000;
+        return '₱' + (Number.isInteger(m) ? m : +m.toFixed(2)) + 'M';
+    }
+    if (a >= 1000) return '₱' + Math.round(v / 1000) + 'k';
+    return '₱' + v;
+}
+
 function fmtMoney(n) {
     const v = Number(n) || 0;
     return v.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

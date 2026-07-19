@@ -98,6 +98,7 @@ function revisedContractValue_(projectId, proj, vos) {
 function createBilling(projectId, currentPct, period) {
   var proj = readAll_('Projects').find(function (p) { return p.id === projectId; });
   if (!proj) throw new Error('Project not found.');
+  assertProjectEditor_(projectId);   // v6.6
   assertContractReady_(projectId, 'generate a billing');   // v6.3 gate
 
   var pct = parseFloat(currentPct);
@@ -202,6 +203,7 @@ function reviseBilling(id, clientPct) {
   if (b.status === 'Paid') throw new Error('A paid billing can no longer be revised.');
   if (b.status === 'Rejected') throw new Error('This billing is already rejected/superseded.');
 
+  assertProjectEditor_(b.projectId);   // v6.6
   assertContractReady_(b.projectId, 'revise a billing');   // v6.3 gate
 
   var pct = parseFloat(clientPct);

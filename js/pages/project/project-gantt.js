@@ -89,8 +89,8 @@ Object.assign(ProjectPage, {
                 <h2>Project Timeline (Gantt Chart)</h2>
                 <div class="rule"></div>
                 ${badgeHtml}
-                <button class="btn-sm" style="margin-left:8px;" title="Snapshot current dates as the baseline"
-                    onclick="ProjectPage.saveGanttBaseline()">📌 Save Baseline</button>
+                ${this._canEdit !== false ? `<button class="btn-sm" style="margin-left:8px;" title="Snapshot current dates as the baseline"
+                    onclick="ProjectPage.saveGanttBaseline()">📌 Save Baseline</button>` : ''}
             </div>
             <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 10px;">
                 <span style="font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);">Scale:</span>

@@ -46,8 +46,11 @@ const SCHEMAS = {
   // rows keep their column positions. Run migrateSchemas() once after deploy.
   // v6: contractValue (client-facing contract sum, basis of billings) and
   // retentionPct (default 0.10) appended.
+  // v6.6: editorsJSON — emails allowed to EDIT this project's content
+  // (empty/absent = open to all, the pre-feature behavior). Approvals
+  // stay role-based and are NOT affected by this list.
   Projects: ['id', 'name', 'status', 'revenue', 'expenses', 'cashPosition',
-    'clientId', 'location', 'startDate', 'endDate', 'contractValue', 'retentionPct'],
+    'clientId', 'location', 'startDate', 'endDate', 'contractValue', 'retentionPct', 'editorsJSON'],
   // v3 additions (appended):
   //   budgetMode   -> 'auto' (mat+labor+equip from approved estimate),
   //                   'indirect' (indirect costs only) or 'manual'

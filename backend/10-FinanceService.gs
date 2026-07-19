@@ -399,7 +399,7 @@ function rejectLiquidation(id) {
 function getFinanceData() {
   // v6.5 PERF: one batched pass for the finance dashboard
   readMany_(['Projects', 'IncomingCashRequests', 'CashRelease', 'SOWItems',
-    'CashAdvanceRequests', 'Liquidations']);
+    'CashAdvanceRequests', 'Liquidations']);   // SOWItems: v6.6 forecast
 
   const projects = readAll_('Projects');
   const allIncoming = readAll_('IncomingCashRequests');
@@ -425,35 +425,154 @@ function getFinanceData() {
     { label: 'Pending Requests', value: String(pendingCA.length), sub: '₱' + fmtMoney_(pendingAmount) + ' total', cls: 'warn' }
   ];
 
+  // ══ v6.6 CASHFLOW v2 ══
+  // Window = actual project span (earliest start → latest end, ≤ 24
+  // months, always including today) instead of a fixed 6 months, plus a
+  // Gantt-driven forecast: each non-milestone SOW's remaining spend
+  // (budget − reviewed releases) spread per-day across its remaining
+  // schedule, aggregated over ALL projects. A weekly series (16 weeks
+  // around today, clamped to the span) is returned alongside monthly.
+  const sowAll = readAll_('SOWItems');
+  const caByIdCf = {};
+  readAll_('CashAdvanceRequests').forEach(function (c) { caByIdCf[c.id] = c; });
+  const sowActual = {};
+  allReleases.forEach(function (r) {
+    if (r.status !== 'Reviewed') return;
+    const ca = caByIdCf[r.originalRequestId];
+    if (!ca) return;
+    const pl = safeParse_(ca.payloadJSON, {});
+    if (!pl.sowId) return;
+    sowActual[pl.sowId] = (sowActual[pl.sowId] || 0) + Number(r.amount || 0);
+  });
+
+  const today0 = new Date(); today0.setHours(0, 0, 0, 0);
+  const spanDs = [today0];
+  projects.forEach(function (p) {
+    [p.startDate, p.endDate].forEach(function (x) {
+      const d = new Date(fmtDate_(x)); if (!isNaN(d)) spanDs.push(d);
+    });
+  });
+  sowAll.forEach(function (s) {
+    [s.startDate, s.endDate].forEach(function (x) {
+      const d = new Date(x); if (!isNaN(d)) spanDs.push(d);
+    });
+  });
+  let cfStart = new Date(Math.min.apply(null, spanDs.map(function (d) { return d.getTime(); })));
+  let cfEnd = new Date(Math.max.apply(null, spanDs.map(function (d) { return d.getTime(); })));
+  cfStart = new Date(cfStart.getFullYear(), cfStart.getMonth(), 1);
+  cfEnd = new Date(cfEnd.getFullYear(), cfEnd.getMonth(), 1);
   const months = [];
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    months.push({ label: Utilities.formatDate(d, Session.getScriptTimeZone(), 'MMM'), year: d.getFullYear(), month: d.getMonth() });
+  for (let d = new Date(cfStart); d <= cfEnd && months.length < 24; d.setMonth(d.getMonth() + 1)) {
+    months.push({ year: d.getFullYear(), month: d.getMonth() });
   }
+  const MNs = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const nowKeyCf = today0.getFullYear() * 12 + today0.getMonth();
+
   const inflow = months.map(function (m) {
     return allIncoming.filter(function (c) {
-      const cd = new Date(c.transactionDate || c.createdAt);
+      const cd = new Date(fmtDate_(c.transactionDate || c.createdAt));
       return cd.getFullYear() === m.year && cd.getMonth() === m.month && c.status === 'Approved';
     }).reduce(function (s, c) { return s + Number(c.amount || 0); }, 0);
   });
   const outflow = months.map(function (m) {
     return allReleases.filter(function (r) {
-      const rd = new Date(r.releasedAt || r.createdAt);
+      const rd = new Date(fmtDate_(r.releasedAt || r.createdAt));
       return rd.getFullYear() === m.year && rd.getMonth() === m.month && r.status === 'Reviewed';
     }).reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
   });
-  // v5 (item 14): opening balance = all cash movement BEFORE the 6-month
-  // window, so the Net line is a true running cash position (all inflow
-  // minus all outflow to date), not a per-month difference.
-  const windowStart = new Date(months[0].year, months[0].month, 1);
-  const openInflow = allIncoming.filter(function (c) {
-    return c.status === 'Approved' && new Date(c.transactionDate || c.createdAt) < windowStart;
-  }).reduce(function (s, c) { return s + Number(c.amount || 0); }, 0);
-  const openOutflow = allReleases.filter(function (r) {
-    return r.status === 'Reviewed' && new Date(r.releasedAt || r.createdAt) < windowStart;
-  }).reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
 
-  const cashflow = { labels: months.map(function (m) { return m.label; }), inflow: inflow, outflow: outflow, projectedFrom: months.length, openingBalance: openInflow - openOutflow };
+  // Gantt forecast helper: allocate remaining spend of every SOW into an
+  // arbitrary list of [bucketStart, bucketEnd] date pairs.
+  const allocProjected_ = function (buckets) {
+    const out = buckets.map(function () { return 0; });
+    sowAll.forEach(function (s) {
+      if (String(s.isMilestone) === 'true') return;
+      const remaining = Math.max((parseFloat(s.budget) || 0) - (sowActual[s.id] || 0), 0);
+      if (remaining <= 0) return;
+      const sEnd = new Date(s.endDate);
+      if (isNaN(sEnd)) return;
+      let from = new Date(Math.max(today0.getTime(), new Date(s.startDate).getTime() || today0.getTime()));
+      if (sEnd < today0) {
+        // overdue: lands in whichever bucket holds today
+        for (var i = 0; i < buckets.length; i++) {
+          if (today0 >= buckets[i][0] && today0 <= buckets[i][1]) { out[i] += remaining; break; }
+        }
+        return;
+      }
+      const days = Math.max(Math.round((sEnd - from) / 86400000) + 1, 1);
+      const perDay = remaining / days;
+      buckets.forEach(function (b, i) {
+        const a = Math.max(from.getTime(), b[0].getTime());
+        const z = Math.min(sEnd.getTime(), b[1].getTime());
+        if (z < a) return;
+        out[i] += perDay * (Math.round((z - a) / 86400000) + 1);
+      });
+    });
+    return out;
+  };
+
+  const monthBuckets = months.map(function (m) {
+    return [new Date(m.year, m.month, 1), new Date(m.year, m.month + 1, 0)];
+  });
+  const projRaw = allocProjected_(monthBuckets);
+  const projectedOutflow = months.map(function (m, i) {
+    return (m.year * 12 + m.month) >= nowKeyCf ? Math.round(projRaw[i]) : null;
+  });
+
+  // Weekly: 6 weeks back + 10 weeks forward from this week's Monday
+  const monday = new Date(today0);
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  const weeks = [];
+  for (let w = -6; w < 10; w++) {
+    const ws = new Date(monday); ws.setDate(ws.getDate() + w * 7);
+    const we = new Date(ws); we.setDate(we.getDate() + 6);
+    weeks.push([ws, we]);
+  }
+  const wkLabels = weeks.map(function (b) { return MNs[b[0].getMonth()] + ' ' + b[0].getDate(); });
+  const wkInflow = weeks.map(function (b) {
+    return allIncoming.filter(function (c) {
+      const cd = new Date(fmtDate_(c.transactionDate || c.createdAt));
+      return c.status === 'Approved' && cd >= b[0] && cd <= b[1];
+    }).reduce(function (s, c) { return s + Number(c.amount || 0); }, 0);
+  });
+  const wkOutflow = weeks.map(function (b) {
+    return allReleases.filter(function (r) {
+      const rd = new Date(fmtDate_(r.releasedAt || r.createdAt));
+      return r.status === 'Reviewed' && rd >= b[0] && rd <= b[1];
+    }).reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
+  });
+  const wkProjRaw = allocProjected_(weeks);
+  const wkProjected = weeks.map(function (b, i) {
+    return b[1] >= today0 ? Math.round(wkProjRaw[i]) : null;
+  });
+
+  // opening balance for each window (all movement before its first bucket)
+  const openBefore_ = function (cutoff) {
+    const oi = allIncoming.filter(function (c) {
+      return c.status === 'Approved' && new Date(fmtDate_(c.transactionDate || c.createdAt)) < cutoff;
+    }).reduce(function (s, c) { return s + Number(c.amount || 0); }, 0);
+    const oo = allReleases.filter(function (r) {
+      return r.status === 'Reviewed' && new Date(fmtDate_(r.releasedAt || r.createdAt)) < cutoff;
+    }).reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
+    return oi - oo;
+  };
+
+  const cashflow = {
+    labels: months.map(function (m) { return MNs[m.month] + ' ' + String(m.year).slice(2); }),
+    inflow: inflow,
+    outflow: outflow,
+    projectedOutflow: projectedOutflow,
+    nowIndex: months.findIndex(function (m) { return m.year * 12 + m.month === nowKeyCf; }),
+    openingBalance: openBefore_(new Date(months[0].year, months[0].month, 1)),
+    weekly: {
+      labels: wkLabels,
+      inflow: wkInflow,
+      outflow: wkOutflow,
+      projectedOutflow: wkProjected,
+      nowIndex: weeks.findIndex(function (b) { return today0 >= b[0] && today0 <= b[1]; }),
+      openingBalance: openBefore_(weeks[0][0])
+    }
+  };
 
   const budgetVsActual = {
     labels: projects.map(function (p) { return p.name; }),

@@ -15,6 +15,7 @@
  */
 
 function requestVariationOrder(projectId, data) {
+  assertProjectEditor_(projectId);   // v6.6
   // v6.3 gate: a VO modifies the contract, so the base contract must be
   // fully defined first (all estimates approved, all budgets set).
   assertContractReady_(projectId, 'submit a variation order');

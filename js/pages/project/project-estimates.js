@@ -107,8 +107,8 @@ Object.assign(ProjectPage, {
         html += `
                 </div>
                 <div class="submit-row" style="margin-top:16px;">
-                    <button class="btn-primary" onclick="ProjectPage.addSOWGroup()">+ Add SOW Group</button>
-                    <button class="btn-ghost" onclick="ProjectPage.saveAllEstimates()">${Icon.save({size:14})} Save All Drafts</button>
+                    ${this._canEdit !== false ? `<button class="btn-primary" onclick="ProjectPage.addSOWGroup()">+ Add SOW Group</button>
+                    <button class="btn-ghost" onclick="ProjectPage.saveAllEstimates()">${Icon.save({size:14})} Save All Drafts</button>` : ''}
 
                 </div>`;
 

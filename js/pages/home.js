@@ -283,6 +283,10 @@ const HomePage = {
                         <div class="pc-stat"><div class="k">Expenses</div><div class="v">₱${fmtMoney((p.expenses || 0))}</div></div>
                         <div class="pc-stat"><div class="k">Cash Position</div><div class="v">₱${fmtMoney((p.cashPosition || 0))}</div></div>
                     </div>
+                    ${(p.editors && p.editors.length) ? `<div class="home-editor-avatars" style="margin-top:8px;">
+                        ${p.editors.slice(0, 4).map(e => `<span class="editor-avatar" title="${e}">${e.slice(0, 2).toUpperCase()}</span>`).join('')}
+                        <span class="more">${p.editors.length > 4 ? '+' + (p.editors.length - 4) + ' · ' : ''}editors</span>
+                    </div>` : ''}
                 </button>`;
         });
         projHtml += `</div>`;

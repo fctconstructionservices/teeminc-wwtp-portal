@@ -16,10 +16,15 @@
 // ============================================================
 
 function saveEstimates(projectId, groups) {
+  assertProjectEditor_(projectId);   // v6.6
+  // v6.6 PERF: read the group index ONCE for the whole save
+  const allGroups = readAll_('EstimateGroups');
+  const bySow = {};
+  allGroups.forEach(function (row) {
+    if (row.projectId === projectId) bySow[row.sowId] = row;
+  });
   groups.forEach(function (g) {
-    let groupRow = readAll_('EstimateGroups').find(function (row) {
-      return row.projectId === projectId && row.sowId === g.sowId;
-    });
+    let groupRow = bySow[g.sowId];
     let groupId;
     if (groupRow) {
       groupId = groupRow.id;
@@ -39,25 +44,47 @@ function saveEstimates(projectId, groups) {
   return { success: true };
 }
 
+/**
+ * replaceGroupChildren_ (rewritten v6.6 for speed) - The old version
+ * issued one deleteRow per removed line and one appendRow per new line —
+ * a 30-item estimate cost ~40 separate write round-trips, which is why
+ * submitting felt slow (and slow saves invite double-clicks and errors).
+ * Now: ONE read of the sheet, rebuild in memory (drop this group's rows,
+ * append the new ones), ONE clear + ONE setValues. Three calls total per
+ * sheet regardless of item count.
+ */
 function replaceGroupChildren_(sheetName, groupId, items, fields) {
   const sh = sheet_(sheetName);
   const heads = headers_(sheetName);
-  const groupCol = heads.indexOf('groupId') + 1;
+  const groupIdx = heads.indexOf('groupId');
   const lastRow = sh.getLastRow();
+
+  // read once; keep every row that is NOT this group's
+  let kept = [];
   if (lastRow >= 2) {
-    const groupIds = sh.getRange(2, groupCol, lastRow - 1, 1).getValues();
-    for (let i = groupIds.length - 1; i >= 0; i--) {
-      if (String(groupIds[i][0]) === String(groupId)) sh.deleteRow(i + 2);
-    }
+    const values = sh.getRange(2, 1, lastRow - 1, heads.length).getValues();
+    kept = values.filter(function (row) {
+      return String(row[groupIdx]) !== String(groupId) && row.join('') !== '';
+    });
   }
-  items.forEach(function (item) {
-    const row = { id: item.id || nextId_('EI'), groupId: groupId };
-    fields.forEach(function (f) { row[f] = item[f]; });
-    appendRow_(sheetName, row);
+
+  // build the group's new rows in memory
+  const fresh = (items || []).map(function (item) {
+    const obj = { id: item.id || nextId_('EI'), groupId: groupId };
+    fields.forEach(function (f) { obj[f] = item[f]; });
+    return heads.map(function (h) {
+      return (obj[h] !== undefined && obj[h] !== null) ? obj[h] : '';
+    });
   });
+
+  const all = kept.concat(fresh);
+  if (lastRow >= 2) sh.getRange(2, 1, lastRow - 1, heads.length).clearContent();
+  if (all.length) sh.getRange(2, 1, all.length, heads.length).setValues(all);
+  _invalidateRead_(sheetName);   // bypassed appendRow_, so invalidate manually
 }
 
 function submitEstimatesForApproval(projectId, sowId) {
+  assertProjectEditor_(projectId);   // v6.6
   const g = readAll_('EstimateGroups').find(function (row) { return row.projectId === projectId && row.sowId === sowId; });
   if (!g) throw new Error('Estimate group not found');
   updateRow_('EstimateGroups', 'id', g.id, { status: 'pending', submittedBy: currentUserEmail_() });

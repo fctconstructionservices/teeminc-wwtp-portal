@@ -25,8 +25,13 @@ const FinancePage = {
                     `<div class="kpi-card ${k.cls}"><div class="k-label">${k.label}</div><div class="k-val mono">${k.value}</div><div class="k-sub">${k.sub}</div></div>`;
             });
             html += `</div>
-            <div class="section-head"><h2>Cashflow</h2><div class="rule"></div></div>
-            <div class="chart-grid full"><div class="chart-card"><div class="cc-head"><h3>Monthly Inflow / Outflow / Net</h3><span class="cc-note">dashed = projected</span></div><div class="canvas-wrap"><canvas id="cfChart"></canvas></div></div></div>
+            <div class="section-head"><h2>Cashflow</h2><div class="rule"></div>
+                <span style="font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);">View:</span>
+                <button class="btn-sm" id="cfMonthBtn" onclick="FinancePage.setCashflowView('month')">Month</button>
+                <button class="btn-sm" id="cfWeekBtn" onclick="FinancePage.setCashflowView('week')">Week</button>
+                <span class="cc-note" style="margin-left:6px;">solid = actual · dotted = projected (Gantt, all projects)</span>
+            </div>
+            <div class="chart-grid full"><div class="chart-card"><div class="cc-head"><h3>Inflow / Outflow / Net</h3><span class="cc-note">actual + Gantt forecast</span></div><div class="canvas-wrap"><canvas id="cfChart"></canvas></div></div></div>
             <div class="section-head"><h2>Cost Control</h2><div class="rule"></div></div>
             <div class="chart-grid"><div class="chart-card"><div class="cc-head"><h3>Budget vs Actual</h3></div><div class="canvas-wrap"><canvas id="budgetChart"></canvas></div></div><div class="chart-card"><div class="cc-head"><h3>Cost Breakdown</h3></div><div class="canvas-wrap"><canvas id="breakdownChart"></canvas></div></div></div>
             <div class="chart-grid" style="margin-top:16px"><div class="chart-card"><div class="cc-head"><h3>Cash Advance Liquidation Aging</h3><span class="cc-note">unliquidated advances</span></div><div class="canvas-wrap short"><canvas id="agingChart"></canvas></div></div><div class="chart-card"><div class="cc-head"><h3>Project Cost Status</h3></div><table><thead><tr><th>Project</th><th style="text-align:right">Budget</th><th style="text-align:right">Actual</th><th>Status</th></tr></thead><tbody>`;
@@ -42,63 +47,79 @@ const FinancePage = {
         } catch (err) { console.error('Finance error:', err);
             UI.toast('Error loading finance.', 'error'); }
     },
+    setCashflowView(view) {
+        this._cfView = view;
+        this._buildCashflowChart();
+    },
+
+    _buildCashflowChart() {
+        const src = this._cashflowData;
+        if (!src || typeof Chart === 'undefined') return;
+        const cf = this._cfView === 'week' ? (src.weekly || src) : src;
+        const mBtn = document.getElementById('cfMonthBtn');
+        const wBtn = document.getElementById('cfWeekBtn');
+        if (mBtn) mBtn.classList.toggle('primary', this._cfView !== 'week');
+        if (wBtn) wBtn.classList.toggle('primary', this._cfView === 'week');
+
+        const nowIdx = typeof cf.nowIndex === 'number' ? cf.nowIndex : cf.labels.length - 1;
+        // running net: actual up to today, then projected continuation
+        // (inflow assumed 0 in the projection — conservative view; billings
+        // collections will raise it as they actually land)
+        let running = Number(cf.openingBalance || 0);
+        const netActual = [], netProjected = [];
+        cf.labels.forEach((_, i) => {
+            if (i <= nowIdx) {
+                running += (cf.inflow[i] || 0) - (cf.outflow[i] || 0);
+                netActual.push(running);
+                netProjected.push(i === nowIdx ? running : null);
+            } else {
+                running -= (cf.projectedOutflow && cf.projectedOutflow[i]) || 0;
+                netActual.push(null);
+                netProjected.push(running);
+            }
+        });
+
+        if (this._charts.cf) { try { this._charts.cf.destroy(); } catch (_) {} }
+        this._charts.cf = new Chart(document.getElementById('cfChart'), {
+            data: {
+                labels: cf.labels,
+                datasets: [
+                    { type: 'bar', label: 'Inflow (actual)', data: cf.inflow.map((v, i) => i <= nowIdx ? v : null),
+                        backgroundColor: '#2F7A46', borderRadius: 4, order: 2 },
+                    { type: 'bar', label: 'Outflow (actual)', data: cf.outflow.map((v, i) => i <= nowIdx ? v : null),
+                        backgroundColor: '#B23A2E', borderRadius: 4, order: 2 },
+                    { type: 'line', label: 'Projected outflow (Gantt)', data: cf.projectedOutflow || [],
+                        borderColor: '#C2860F', borderDash: [5, 4], pointRadius: 3, tension: .3, spanGaps: false, order: 1 },
+                    { type: 'line', label: 'Net cash (actual)', data: netActual,
+                        borderColor: '#24455A', borderWidth: 2, pointRadius: 3, tension: .3, spanGaps: false, order: 1 },
+                    { type: 'line', label: 'Net cash (projected)', data: netProjected,
+                        borderColor: '#24455A', borderDash: [4, 4], borderWidth: 2, pointRadius: 2, tension: .3, spanGaps: false, order: 1 }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, font: { size: 10.5 } } },
+                    tooltip: { callbacks: { label: c => `${c.dataset.label}: ₱${fmtMoney(c.parsed.y ?? 0)}` } }
+                },
+                scales: { y: { ticks: { callback: fmtAxisMoney }, grid: { color: '#EEEBE0' } }, x: { grid: { display: false } } }
+            }
+        });
+    },
+
     _buildCharts(data) {
         Object.values(this._charts).forEach(c => { try { c.destroy(); } catch (_) {} });
         this._charts = {};
         try {
             if (typeof Chart === 'undefined') return;
-            const cf = data.cashflow;
-            // v5 (item 14): Net Cash is a RUNNING balance — everything that
-            // has come in minus everything that has gone out up to that
-            // month (seeded with the balance before the chart window) —
-            // not a per-month inflow−outflow difference.
-            let running = Number(cf.openingBalance || 0);
-            const net = cf.inflow.map((v, i) => {
-                running += v - (cf.outflow[i] || 0);
-                return running;
-            });
-            this._charts.cf = new Chart(document.getElementById('cfChart'), {
-                type: 'bar',
-                data: {
-                    labels: cf.labels,
-                    datasets: [{
-                        label: 'Inflow',
-                        data: cf.inflow,
-                        backgroundColor: cf.labels.map((_, i) => i >= cf.projectedFrom ? 'rgba(47,122,70,.35)' :
-                            '#2F7A46'),
-                        borderRadius: 4,
-                        order: 2
-                    }, {
-                        label: 'Outflow',
-                        data: cf.outflow,
-                        backgroundColor: cf.labels.map((_, i) => i >= cf.projectedFrom ? 'rgba(178,58,46,.35)' :
-                            '#B23A2E'),
-                        borderRadius: 4,
-                        order: 2
-                    }, {
-                        label: 'Net Cash',
-                        data: net,
-                        type: 'line',
-                        borderColor: '#24455A',
-                        backgroundColor: '#24455A',
-                        borderWidth: 2,
-                        pointRadius: 3,
-                        segment: { borderDash: ctx => ctx.p0DataIndex >= cf.projectedFrom - 1 ? [5,
-                                4] : undefined },
-                        order: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8 } },
-                        tooltip: { callbacks: { label: c => `${c.dataset.label}: ₱${fmtMoney(c.parsed.y)}` } }
-                    },
-                    scales: { y: { ticks: { callback: v => '₱' + fmtNum(v / 1000) + 'k' },
-                            grid: { color: '#EEEBE0' } }, x: { grid: { display: false } } }
-                }
-            });
+            // ══ v6.6 Cashflow v2 ══ month/week toggle + Gantt forecast.
+            // Net Cash stays a RUNNING balance (seeded with the opening
+            // balance before the window); beyond today it continues as a
+            // dotted projection driven by the aggregated Gantt forecast.
+            this._cashflowData = data.cashflow;
+            if (!this._cfView) this._cfView = 'month';
+            this._buildCashflowChart();
             const bv = data.budgetVsActual;
             this._charts.budget = new Chart(document.getElementById('budgetChart'), {
                 type: 'bar',
@@ -115,7 +136,7 @@ const FinancePage = {
                         legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8 } },
                         tooltip: { callbacks: { label: c => `${c.dataset.label}: ₱${fmtMoney(c.parsed.y)}` } }
                     },
-                    scales: { y: { ticks: { callback: v => '₱' + fmtNum(v / 1000) + 'k' },
+                    scales: { y: { ticks: { callback: fmtAxisMoney },
                             grid: { color: '#EEEBE0' } }, x: { grid: { display: false } } }
                 }
             });
@@ -154,7 +175,7 @@ const FinancePage = {
                     maintainAspectRatio: false,
                     plugins: { legend: { display: false }, tooltip: { callbacks: { label: c =>
                                 '₱' + fmtMoney(c.parsed.x) } } },
-                    scales: { x: { ticks: { callback: v => '₱' + fmtNum(v / 1000) + 'k' },
+                    scales: { x: { ticks: { callback: fmtAxisMoney },
                             grid: { color: '#EEEBE0' } }, y: { grid: { display: false } } }
                 }
             });

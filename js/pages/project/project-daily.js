@@ -268,7 +268,7 @@ Object.assign(ProjectPage, {
         const dailyRecords = p.dailyRecords || [];
         let html = `
             <div class="add-record-toggle">
-                <button class="btn-ghost" onclick="ProjectPage.toggleAddRecord()">+ Add Daily Site Record</button>
+                ${this._canEdit !== false ? `<button class="btn-ghost" onclick="ProjectPage.toggleAddRecord()">+ Add Daily Site Record</button>` : ''}
             </div>
             <div class="add-record-form" id="dailyAddForm">
                 ${this._buildDailyFormHTML()}
@@ -308,7 +308,8 @@ Object.assign(ProjectPage, {
                 if (r.status === 'draft') {
                     // v6.4: drafts are editable/deletable by their creator
                     // (super admin can also delete); frozen once submitted.
-                    if (isCreator) {
+                    // v6.6: at kailangang editor ka ng project.
+                    if (isCreator && this._canEdit !== false) {
                         actionsHtml = `
                             <button class="btn-sm primary" onclick="ProjectPage.submitDailyForApproval('${r.id}')">Submit</button>
                             <button class="btn-sm" onclick="ProjectPage.editDailyRecord('${r.id}')">Edit</button>

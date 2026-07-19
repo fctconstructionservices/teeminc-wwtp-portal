@@ -16,6 +16,7 @@
 // ============================================================
 
 function addDailyRecord(projectId, data) {
+  assertProjectEditor_(projectId);   // v6.6
   // ─── v3 SERVER-SIDE GUARD: one non-rejected record per date ───
   // The frontend also checks this, but the sheet is the source of
   // truth — two users submitting the same date simultaneously (or a
@@ -130,6 +131,9 @@ function addDailyRecord(projectId, data) {
 }
 
 function submitDailyRecordForApproval(recordId) {
+  const rec = readAll_('DailyRecords').find(function (d) { return d.id === recordId; });
+  if (!rec) throw new Error('Record not found.');
+  assertProjectEditor_(rec.projectId);   // v6.6
   updateRow_('DailyRecords', 'id', recordId, { status: 'pending' });
   logActivity_('Daily record ' + recordId + ' submitted for approval', 'g', recordId);
   return { success: true };
@@ -163,6 +167,7 @@ function updateDailyRecord(recordId, data) {
   const rec = readAll_('DailyRecords').find(function (d) { return d.id === recordId; });
   if (!rec) throw new Error('Daily record not found.');
   if (rec.status !== 'draft') throw new Error('Only draft records can be edited.');
+  assertProjectEditor_(rec.projectId);   // v6.6
 
   const me = currentUserEmail_().toLowerCase();
   const user = readAll_('Users').find(function (u) { return u.email.toLowerCase() === me; });
@@ -245,6 +250,7 @@ function deleteDailyRecord(recordId) {
   const rec = readAll_('DailyRecords').find(function (d) { return d.id === recordId; });
   if (!rec) throw new Error('Daily record not found.');
   if (rec.status !== 'draft') throw new Error('Only draft records can be deleted.');
+  assertProjectEditor_(rec.projectId);   // v6.6
 
   const me = currentUserEmail_().toLowerCase();
   const user = readAll_('Users').find(function (u) { return u.email.toLowerCase() === me; });

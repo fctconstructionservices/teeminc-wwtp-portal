@@ -141,7 +141,7 @@ Object.assign(ProjectPage, {
             <div class="section-head">
                 <h2>Scope of Work Budget Control</h2>
                 <div class="rule"></div>
-                <button class="btn-primary" onclick="ProjectPage.showAddSOWModal()" style="padding:4px 14px;font-size:11px;margin-left:auto;">+ Add SOW</button>
+                ${this._canEdit !== false ? `<button class="btn-primary" onclick="ProjectPage.showAddSOWModal()" style="padding:4px 14px;font-size:11px;margin-left:auto;">+ Add SOW</button>` : ''}
                 <span class="badge">Click any SOW to see detailed breakdown</span>
             </div>
             
@@ -439,7 +439,7 @@ Object.assign(ProjectPage, {
                         tooltip: { callbacks: { label: c => `${c.dataset.label}: ₱${fmtMoney(c.parsed.y)}` } }
                     },
                     scales: {
-                        y: { ticks: { callback: v => '₱' + (v / 1000) + 'k' }, grid: { color: '#EEEBE0' } },
+                        y: { ticks: { callback: fmtAxisMoney }, grid: { color: '#EEEBE0' } },
                         x: { grid: { display: false } }
                     }
                 }

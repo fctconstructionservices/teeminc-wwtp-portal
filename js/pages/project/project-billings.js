@@ -60,7 +60,7 @@ Object.assign(ProjectPage, {
 
         html += `
             <div class="section-head"><h2>Billing Register</h2><div class="rule"></div>
-                ${isAdmin && cr.ready ? `<button class="btn-sm primary" onclick="ProjectPage.generateBilling()">+ Generate from Progress (${p.totalProgress || 0}%)</button>` : ''}
+                ${isAdmin && cr.ready && this._canEdit !== false ? `<button class="btn-sm primary" onclick="ProjectPage.generateBilling()">+ Generate from Progress (${p.totalProgress || 0}%)</button>` : ''}
             </div>
             <div class="panel"><table><thead><tr>
                 <th>Billing #</th><th>Period</th>

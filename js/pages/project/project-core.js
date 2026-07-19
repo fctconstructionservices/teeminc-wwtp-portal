@@ -101,7 +101,28 @@ const ProjectPage = {
 
             const pendingTotal = (p.requests || []).filter(r => r.status === 'Pending' || r.status === 'Pending Approval' || r.status === 'Approved for Release').reduce((s, r) => s + (r.amount || 0), 0);
 
+            // v6.6: per-project editors — chips + Manage (superadmin),
+            // view-only banner for everyone who isn't assigned.
+            this._canEdit = p.canEdit !== false;
+            const isSuperE = (App.getUser() || {}).role === 'superadmin';
+            const editorChips = (p.editors || []).map(e => {
+                const init = e.slice(0, 2).toUpperCase();
+                return `<span class="editor-chip"><span class="editor-avatar">${init}</span>${e.split('@')[0]}</span>`;
+            }).join('');
+            const editorsRow = `
+                <div class="editors-row">
+                    <span class="editors-lbl">Editors:</span>
+                    ${editorChips || '<span class="editors-open">Open to all users</span>'}
+                    ${isSuperE ? `<button class="btn-sm" style="border-style:dashed;" onclick="ProjectPage.openEditorsModal()">⚙ Manage Editors</button>` : ''}
+                </div>`;
+            const viewOnlyBanner = this._canEdit ? '' : `
+                <div class="data-source-note" style="border-left:3px solid var(--amber);color:var(--amber);margin-bottom:14px;">
+                    🔒 <b>View-only.</b> This project is assigned to: ${(p.editors || []).join(', ') || '—'}. You can see everything, but editing is limited to the assigned editors.
+                </div>`;
+
             let html = `
+            ${editorsRow}
+            ${viewOnlyBanner}
             <div class="section-head"><h2>Project Snapshot</h2><div class="rule"></div></div>
             <div class="kpi-strip kpi-strip-5">
                 <div class="kpi-card good"><div class="k-label">Revenue</div><div class="k-val mono">₱${fmtMoney((p.revenue || 0))}</div></div>
@@ -158,6 +179,69 @@ const ProjectPage = {
     /**
      * switchTab - Switch between project tabs
      */
+
+    /**
+     * openEditorsModal (v6.6) - Super Admin assigns which users can edit
+     * this project. Empty selection = open to everyone (default).
+     */
+    async openEditorsModal() {
+        let users = [];
+        try { users = await DataService.getAssignableUsers(); }
+        catch (err) { UI.toast('' + err.message, 'error'); return; }
+        const current = (this._data.editors || []).map(e => String(e).toLowerCase());
+        const overlay = document.createElement('div');
+        overlay.id = 'editorsModal';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(28,35,33,.55);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;';
+        overlay.innerHTML = `
+            <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;max-width:430px;width:100%;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;">
+                <div style="padding:13px 18px;border-bottom:1px solid var(--line);background:var(--blueprint-tint);display:flex;justify-content:space-between;align-items:center;">
+                    <h3 style="font-family:'Oswald';font-size:13px;text-transform:uppercase;color:var(--blueprint);margin:0;">Assign Editors — ${this._currentProjectId}</h3>
+                    <span style="cursor:pointer;color:var(--ink-soft);" onclick="document.getElementById('editorsModal').remove()">✕</span>
+                </div>
+                <div style="padding:14px 18px;overflow:auto;">
+                    <input id="editorSearch" placeholder="Search user..." oninput="ProjectPage.filterEditorList(this.value)"
+                        style="width:100%;padding:8px 11px;border:1px solid var(--line);border-radius:7px;margin-bottom:10px;font-size:12px;background:var(--surface);color:var(--ink);" />
+                    <div id="editorList">
+                        ${users.map(u => {
+                            const em = String(u.email).toLowerCase();
+                            const init = (u.name || em).slice(0, 2).toUpperCase();
+                            return `<label class="editor-usr" data-search="${(u.name + ' ' + em).toLowerCase()}" style="display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;cursor:pointer;">
+                                <input type="checkbox" value="${em}" ${current.includes(em) ? 'checked' : ''} ${u.role === 'superadmin' ? 'checked disabled title="Super Admin always has access"' : ''} style="accent-color:var(--safety);width:15px;height:15px;">
+                                <span class="editor-avatar">${init}</span>
+                                <span style="font-weight:600;font-size:12.5px;">${u.name || em}</span>
+                                <span style="font-family:'IBM Plex Mono';font-size:10px;color:var(--ink-soft);margin-left:auto;border:1px solid var(--line);border-radius:4px;padding:1px 6px;">${u.role}</span>
+                            </label>`;
+                        }).join('')}
+                    </div>
+                    <div style="font-size:10.5px;color:var(--ink-soft);margin-top:6px;">Walang naka-check = bukas sa lahat (default). Ang Super Admin ay laging may access.</div>
+                </div>
+                <div style="padding:12px 18px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px;">
+                    <button class="btn-ghost" onclick="document.getElementById('editorsModal').remove()">Cancel</button>
+                    <button class="btn-primary" onclick="ProjectPage.saveEditors()">Save Editors</button>
+                </div>
+            </div>`;
+        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+        document.body.appendChild(overlay);
+    },
+
+    filterEditorList(q) {
+        q = String(q || '').toLowerCase().trim();
+        document.querySelectorAll('#editorList .editor-usr').forEach(el => {
+            el.style.display = !q || el.dataset.search.indexOf(q) > -1 ? '' : 'none';
+        });
+    },
+
+    async saveEditors() {
+        const emails = [...document.querySelectorAll('#editorList input[type=checkbox]:checked:not(:disabled)')].map(c => c.value);
+        try {
+            await DataService.setProjectEditors(this._currentProjectId, emails);
+            UI.toast(emails.length ? `Editors saved (${emails.length}).` : 'Project is now open to all users.', 'success');
+            const m = document.getElementById('editorsModal');
+            if (m) m.remove();
+            await this.open(this._currentProjectId, true);
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
+
     switchTab(tab) {
         document.querySelectorAll('.project-tabs button').forEach(b => b.classList.remove('active'));
         document.querySelector(`.project-tabs button[data-tab="${tab}"]`)?.classList.add('active');
@@ -423,15 +507,15 @@ const ProjectPage = {
 
                 <div class="section-head"><h2>Project Health — Earned Value</h2><div class="rule"></div></div>
                 <div class="kpi-strip" style="margin-bottom:12px;">
-                    <div class="kpi-card"><div class="k-label">PV · Planned Value</div><div class="k-val mono">₱${fmtMoney(evm.pv || 0)}</div><div class="k-sub">dapat na-accomplish by today (Gantt)</div></div>
-                    <div class="kpi-card good"><div class="k-label">EV · Earned Value</div><div class="k-val mono">₱${fmtMoney(evm.ev || 0)}</div><div class="k-sub">halaga ng natapos (progress × budget)</div></div>
+                    <div class="kpi-card"><div class="k-label">PV · Planned Value</div><div class="k-val mono">₱${fmtMoney(evm.pv || 0)}</div><div class="k-sub">planong gastos by today (budget × Gantt)</div></div>
+                    <div class="kpi-card good"><div class="k-label">EV · Earned Value</div><div class="k-val mono">₱${fmtMoney(evm.ev || 0)}</div><div class="k-sub">halaga ng natapos (progress × estimate + VOs)</div></div>
                     <div class="kpi-card warn"><div class="k-label">AC · Actual Cost</div><div class="k-val mono">₱${fmtMoney(evm.ac || 0)}</div><div class="k-sub">tunay na gastos (Reviewed releases)</div></div>
                     <div class="kpi-card ${healthCls}"><div class="k-label">SPI ${spiTxt} · CPI ${cpiTxt}</div><div class="k-val" style="font-size:14px;">${spiState}${spiState && cpiState ? ' · ' : ''}${cpiState}</div><div class="k-sub">SPI=EV/PV · CPI=EV/AC · 1.00 = on plan</div></div>
                 </div>
                 <div class="chart-card" style="margin-bottom:10px;"><div class="cc-head"><h3>S-Curve — PV vs EV vs AC</h3><span class="cc-note">PV moves with the Gantt · AC is fixed actual</span></div><div class="canvas-wrap"><canvas id="evmChart"></canvas></div></div>
                 <div class="evm-help" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-bottom:18px;">
                     <div style="background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:11.5px;line-height:1.5;"><b style="font-family:'IBM Plex Mono';color:var(--blueprint);">PV — Planned Value.</b> Kung susundin ang Gantt schedule, magkano na dapat ang na-accomplish hanggang ngayon. Gumagalaw kapag binago ang Timeline.</div>
-                    <div style="background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:11.5px;line-height:1.5;"><b style="font-family:'IBM Plex Mono';color:var(--blueprint);">EV — Earned Value.</b> Halaga ng trabahong tunay na natapos: % complete (Daily Reports) × budget ng bawat SOW.</div>
+                    <div style="background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:11.5px;line-height:1.5;"><b style="font-family:'IBM Plex Mono';color:var(--blueprint);">EV — Earned Value.</b> Halaga ng trabahong tunay na natapos sa CONTRACT basis: % complete (Daily Reports) × approved estimate (+ VOs) ng bawat SOW.</div>
                     <div style="background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:11.5px;line-height:1.5;"><b style="font-family:'IBM Plex Mono';color:var(--blueprint);">AC — Actual Cost.</b> Tunay na perang lumabas (Reviewed releases). Fixed ito. EV vs AC = sulit ba; EV vs PV = nasa oras ba.</div>
                 </div>
 
@@ -496,7 +580,7 @@ const ProjectPage = {
                     options: { responsive: true, maintainAspectRatio: false,
                         plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, font: { size: 10.5 } } },
                             tooltip: { callbacks: { label: c => `${c.dataset.label}: ₱${fmtMoney(c.parsed.y ?? 0)}` } } },
-                        scales: { y: { ticks: { callback: v => '₱' + fmtNum(v / 1000) + 'k' }, grid: { color: '#EEEBE0' } }, x: { grid: { display: false } } } }
+                        scales: { y: { ticks: { callback: fmtAxisMoney }, grid: { color: '#EEEBE0' } }, x: { grid: { display: false } } } }
                 });
             }
 
@@ -510,12 +594,12 @@ const ProjectPage = {
                     data: { labels: evm.labels, datasets: [
                         { label: 'PV — Planned (Gantt)', data: evm.pvSeries, borderColor: '#5B6360', borderDash: [6, 4], tension: .35, pointRadius: 2 },
                         { label: 'AC — Actual Cost', data: evm.acSeries, borderColor: '#B23A2E', tension: .35, pointRadius: 3, spanGaps: false },
-                        { label: 'EV — Earned (today)', data: evPoint, borderColor: '#2F7A46', backgroundColor: '#2F7A46', pointRadius: 6, pointStyle: 'rectRot', showLine: false }
+                        { label: 'EV — Earned, contract basis (today)', data: evPoint, borderColor: '#2F7A46', backgroundColor: '#2F7A46', pointRadius: 6, pointStyle: 'rectRot', showLine: false }
                     ]},
                     options: { responsive: true, maintainAspectRatio: false,
                         plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, font: { size: 10.5 } } },
                             tooltip: { callbacks: { label: c => `${c.dataset.label}: ₱${fmtMoney(c.parsed.y ?? 0)}` } } },
-                        scales: { y: { ticks: { callback: v => '₱' + fmtNum(v / 1000) + 'k' }, grid: { color: '#EEEBE0' } }, x: { grid: { display: false } } } }
+                        scales: { y: { ticks: { callback: fmtAxisMoney }, grid: { color: '#EEEBE0' } }, x: { grid: { display: false } } } }
                 });
             }
 
@@ -531,7 +615,7 @@ const ProjectPage = {
                             backgroundColor: cbt.length ? cbt.map((_, i) => palette[i % palette.length]) : ['#D6D2C4'], borderRadius: 5 }] },
                     options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
                         plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => '₱' + fmtMoney(c.parsed.x) } } },
-                        scales: { x: { ticks: { callback: v => '₱' + fmtNum(v / 1000) + 'k' }, grid: { color: '#EEEBE0' } }, y: { grid: { display: false } } } }
+                        scales: { x: { ticks: { callback: fmtAxisMoney }, grid: { color: '#EEEBE0' } }, y: { grid: { display: false } } } }
                 });
             }
             const requests = p.requests || [];
@@ -573,7 +657,7 @@ const ProjectPage = {
                         maintainAspectRatio: false,
                         plugins: { legend: { display: false }, tooltip: { callbacks: { label: c =>
                                         '₱' + fmtMoney(c.parsed.y) } } },
-                        scales: { y: { ticks: { callback: v => '₱' + (v / 1000) + 'k' },
+                        scales: { y: { ticks: { callback: fmtAxisMoney },
                                 grid: { color: '#EEEBE0' } }, x: { grid: { display: false } } }
                     }
                 });

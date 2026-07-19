@@ -280,6 +280,20 @@ function rejectItem(id, type) {
  */
 function decideItem_(id, type, decision, isForce) {
   const approver = currentUserEmail_().toLowerCase();
+
+  // v6.6 FIX: some callers historically passed the SOW id for estimates
+  // instead of the estimate GROUP id ("Estimate group not found").
+  // Translate here so signatures, finalization, and the Approvals sheet
+  // all consistently use the canonical group id.
+  if (type === 'Estimate') {
+    const groups = readAll_('EstimateGroups');
+    if (!groups.some(function (g) { return g.id === id; })) {
+      const bySow = groups.find(function (g) { return g.sowId === id && g.status === 'pending'; })
+        || groups.find(function (g) { return g.sowId === id; });
+      if (bySow) id = bySow.id;
+    }
+  }
+
   const meta = resolveApprovalItem_(id, type);
   if (!meta.found) throw new Error(meta.msg || 'Request not found.');
   if (!meta.isPending) throw new Error(meta.notPendingMsg || 'Request is not pending.');

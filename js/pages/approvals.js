@@ -469,13 +469,13 @@ const ApprovalsPage = {
                 let actionsHtml = '';
                 if (isSuperAdmin) {
                     actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${e.sowId || e.id}','Estimate')">Force Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${e.sowId || e.id}','Estimate')">Force Reject</button>
+                        <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${e.id}','Estimate')">Force Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${e.id}','Estimate')">Force Reject</button>
                     `;
                 } else if (isApprover) {
                     actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${e.sowId || e.id}','Estimate')">Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${e.sowId || e.id}','Estimate')">Reject</button>
+                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${e.id}','Estimate')">Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${e.id}','Estimate')">Reject</button>
                     `;
                 }
                 html += `

@@ -20,6 +20,7 @@ function getHomeData() {
     'IncomingCashRequests', 'Liquidations', 'ActivityLog']);
 
   const projects = readAll_('Projects').map(function (p) {
+    p.editors = projectEditors_(p);   // v6.6: card avatars
     const revenue = getTotalIncomingCashForProject(p.id);
     const expenses = getTotalReleasedCashForProject(p.id);
     return {
@@ -116,6 +117,62 @@ function addProject(id, name, clientId, location, startDate, endDate) {
   });
   logActivity_('New project "' + name + '" (' + id + ') created by ' + currentUserName_(), 'blue');
   return { success: true, id: id, name: name, message: 'Project "' + name + '" created successfully.' };
+}
+
+
+/**
+ * ══ v6.6: PER-PROJECT EDITORS ══
+ * Super Admin assigns which users may EDIT a project's content (daily
+ * records, SOW/Gantt, estimates, billings generate/revise, VOs). An
+ * EMPTY list means the project is open to everyone (pre-feature
+ * behavior), so nothing locks unexpectedly on deploy. Super Admin can
+ * always edit. Approvals remain role-based and are not affected.
+ */
+function projectEditors_(proj) {
+  return safeParse_(proj && proj.editorsJSON, []).map(function (e) { return String(e).toLowerCase(); });
+}
+
+function canEditProject_(projectId) {
+  var proj = readAll_('Projects').find(function (p) { return p.id === projectId; });
+  if (!proj) return false;
+  var me = currentUserEmail_().toLowerCase();
+  var user = readAll_('Users').find(function (u) { return u.email.toLowerCase() === me; });
+  if (user && user.role === 'superadmin') return true;
+  var editors = projectEditors_(proj);
+  if (editors.length === 0) return true;   // open project
+  return editors.indexOf(me) > -1;
+}
+
+function assertProjectEditor_(projectId) {
+  if (!canEditProject_(projectId)) {
+    throw new Error('View-only: you are not assigned as an editor of this project. Ask the Super Admin for access.');
+  }
+}
+
+/** setProjectEditors - Super Admin only; emails may be empty (= open). */
+function setProjectEditors(projectId, emails) {
+  var me = currentUserEmail_().toLowerCase();
+  var user = readAll_('Users').find(function (u) { return u.email.toLowerCase() === me; });
+  if (!user || user.role !== 'superadmin') throw new Error('Only Super Admin can assign project editors.');
+  var proj = readAll_('Projects').find(function (p) { return p.id === projectId; });
+  if (!proj) throw new Error('Project not found.');
+  var users = readAll_('Users');
+  var clean = (emails || []).map(function (e) { return String(e).toLowerCase().trim(); })
+    .filter(function (e, i, a) { return e && a.indexOf(e) === i; })
+    .filter(function (e) { return users.some(function (u) { return u.email.toLowerCase() === e; }); });
+  updateRow_('Projects', 'id', projectId, { editorsJSON: JSON.stringify(clean) });
+  logActivity_('Editors for ' + projectId + ' set to: ' + (clean.length ? clean.join(', ') : '(open to all)'), 'blue', projectId);
+  return { success: true, editors: clean };
+}
+
+/** getAssignableUsers - Super Admin only; the checklist for the modal. */
+function getAssignableUsers() {
+  var me = currentUserEmail_().toLowerCase();
+  var user = readAll_('Users').find(function (u) { return u.email.toLowerCase() === me; });
+  if (!user || user.role !== 'superadmin') throw new Error('Only Super Admin can view the assignable user list.');
+  return readAll_('Users').map(function (u) {
+    return { email: u.email, name: u.name || u.email, role: u.role };
+  });
 }
 
 function getProjectData(projectId) {
@@ -449,8 +506,15 @@ function getProjectData(projectId) {
     return Math.round(cum);
   });
   const totalBudgetAll = sowItems.reduce(function (s, x) { return s + (x.isMilestone ? 0 : (x.budget || 0)); }, 0);
+  // v6.6: EV is on the CONTRACT basis (approved estimate + client VOs),
+  // per Darwin's model: estimates = what the client pays for finished
+  // work; budget = the internal spending plan. PV stays budget-based —
+  // "how much did we PLAN to spend by now" — and AC is what was actually
+  // spent, so CPI reads earned contract value per peso spent.
   const evNow = sowItems.reduce(function (s, x) {
-    return s + (x.isMilestone ? 0 : (x.budget || 0) * ((x.progress || 0) / 100));
+    if (x.isMilestone) return s;
+    const basis = (x.estimateTotal || 0) + (x.voAdjustment || 0);
+    return s + basis * ((x.progress || 0) / 100);
   }, 0);
   const nowIdx = monthsArr.findIndex(function (mm) { return mm.y * 12 + mm.m === nowKey; });
   const pvNow = nowIdx > -1 ? pvSeries[nowIdx] : (pvSeries[pvSeries.length - 1] || 0);
@@ -562,6 +626,9 @@ function getProjectData(projectId) {
     retentionPct: retentionPctVal,
     contractValueRevised: contractValueRevised,
     contractReady: contractReady,
+    // v6.6: per-project editors
+    editors: projectEditors_(proj),
+    canEdit: canEditProject_(projectId),
     revenue: revenue,
     expenses: expenses,
     cashPosition: cashPosition,
@@ -581,6 +648,7 @@ function getProjectData(projectId) {
 // ============================================================
 
 function addSOWItem(projectId, data) {
+  assertProjectEditor_(projectId);   // v6.6
   const id = data.id || 'SOW-' + Utilities.getUuid().slice(0, 6).toUpperCase();
   const description = data.description || '';
   const qty = parseFloat(data.qty) || 0;
@@ -620,6 +688,7 @@ function addSOWItem(projectId, data) {
 }
 
 function updateSOWItem(projectId, sowId, data) {
+  assertProjectEditor_(projectId);   // v6.6
   const patch = {};
   if (data.description !== undefined) patch.description = data.description;
   if (data.budget !== undefined) patch.budget = parseFloat(data.budget) || 0;
@@ -641,6 +710,7 @@ function updateSOWItem(projectId, sowId, data) {
 }
 
 function deleteSOWItem(projectId, sowId) {
+  assertProjectEditor_(projectId);   // v6.6
   const rowNum = findRowNum_('SOWItems', 'id', sowId);
   if (rowNum > -1) sheet_('SOWItems').deleteRow(rowNum);
   const group = readAll_('EstimateGroups').find(function (g) { return g.projectId === projectId && g.sowId === sowId; });
@@ -701,6 +771,7 @@ function computeSOWProgress_(sowId, dailyRecords) {
  * the sheet itself stays readable.
  */
 function updateSOWBudget(projectId, sowId, mode, manualAmount) {
+  assertProjectEditor_(projectId);   // v6.6
   const valid = ['auto', 'indirect', 'manual'];
   if (valid.indexOf(mode) === -1) throw new Error('Invalid budget mode: ' + mode);
 
@@ -729,6 +800,7 @@ function updateSOWBudget(projectId, sowId, mode, manualAmount) {
  * thin ghost bar under each task so slippage is visible.
  */
 function saveBaseline(projectId) {
+  assertProjectEditor_(projectId);   // v6.6
   const items = readAll_('SOWItems').filter(function (s) { return s.projectId === projectId; });
   if (!items.length) throw new Error('No SOW items to baseline.');
   items.forEach(function (s) {

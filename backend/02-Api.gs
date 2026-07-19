@@ -125,6 +125,9 @@ const API_ACTIONS = {
   reviseBilling: reviseBilling,
   // v6.4: draft daily record edit/delete
   updateDailyRecord: updateDailyRecord,
+  // v6.6: per-project editors
+  setProjectEditors: setProjectEditors,
+  getAssignableUsers: getAssignableUsers,
   deleteDailyRecord: deleteDailyRecord,
   requestVariationOrder: requestVariationOrder,
   approveVariationOrder: approveVariationOrder,

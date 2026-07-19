@@ -316,6 +316,13 @@ const DataService = {
     },
 
     // ── v6: billings, variation orders, contract ──
+    // v6.6: per-project editors (Super Admin)
+    async setProjectEditors(projectId, emails) {
+        return await gasCall('setProjectEditors', projectId, emails);
+    },
+    async getAssignableUsers() {
+        return await gasCall('getAssignableUsers');
+    },
     async updateProjectContract(projectId, contractValue, retentionPct) {
         return await gasCall('updateProjectContract', projectId, contractValue, retentionPct);
     },
