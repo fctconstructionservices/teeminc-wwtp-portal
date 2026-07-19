@@ -38,7 +38,7 @@ const HomePage = {
                 if (isSuperAdmin) {
                     rightContent = `
                         <button class="btn-primary" onclick="ProjectPage.showAddProjectModal()" 
-                            style="padding:4px 14px;font-size:11px;margin-left:auto;">
+                            style="padding:4px 14px;font-size:11px;">
                             + Add Project
                         </button>
                     `;
@@ -46,9 +46,13 @@ const HomePage = {
                     const projectCount = data.projects ? data.projects.length : 0;
                     rightContent = `<span class="badge project-count-badge">${projectCount} projects</span>`;
                 }
+                // v7.2.1: this block REWRITES the section head, so the
+                // Portfolio link has to live here — putting it in
+                // index.html meant it was wiped on every load.
                 sectionHead.innerHTML = `
                     <h2>Projects</h2>
                     <div class="rule"></div>
+                    <button class="link-btn" onclick="App.navigate('portfolio')">Portfolio View <span class="btn-arrow"></span></button>
                     ${rightContent}
                 `;
             }

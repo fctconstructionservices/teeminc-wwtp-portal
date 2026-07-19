@@ -452,3 +452,69 @@
         align-self: flex-end;
     }
 }
+
+/* ═══ v7.2: MOBILE STEP MODE for the daily site report ═══
+   On site the form is filled one-handed on a phone, often in sunlight.
+   Step mode shows one section at a time with large targets; the desktop
+   layout is untouched above the breakpoint. */
+.daily-step-bar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+    padding: 10px 0 8px;
+    margin-bottom: 12px;
+}
+.daily-step-bar .dsb-track { display: flex; gap: 3px; margin-bottom: 8px; }
+.daily-step-bar .dsb-seg {
+    flex: 1; height: 3px; border-radius: 2px; background: var(--line);
+    transition: background var(--transition);
+}
+.daily-step-bar .dsb-seg.done { background: var(--green); }
+.daily-step-bar .dsb-seg.now { background: var(--safety); }
+.daily-step-bar .dsb-head { display: flex; align-items: baseline; justify-content: space-between; }
+.daily-step-bar .dsb-title {
+    font-family: 'Oswald', sans-serif; font-size: 13px;
+    text-transform: uppercase; letter-spacing: .04em;
+}
+.daily-step-bar .dsb-count {
+    font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-soft);
+}
+
+@media (max-width: 720px) {
+    /* 16px minimum stops iOS from zooming on focus, which otherwise
+       throws the whole layout sideways mid-entry. */
+    .daily-form-section input,
+    .daily-form-section select,
+    .daily-form-section textarea {
+        font-size: 16px;
+        padding: 11px 12px;
+        border-radius: 9px;
+    }
+    .daily-form-section .entry-row {
+        grid-template-columns: 1fr !important;
+        gap: 6px;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        margin-bottom: 10px;
+        background: var(--bg);
+    }
+    .daily-form-section .entry-row .field { margin-bottom: 0; }
+    .daily-form-section .add-btn-row .btn-sm,
+    #dailyStepNav .btn-primary,
+    #dailyStepNav .btn-ghost,
+    #dailySubmitRow .btn-primary,
+    #dailySubmitRow .btn-ghost {
+        width: 100%;
+        padding: 13px 16px;
+        font-size: 14px;
+    }
+    #dailyStepNav { display: flex; gap: 8px; }
+    #dailyStepNav .btn-ghost { flex: 1; }
+    #dailyStepNav .btn-primary { flex: 2; }
+    #dailySubmitRow { display: flex; flex-direction: column; gap: 8px; }
+    /* remove-entry buttons need a real touch target */
+    .daily-form-section .entry-row .btn-sm.danger { width: 100%; padding: 10px; }
+}

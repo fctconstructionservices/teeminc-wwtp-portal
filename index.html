@@ -210,6 +210,32 @@
     </section>
 
     <!-- ════════════════════════════════════════════ -->
+    <!--  PORTFOLIO DASHBOARD (v7.2)                 -->
+    <!-- ════════════════════════════════════════════ -->
+    <section id="page-portfolio" class="page" aria-label="Portfolio Dashboard">
+        <div class="wrap">
+            <div class="topbar">
+                <div class="mark">F</div>
+                <div class="brand">
+                    <div class="name">Portfolio</div>
+                    <div class="sub">Lahat ng proyekto sa isang tanaw</div>
+                </div>
+                <div class="spacer"></div>
+                <button class="hamburger" onclick="toggleMenu()"></button>
+                <div class="actions" id="topActionsPortfolio">
+                    <button class="theme-toggle" onclick="App.toggleTheme()"></button>
+                    <button class="superadmin-only" onclick="App.openViewAs()">👁 View As (test)</button>
+                    <button onclick="App.logout()">Log Out</button>
+                </div>
+            </div>
+            <div class="crumb"><button onclick="App.navigate('home')">Home</button> / Portfolio</div>
+            <div id="portfolioContent">
+                <div class="loading-overlay"><div class="loader"></div><p>Loading portfolio...</p></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
     <!--  PROJECT (with Tabs)                        -->
     <!-- ════════════════════════════════════════════ -->
     <section id="page-project" class="page" aria-label="Project Dashboard">
@@ -717,6 +743,7 @@
     <script src="js/pages/project/project-variations.js"></script>
     <script src="js/pages/approvals.js"></script>
     <script src="js/pages/finance.js"></script>
+    <script src="js/pages/portfolio.js"></script>
     <script src="js/pages/materials.js"></script>
     <script src="js/pages/equipment.js"></script>
     <script src="js/pages/manpower.js"></script>

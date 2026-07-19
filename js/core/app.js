@@ -68,6 +68,9 @@ const App = {
         // session — otherwise a stale localStorage profile (or the login
         // page itself) triggers calls that fail with "Session expired".
         if (getSessionToken()) {
+            if (page === 'portfolio') {
+                PortfolioPage.load();
+            }
             if (page === 'request') {
                 loadProjectsDropdown();
             }

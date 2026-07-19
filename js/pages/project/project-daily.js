@@ -29,7 +29,14 @@ Object.assign(ProjectPage, {
                     </div>
                 </div>
             </div>
-            <div class="daily-form-section"><div class="section-label">Date & Weather <span class="rule"></span></div>
+            <div id="dailyStepBar" class="daily-step-bar" hidden>
+                <div class="dsb-track" id="dsbTrack"></div>
+                <div class="dsb-head">
+                    <span class="dsb-title" id="dsbTitle"></span>
+                    <span class="dsb-count" id="dsbCount"></span>
+                </div>
+            </div>
+            <div class="daily-form-section" id="dateWeatherSection"><div class="section-label">Date & Weather <span class="rule"></span></div>
                 <div class="sub-fields">
                     <div class="field"><label>Date *</label><input type="date" id="dr-date" value="${today}" required /></div>
                     <div class="field"><label>Weather AM</label><input type="text" id="dr-weather-am" placeholder="e.g. Sunny" /></div>
@@ -78,7 +85,11 @@ Object.assign(ProjectPage, {
                 <div id="photosEntries"><div class="entry-row"><div class="field"><label>Photo</label><input type="file" accept="image/*" class="photo-input" data-photo onchange="ProjectPage.previewSmallImage(this,'photo-preview-${Date.now()}')" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'photos')">${Icon.close({size:13})}</button></div></div></div>
                 <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('photos')">+ Add Photo</button></div>
             </div>
-            <div class="submit-row">
+            <div class="submit-row" id="dailyStepNav" hidden>
+                <button class="btn-ghost" id="dsbPrev" onclick="ProjectPage.dailyStep(-1)">← Balik</button>
+                <button class="btn-primary" id="dsbNext" onclick="ProjectPage.dailyStep(1)">Susunod →</button>
+            </div>
+            <div class="submit-row" id="dailySubmitRow">
                 <button class="btn-primary" onclick="ProjectPage.submitDailyRecord('${this._currentProjectId || ''}')">Save Record (Draft)</button>
                 <button class="btn-ghost" onclick="ProjectPage.toggleAddRecord()">Cancel</button>
             </div>
@@ -438,9 +449,128 @@ Object.assign(ProjectPage, {
         document.getElementById('manpowerTotalDisplay').textContent = 'Total: ' + total;
     },
 
+
+    // ════════════ v7.2: MOBILE STEP MODE ════════════
+    //
+    // On a phone the daily form is a very long scroll of small inputs —
+    // hard to fill one-handed on site. Step mode shows ONE section at a
+    // time with large touch targets and a progress bar.
+    //
+    // Design choice: this only SHOWS and HIDES the existing sections. The
+    // markup, the gather logic and the submit path are untouched, so the
+    // desktop form and the phone form can never drift apart or disagree
+    // about what was captured.
+
+    _DAILY_STEPS: [
+        { id: 'dateWeatherSection',    label: 'Petsa at Panahon' },
+        { id: 'manpowerSection',       label: 'Manpower' },
+        { id: 'equipmentSection',      label: 'Equipment' },
+        { id: 'workSection',           label: 'Natapos na Trabaho' },
+        { id: 'materialsSection',      label: 'Materials Delivered' },
+        { id: 'materialsUsedSection',  label: 'Materials Used' },
+        { id: 'issuesSection',         label: 'Isyu at Pagka-antala' },
+        { id: 'visitorsSection',       label: 'Bisita' },
+        { id: 'photosSection',         label: 'Mga Litrato' }
+    ],
+
+    /** isMobileView - phone-sized viewport (matches the CSS breakpoint). */
+    isMobileView() {
+        return window.matchMedia('(max-width: 720px)').matches;
+    },
+
+    /**
+     * initDailySteps - Enables step mode on small screens, and plain
+     * scrolling everywhere else. Called whenever the form opens.
+     */
+    initDailySteps() {
+        const bar = document.getElementById('dailyStepBar');
+        const nav = document.getElementById('dailyStepNav');
+        const submitRow = document.getElementById('dailySubmitRow');
+        if (!bar || !nav || !submitRow) return;
+
+        if (!this.isMobileView()) {
+            // desktop: everything visible, no stepping
+            bar.hidden = true;
+            nav.hidden = true;
+            submitRow.hidden = false;
+            this._DAILY_STEPS.forEach(s => {
+                const el = document.getElementById(s.id);
+                if (el) el.style.display = '';
+            });
+            this._dailyStepIdx = null;
+            return;
+        }
+
+        bar.hidden = false;
+        nav.hidden = false;
+        this._dailyStepIdx = 0;
+        this._renderDailyStep();
+    },
+
+    _renderDailyStep() {
+        const idx = this._dailyStepIdx;
+        if (idx === null || idx === undefined) return;
+        const steps = this._DAILY_STEPS;
+
+        steps.forEach((s, i) => {
+            const el = document.getElementById(s.id);
+            if (el) el.style.display = (i === idx) ? '' : 'none';
+        });
+
+        const track = document.getElementById('dsbTrack');
+        if (track) {
+            track.innerHTML = steps.map((_, i) =>
+                `<span class="dsb-seg ${i < idx ? 'done' : i === idx ? 'now' : ''}"></span>`
+            ).join('');
+        }
+        const title = document.getElementById('dsbTitle');
+        if (title) title.textContent = (idx + 1) + ' · ' + steps[idx].label;
+        const count = document.getElementById('dsbCount');
+        if (count) count.textContent = (idx + 1) + ' sa ' + steps.length;
+
+        const prev = document.getElementById('dsbPrev');
+        const next = document.getElementById('dsbNext');
+        const submitRow = document.getElementById('dailySubmitRow');
+        const isLast = idx === steps.length - 1;
+        if (prev) prev.style.visibility = idx === 0 ? 'hidden' : 'visible';
+        if (next) next.textContent = isLast ? 'Suriin at I-save' : 'Susunod →';
+        // On the final step, show the real save controls instead of "next"
+        if (submitRow) submitRow.hidden = !isLast;
+        const nav = document.getElementById('dailyStepNav');
+        if (nav) nav.hidden = false;
+
+        const form = document.getElementById('dailyAddForm');
+        if (form) form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    },
+
+    dailyStep(delta) {
+        if (this._dailyStepIdx === null || this._dailyStepIdx === undefined) return;
+        const next = this._dailyStepIdx + delta;
+        if (next < 0 || next >= this._DAILY_STEPS.length) return;
+
+        // Validate the date before letting anyone past step 1 — it is the
+        // one field the whole record depends on.
+        if (delta > 0 && this._dailyStepIdx === 0) {
+            const d = document.getElementById('dr-date');
+            if (d && !d.value) { UI.toast('Pumili muna ng petsa.', 'error'); return; }
+        }
+        this._dailyStepIdx = next;
+        this._renderDailyStep();
+    },
+
+    /** jumpToDailyStep - used by the review summary to fix a section. */
+    jumpToDailyStep(i) {
+        if (!this.isMobileView()) return;
+        this._dailyStepIdx = Math.max(0, Math.min(i, this._DAILY_STEPS.length - 1));
+        this._renderDailyStep();
+    },
+
     toggleAddRecord() {
         const form = document.getElementById('dailyAddForm');
         if (form) form.classList.toggle('open');
+        if (form && form.classList.contains('open')) {
+            setTimeout(() => this.initDailySteps(), 30);   // v7.2
+        }
         // v6.4: leaving the form ends edit mode and restores the button label
         if (form && !form.classList.contains('open')) {
             this._editingRecordId = null;
@@ -464,6 +594,7 @@ Object.assign(ProjectPage, {
         if (form && !form.classList.contains('open')) form.classList.add('open');
         this._editingRecordId = id;
         this._populateDailyForm(r);
+        setTimeout(() => this.initDailySteps(), 30);   // v7.2
         const btn = form ? form.querySelector('.submit-row .btn-primary') : null;
         if (btn) btn.textContent = 'Update Draft';
         if (form && !document.getElementById('dailyEditBanner')) {

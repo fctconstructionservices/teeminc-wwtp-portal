@@ -388,6 +388,10 @@ const DataService = {
     async getViewAsUsers() {
         return await gasCall('getViewAsUsers');
     },
+    // v7.2: portfolio dashboard
+    async getPortfolioData() {
+        return await gasCall('getPortfolioData');
+    },
     async getBackupStatus() {
         return await gasCall('getBackupStatus');
     },

@@ -118,3 +118,77 @@ tbody tr:hover td {
 .home-editor-avatars { display: flex; align-items: center; }
 .home-editor-avatars .editor-avatar { border: 2px solid var(--surface); margin-right: -7px; width: 20px; height: 20px; font-size: 9px; }
 .home-editor-avatars .more { font-size: 9.5px; color: var(--ink-soft); margin-left: 12px; }
+/* ═══ v7.2: PORTFOLIO DASHBOARD ═══ */
+.attention-list {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+.attention-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    border-left: 3px solid transparent;
+    font-size: 12.5px;
+}
+.attention-row:last-child { border-bottom: none; }
+.attention-row.urgent { border-left-color: var(--red); }
+.attention-row.warn   { border-left-color: var(--amber); }
+.attention-row.info   { border-left-color: var(--blueprint); }
+.attention-row .attn-ico {
+    width: 24px; height: 24px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; flex-shrink: 0; background: var(--bg);
+}
+.attention-row.urgent .attn-ico { background: #FAEBE9; }
+.attention-row.warn   .attn-ico { background: #FBF1DE; }
+.attention-row.info   .attn-ico { background: var(--blueprint-tint); }
+.attention-row .attn-text { flex: 1; line-height: 1.45; }
+.attention-row .btn-sm { flex-shrink: 0; }
+
+/* index chips (SPI / CPI) — colour carries the verdict at a glance */
+.idx-chip {
+    font-family: 'IBM Plex Mono', monospace; font-size: 11px;
+    padding: 1px 7px; border-radius: 4px;
+    background: var(--bg); color: var(--ink-soft);
+}
+.idx-chip.g { background: #E7F3EA; color: var(--green); }
+.idx-chip.a { background: #FBF1DE; color: var(--amber); }
+.idx-chip.r { background: #FAEBE9; color: var(--red); }
+
+/* ═══ v7.2: EMPTY STATES ═══
+   An empty table used to say only "no data". These say what the thing is
+   FOR and how to fill it, which turns a dead end into a next step. */
+.empty {
+    text-align: center;
+    padding: 34px 16px;
+    color: var(--ink-soft);
+}
+.empty .empty-ico { font-size: 30px; opacity: .4; margin-bottom: 8px; }
+.empty h4 {
+    font-family: 'Oswald', sans-serif; font-size: 13px;
+    text-transform: uppercase; letter-spacing: .04em;
+    margin: 0 0 5px; color: var(--ink);
+}
+.empty p { font-size: 12px; margin: 0 0 12px; line-height: 1.5; }
+
+/* ═══ v7.2: sticky table headers ═══
+   Long tables (daily records, releases) lose their headings on scroll. */
+.panel table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+/* ═══ v7.2: visible keyboard focus ═══ */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(36, 69, 90, .28);
+    border-radius: 6px;
+}
