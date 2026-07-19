@@ -112,6 +112,7 @@ function getTransferOptions(fromLoc, itemType) {
  * owner), so the check is "editor of source OR destination".
  */
 function requestTransfer(data) {
+  requireLogin_();   // v7.0 (editor check on either side follows below)
   var fromLoc = String(data && data.fromLoc || '').trim();
   var toLoc = String(data && data.toLoc || '').trim();
   var itemType = String(data && data.itemType || 'Material').trim();

@@ -13,6 +13,7 @@
 function getAllMaterials() { return readAll_('Materials'); }
 function getMaterials(status) { return readAll_('Materials').filter(function (m) { return m.status === status; }); }
 function requestMaterial(data) {
+  requireLogin_();   // v7.0
   const id = nextId_('MAT');
   appendRow_('Materials', {
     id: id, code: data.code || id, name: data.name, desc: data.desc, category: data.category,
@@ -23,7 +24,9 @@ function requestMaterial(data) {
   logActivity_('Material Database Update Request: "' + data.name + '" requested by ' + currentUserName_(), 'blue');
   return { success: true, id: id };
 }
-function approveMaterial(id) { updateRow_('Materials', 'id', id, { status: 'approved' }); logActivity_('Material ' + id + ' approved', 'g'); return { success: true }; }
+function approveMaterial(id) {
+  requireApprover_('approving a material');   // v7.0
+  updateRow_('Materials', 'id', id, { status: 'approved' }); logActivity_('Material ' + id + ' approved', 'g'); return { success: true }; }
 function searchMaterials(query) {
   query = String(query || '').toLowerCase();
   return readAll_('Materials').filter(function (m) {

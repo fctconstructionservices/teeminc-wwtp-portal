@@ -28,6 +28,39 @@ function getCurrentUserEmail() {
 }
 
 /**
+ * v7.0 SESSION TOKEN
+ * The browser no longer tells the server who it is — it presents an
+ * opaque token the server issued at login, and the server decides the
+ * identity. The stored email is kept only for display.
+ */
+function getSessionToken() {
+    try { return localStorage.getItem('fctc_token') || ''; } catch (e) { return ''; }
+}
+function setSessionToken(token) {
+    try {
+        if (token) localStorage.setItem('fctc_token', token);
+        else localStorage.removeItem('fctc_token');
+    } catch (e) {}
+}
+
+/**
+ * handleSessionExpired - Sliding 8-hour window means this only fires
+ * after real inactivity. Warn about unsaved work BEFORE clearing, so a
+ * half-finished daily report isn't silently lost.
+ */
+function handleSessionExpired() {
+    if (window.__fctcExpiring) return;
+    window.__fctcExpiring = true;
+    const hasDraft = !!document.querySelector('#dailyAddForm.open, #transferModal, #editorsModal');
+    setSessionToken('');
+    try { localStorage.removeItem('fctc_user'); } catch (e) {}
+    const msg = hasDraft
+        ? 'Nag-expire ang session mo (8 oras na walang aktibidad). May bukas kang form — kopyahin muna ang anumang hindi pa na-save bago mag-OK, dahil babalik tayo sa login.'
+        : 'Nag-expire ang session mo (8 oras na walang aktibidad). Mag-login ulit para magpatuloy.';
+    setTimeout(() => { alert(msg); window.location.reload(); }, 50);
+}
+
+/**
  * gasCall - Generic API caller
  * PURPOSE: Sends requests to the backend with proper authentication
  */
@@ -36,7 +69,8 @@ async function gasCall(action) {
     const payload = {
         action: action,
         params: params,
-        userEmail: getCurrentUserEmail()
+        token: getSessionToken(),        // v7.0: identity proof
+        userEmail: getCurrentUserEmail() // display only; server ignores it
     };
 
     const response = await fetch(GAS_API_URL, {
@@ -50,6 +84,10 @@ async function gasCall(action) {
 
     const result = await response.json();
     if (!result.success) {
+        if (result.code === 'SESSION_EXPIRED') {
+            handleSessionExpired();
+            throw new Error('Session expired. Please log in again.');
+        }
         throw new Error(result.error || 'Unknown server error');
     }
     return result.data;
@@ -332,6 +370,29 @@ const DataService = {
     },
     async getWarehouseStock() {
         return await gasCall('getWarehouseStock');
+    },
+    // v7.0: session-based auth
+    async loginWithPassword(email, password) {
+        return await gasCall('loginWithPassword', email, password);
+    },
+    async logout() {
+        try { return await gasCall('logout', getSessionToken()); }
+        finally { setSessionToken(''); }
+    },
+    async whoAmI() {
+        return await gasCall('whoAmI');
+    },
+    async setViewAs(email) {
+        return await gasCall('setViewAs', email);
+    },
+    async getViewAsUsers() {
+        return await gasCall('getViewAsUsers');
+    },
+    async getBackupStatus() {
+        return await gasCall('getBackupStatus');
+    },
+    async runBackupNow() {
+        return await gasCall('runBackupNow');
     },
     async setProjectEditors(projectId, emails) {
         return await gasCall('setProjectEditors', projectId, emails);

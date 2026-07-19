@@ -256,10 +256,12 @@ function getRequestById(id) {
 }
 
 function approveItem(id, type) {
+  requireApprover_('approving a request');   // v7.0
   return decideItem_(id, type, 'Approved');
 }
 
 function rejectItem(id, type) {
+  requireApprover_('rejecting a request');   // v7.0
   return decideItem_(id, type, 'Rejected');
 }
 
@@ -483,6 +485,7 @@ function allSignersApproved_(id, submitterEmail) {
 // ─── SUPER ADMIN FORCE APPROVE/REJECT ─────────────────────────
 
 function forceApprove(id, type) {
+  requireSuperAdmin_('force approval');   // v7.0
   const user = readAll_('Users').find(function (u) { 
     return String(u.email).toLowerCase() === currentUserEmail_().toLowerCase(); 
   });
@@ -493,6 +496,7 @@ function forceApprove(id, type) {
 }
 
 function forceReject(id, type) {
+  requireSuperAdmin_('force rejection');   // v7.0
   const user = readAll_('Users').find(function (u) { 
     return String(u.email).toLowerCase() === currentUserEmail_().toLowerCase(); 
   });

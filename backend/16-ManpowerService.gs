@@ -22,6 +22,7 @@ function getManpower(status) {
 }
 
 function requestManpower(data) {
+  requireLogin_();   // v7.0
   const role = String(data && data.role || '').trim();
   if (!role) throw new Error('Role / Trade name is required.');
 

@@ -8,6 +8,7 @@
 function getAllEquipment() { return readAll_('Equipment'); }
 function getEquipment(status) { return readAll_('Equipment').filter(function (e) { return e.status === status; }); }
 function requestEquipment(data) {
+  requireLogin_();   // v7.0
   const id = nextId_('EQ');
   appendRow_('Equipment', {
     id: id, code: data.code || id, name: data.name, desc: data.desc, category: data.category,
@@ -18,7 +19,9 @@ function requestEquipment(data) {
   logActivity_('Equipment "' + data.name + '" requested by ' + currentUserName_(), 'blue');
   return { success: true, id: id };
 }
-function approveEquipment(id) { updateRow_('Equipment', 'id', id, { status: 'approved' }); logActivity_('Equipment ' + id + ' approved', 'g'); return { success: true }; }
+function approveEquipment(id) {
+  requireApprover_('approving equipment');   // v7.0
+  updateRow_('Equipment', 'id', id, { status: 'approved' }); logActivity_('Equipment ' + id + ' approved', 'g'); return { success: true }; }
 function searchEquipment(query) {
   query = String(query || '').toLowerCase();
   return readAll_('Equipment').filter(function (e) {

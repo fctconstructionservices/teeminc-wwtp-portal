@@ -36,6 +36,7 @@ function getTotalReleasedCashForProject(projectId) {
 // ============================================================
 
 function submitCashAdvance(payload) {
+  requireLogin_();   // v7.0
   const uploaded = uploadAttachmentIfAny_(payload);
   const fileUrl = uploaded.fileUrl;
   const fileName = uploaded.fileName;
@@ -73,6 +74,7 @@ function submitCashAdvance(payload) {
 }
 
 function approveCashAdvance(id) {
+  requireApprover_('approving a cash advance');   // v7.0
   const ca = readAll_('CashAdvanceRequests').find(function (r) { return r.id === id; });
   if (!ca) throw new Error('Cash advance request not found.');
   if (ca.status !== 'Pending') throw new Error('Request is not pending.');
@@ -110,6 +112,7 @@ function getPendingCashReleases() {
 }
 
 function submitRelease(payload) {
+  requireAdmin_('releasing cash');   // v7.0
   const releaseId = payload.releaseId;
   const releaseAmount = parseFloat(payload.amount) || 0;
 
@@ -139,6 +142,13 @@ function submitRelease(payload) {
 }
 
 function reviewRelease(releaseId, reviewerEmail) {
+  // ══ v7.0 SECURITY ══ The reviewer used to be whatever email the
+  // browser sent, so anyone could review cash releases as somebody else.
+  // Identity now comes from the session; the parameter is ignored and
+  // kept only so older clients don't break on the call signature.
+  requireAdmin_('reviewing a cash release');
+  reviewerEmail = currentUserEmail_();
+
   const release = readAll_('CashRelease').find(function (r) { return r.id === releaseId && r.status === 'For Review'; });
   if (!release) throw new Error('Release record not found or not in For Review status.');
 
@@ -181,6 +191,7 @@ function reviewRelease(releaseId, reviewerEmail) {
 // ============================================================
 
 function submitIncomingCash(payload) {
+  requireLogin_();   // v7.0
   const uploaded = uploadAttachmentIfAny_(payload);
   const fileUrl = uploaded.fileUrl;
   const fileName = uploaded.fileName;
@@ -214,6 +225,7 @@ function submitIncomingCash(payload) {
 }
 
 function approveIncomingCash(id) {
+  requireApprover_('approving incoming cash');   // v7.0
   const req = readAll_('IncomingCashRequests').find(function (r) { return r.id === id; });
   if (!req) throw new Error('Request not found.');
   if (req.status !== 'Pending') throw new Error('Request is not pending.');
@@ -228,6 +240,7 @@ function approveIncomingCash(id) {
 // ============================================================
 
 function submitLiquidation(payload) {
+  requireLogin_();   // v7.0
   const id = nextId_('LIQ');
   const uploaded = uploadAttachmentIfAny_(payload);
   const fileUrl = uploaded.fileUrl;
@@ -258,6 +271,7 @@ function submitLiquidation(payload) {
 }
 
 function approveLiquidation(id) {
+  requireApprover_('approving a liquidation');   // v7.0
   const liq = readAll_('Liquidations').find(function (l) { return l.id === id; });
   if (!liq) throw new Error('Liquidation record not found.');
   if (liq.status !== 'Pending') throw new Error('Liquidation is not pending.');
@@ -380,6 +394,7 @@ function getReleasesToLiquidate() {
 }
 
 function rejectLiquidation(id) {
+  requireApprover_('rejecting a liquidation');   // v7.0
   const liq = readAll_('Liquidations').find(function (l) { return l.id === id; });
   if (!liq) throw new Error('Liquidation record not found.');
   if (liq.status !== 'Pending') throw new Error('Liquidation is not pending.');

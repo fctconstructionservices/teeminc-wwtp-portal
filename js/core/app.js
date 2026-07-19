@@ -15,17 +15,23 @@ const App = {
     _pendingCount: 0,
 
     init() {
+        // v7.0: a stored profile is not a session — without a valid token
+        // the server will reject everything, so require the token too and
+        // re-confirm identity with the server (this also restores the
+        // View As state after a refresh).
         const saved = localStorage.getItem('fctc_user');
-        if (saved) {
+        if (saved && getSessionToken()) {
             try {
                 this.currentUser = JSON.parse(saved);
                 if (this.currentUser && this.currentUser.loggedIn) {
                     this.updateUserBadges();
                     this.navigate('home');
+                    this.refreshIdentity();
                     return;
                 }
             } catch (_) {}
         }
+        setSessionToken('');
         this.navigate('login');
         const theme = localStorage.getItem('fctc_theme') || 'light';
         if (theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
@@ -85,7 +91,99 @@ const App = {
         document.querySelectorAll('.topbar .actions').forEach(el => el.classList.remove('open'));
     },
 
+
+    // ══════════ v7.0: VIEW AS (impersonation) ══════════
+
+    /**
+     * Super Admin only. The target is stored on the SERVER session, never
+     * in the browser — otherwise "who am I" would again be a value the
+     * client controls, which is the exact hole this release closes.
+     * Every action performed while viewing-as is logged as
+     * "real@email (as target@email)", so the audit trail never loses the
+     * real actor.
+     */
+    async openViewAs() {
+        let users = [];
+        try { users = await DataService.getViewAsUsers(); }
+        catch (err) { UI.toast('' + err.message, 'error'); return; }
+
+        const overlay = document.createElement('div');
+        overlay.id = 'viewAsModal';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(28,35,33,.55);z-index:1200;display:flex;align-items:center;justify-content:center;padding:20px;';
+        overlay.innerHTML = `
+            <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;max-width:420px;width:100%;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;">
+                <div style="padding:13px 18px;border-bottom:1px solid var(--line);background:var(--blueprint-tint);display:flex;justify-content:space-between;align-items:center;">
+                    <h3 style="font-family:'Oswald';font-size:13px;text-transform:uppercase;color:var(--blueprint);margin:0;">View As — Test Another User</h3>
+                    <span style="cursor:pointer;color:var(--ink-soft);" onclick="document.getElementById('viewAsModal').remove()">✕</span>
+                </div>
+                <div style="padding:14px 18px;overflow:auto;">
+                    <div style="font-size:11.5px;color:var(--ink-soft);margin-bottom:10px;line-height:1.5;">
+                        Makikita mo ang sistema gaya ng nakikita nila. Ang bawat aksyon ay naka-log pa rin sa tunay mong pangalan.
+                    </div>
+                    ${users.map(u => `
+                        <button onclick="App.applyViewAs('${u.email}')" style="width:100%;text-align:left;display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;background:var(--surface);cursor:pointer;">
+                            <span style="width:26px;height:26px;border-radius:50%;background:var(--blueprint);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-family:'Oswald';font-size:10px;">${(u.name || u.email).slice(0, 2).toUpperCase()}</span>
+                            <span style="font-weight:600;font-size:12.5px;">${u.name || u.email}</span>
+                            <span style="font-family:'IBM Plex Mono';font-size:10px;color:var(--ink-soft);margin-left:auto;border:1px solid var(--line);border-radius:4px;padding:1px 6px;">${u.role}</span>
+                        </button>`).join('')}
+                </div>
+            </div>`;
+        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+        document.body.appendChild(overlay);
+    },
+
+    async applyViewAs(email) {
+        try {
+            await DataService.setViewAs(email);
+            const m = document.getElementById('viewAsModal');
+            if (m) m.remove();
+            await this.refreshIdentity();
+            UI.toast('Viewing as ' + email, 'success');
+            this.navigate('home');
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
+
+    async stopViewAs() {
+        try {
+            await DataService.setViewAs('');
+            await this.refreshIdentity();
+            UI.toast('Back to your own account.', 'success');
+            this.navigate('home');
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
+
+    /** refreshIdentity - re-reads who the server thinks we are. */
+    async refreshIdentity() {
+        try {
+            const me = await DataService.whoAmI();
+            this.currentUser = me.user;
+            localStorage.setItem('fctc_user', JSON.stringify(me.user));
+            this._realUser = me.realUser;
+            this._impersonating = me.impersonating;
+            this.renderImpersonationBanner();
+            this.updateUserBadges();
+        } catch (err) { /* session handling covers this */ }
+    },
+
+    renderImpersonationBanner() {
+        let bar = document.getElementById('impersonationBar');
+        if (!this._impersonating) { if (bar) bar.remove(); return; }
+        if (!bar) {
+            bar = document.createElement('div');
+            bar.id = 'impersonationBar';
+            bar.style.cssText = 'position:sticky;top:0;z-index:900;background:var(--amber);color:#1C2321;padding:7px 14px;font-size:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;';
+            document.body.prepend(bar);
+        }
+        bar.innerHTML = `👁 <b>Viewing as ${(this.currentUser || {}).email || ''}</b>
+            <span style="opacity:.8;">— hindi ito ang tunay mong account (${(this._realUser || {}).email || ''}). Naka-log pa rin ang lahat sa pangalan mo.</span>
+            <button onclick="App.stopViewAs()" style="margin-left:auto;background:#1C2321;color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:11px;cursor:pointer;">Stop</button>`;
+    },
+
     logout() {
+        // v7.0: revoke the session server-side, not just locally — a
+        // token left valid on the server would still work if copied.
+        try { DataService.logout(); } catch (e) {}
+        setSessionToken('');
         localStorage.removeItem('fctc_user');
         this.currentUser = null;
         this.navigate('login');
@@ -138,6 +236,13 @@ const App = {
     updateUserBadges() {
         const user = this.getUser();
         if (!user) return;
+
+        // v7.0: superadmin-only controls (e.g. View As). Note this is a
+        // convenience, not a control — the server enforces the real check.
+        const isSA = user.role === 'superadmin';
+        document.querySelectorAll('.superadmin-only').forEach(el => {
+            el.style.display = isSA ? '' : 'none';
+        });
         
         const name = user.name || 'User';
         const email = user.email || '';

@@ -85,6 +85,7 @@ function getHomeData() {
  * clientId must exist in ClientLists (use addClient first).
  */
 function addProject(id, name, clientId, location, startDate, endDate) {
+  requireSuperAdmin_('adding a project');   // v7.0
   var userEmail = currentUserEmail_();
   var users = readAll_('Users');
   var user = users.find(function(u) { return u.email.toLowerCase() === userEmail.toLowerCase(); });

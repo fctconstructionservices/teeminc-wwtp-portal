@@ -111,6 +111,7 @@ function submitEstimatesForApproval(projectId, sowId) {
 }
 
 function approveEstimates(projectId, sowId) {
+  requireApprover_('approving estimates');   // v7.0
   const g = readAll_('EstimateGroups').find(function (row) { return row.projectId === projectId && row.sowId === sowId; });
   let newBudget = null;
   if (g) {

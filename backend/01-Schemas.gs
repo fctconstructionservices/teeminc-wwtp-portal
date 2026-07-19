@@ -35,6 +35,7 @@ const TABS = {
   MANPOWER: 'Manpower',
   BILLINGS: 'Billings',
   TRANSFERS: 'Transfers',
+  SESSIONS: 'Sessions',
   VARIATION_ORDERS: 'VariationOrders'
 };
 
@@ -42,7 +43,10 @@ const TABS = {
  * SCHEMAS - Defines the column structure for each sheet
  */
 const SCHEMAS = {
-  Users: ['email', 'name', 'password', 'role', 'roleLabel'],
+  // v7.0: passwordHash + passwordSalt replace plaintext 'password'.
+  // The legacy column stays so existing rows still load; it is cleared
+  // the first time a user logs in and their hash is stored.
+  Users: ['email', 'name', 'password', 'role', 'roleLabel', 'passwordHash', 'passwordSalt'],
   // v3: clientId/location/startDate/endDate appended at the END so existing
   // rows keep their column positions. Run migrateSchemas() once after deploy.
   // v6: contractValue (client-facing contract sum, basis of billings) and
@@ -124,6 +128,13 @@ const SCHEMAS = {
   // on BOTH sides at once, so the two halves can never drift apart.
   Transfers: ['id', 'fromLoc', 'toLoc', 'itemType', 'item', 'unit', 'qty',
     'reason', 'transferDate', 'status', 'requestedBy', 'createdAt', 'decidedBy', 'decidedAt'],
+
+  // v7.0 NEW: server-issued session tokens. The browser sends a token,
+  // never an identity — the server decides who you are by looking the
+  // token up here. Sliding 8-hour expiry: lastSeen refreshes on every
+  // authenticated call, so an active user is never interrupted and an
+  // idle one is logged out.
+  Sessions: ['token', 'email', 'createdAt', 'lastSeen', 'expiresAt', 'revoked', 'viewAs'],
 
   Approvals: ['requestId', 'approver', 'decision', 'timestamp', 'remarks'],
   ActivityLog: ['timestamp', 'text', 'type', 'refId']

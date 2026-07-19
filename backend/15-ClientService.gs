@@ -28,6 +28,7 @@ function getClients() {
  * so the dropdown never fills up with near-identical entries.
  */
 function addClient(data) {
+  requireAdmin_('adding a client');   // v7.0
   const name = String(data && data.name || '').trim();
   if (!name) throw new Error('Client name is required.');
 

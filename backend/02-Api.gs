@@ -23,21 +23,65 @@ function doGet(e) {
   return jsonResponse_({ status: 'FCTC Operations Board API is running. Use POST requests.' });
 }
 
+/**
+ * PUBLIC_ACTIONS - the only actions callable without a session token.
+ * Everything else requires authentication, enforced here in ONE place
+ * so a new action can never accidentally ship unauthenticated.
+ */
+const PUBLIC_ACTIONS = { loginWithPassword: true, loginUser: true, migrateSchemas: true, setupSheets: true };
+
+/**
+ * WRITE_ACTION_RE - actions that mutate data take a document lock, so two
+ * people acting at the same moment can't interleave a read-modify-write
+ * and corrupt each other's changes (e.g. two admins approving the same
+ * item, or two estimate saves racing on the same sheet rewrite).
+ */
+const WRITE_ACTION_RE = /^(add|create|update|delete|submit|request|approve|reject|save|set|mark|revise|force|review|migrate|setup|liquidat|transfer)/i;
+
 function doPost(e) {
+  var lock = null;
   try {
     _resetReadCache_();   // v6.5: memo is per-request only, never across requests
     const body = JSON.parse(e.postData.contents);
     const action = body.action;
     const params = body.params || [];
-    CURRENT_REQUEST_USER_EMAIL = body.userEmail || '';
 
     const fn = API_ACTIONS[action];
     if (!fn) throw new Error('Unknown action: ' + action);
+
+    // ── v7.0 AUTH: identity comes from the token, never from the client ──
+    CURRENT_REQUEST_TOKEN = String(body.token || '');
+    CURRENT_REQUEST_USER_EMAIL = '';
+    CURRENT_REQUEST_REAL_EMAIL = '';
+    CURRENT_REQUEST_ROLE = '';
+    CURRENT_REQUEST_IMPERSONATING = false;
+
+    if (!PUBLIC_ACTIONS[action]) {
+      const sess = resolveSession_(CURRENT_REQUEST_TOKEN);
+      if (!sess) {
+        return jsonResponse_({ success: false, error: 'Session expired. Please log in again.', code: 'SESSION_EXPIRED' });
+      }
+      CURRENT_REQUEST_USER_EMAIL = sess.email;
+      CURRENT_REQUEST_REAL_EMAIL = sess.realEmail;
+      CURRENT_REQUEST_ROLE = sess.role;
+      CURRENT_REQUEST_IMPERSONATING = sess.impersonating;
+    }
+
+    // ── v7.0 CONCURRENCY: serialize writes ──
+    if (WRITE_ACTION_RE.test(action)) {
+      lock = LockService.getDocumentLock();
+      if (!lock.tryLock(20000)) {
+        throw new Error('The system is busy with another update. Please try again in a moment.');
+      }
+      _resetReadCache_();   // re-read fresh inside the lock
+    }
 
     const result = fn.apply(null, params);
     return jsonResponse_({ success: true, data: result });
   } catch (err) {
     return jsonResponse_({ success: false, error: err.message });
+  } finally {
+    if (lock) { try { lock.releaseLock(); } catch (_) {} }
   }
 }
 
@@ -50,6 +94,15 @@ function jsonResponse_(obj) {
  */
 const API_ACTIONS = {
   loginUser: loginUser,
+  // v7.0: sessions + impersonation
+  loginWithPassword: loginWithPassword,
+  logout: logout,
+  whoAmI: whoAmI,
+  setViewAs: setViewAs,
+  getViewAsUsers: getViewAsUsers,
+  // v7.0: backup
+  runBackupNow: runBackupNow,
+  getBackupStatus: getBackupStatus,
   getHomeData: getHomeData,
   getProjectData: getProjectData,
   getFinanceData: getFinanceData,

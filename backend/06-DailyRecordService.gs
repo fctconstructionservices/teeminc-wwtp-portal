@@ -140,12 +140,14 @@ function submitDailyRecordForApproval(recordId) {
 }
 
 function approveDailyRecord(recordId) {
+  requireApprover_('approving a daily record');   // v7.0
   updateRow_('DailyRecords', 'id', recordId, { status: 'approved' });
   logActivity_('Daily record ' + recordId + ' approved', 'g', recordId);
   return { success: true };
 }
 
 function rejectDailyRecord(recordId) {
+  requireApprover_('rejecting a daily record');   // v7.0
   updateRow_('DailyRecords', 'id', recordId, { status: 'rejected' });
   logActivity_('Daily record ' + recordId + ' rejected', 'a', recordId);
   return { success: true };

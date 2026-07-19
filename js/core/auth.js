@@ -35,7 +35,11 @@ async function handleLogin(e) {
 
     let user;
     try {
-        user = await DataService.login(email, pass);
+        // v7.0: the server issues a session token; the browser stores the
+        // token, not an identity it could edit.
+        const res = await DataService.loginWithPassword(email, pass);
+        setSessionToken(res.token);
+        user = res.user;
     } catch (err) {
         UI.toast('' + err.message, 'error');
         document.getElementById('login-pass-field').classList.add('error');
