@@ -19,6 +19,14 @@ const App = {
         // the server will reject everything, so require the token too and
         // re-confirm identity with the server (this also restores the
         // View As state after a refresh).
+        // v7.0.1: a profile saved by the OLD login system has no token.
+        // Clear it silently so the user simply sees the login page instead
+        // of a confusing "session expired" error on first load.
+        if (localStorage.getItem('fctc_user') && !getSessionToken()) {
+            try { localStorage.removeItem('fctc_user'); } catch (_) {}
+            this.currentUser = null;
+        }
+
         const saved = localStorage.getItem('fctc_user');
         if (saved && getSessionToken()) {
             try {
@@ -56,11 +64,16 @@ const App = {
             }
         }
 
-        if (page === 'request') {
-            loadProjectsDropdown();
-        }
-        if (page === 'record-cash') {
-            setTimeout(loadIncomingProjectsDropdown, 100);
+        // v7.0.1: these hit the API, so they must not run without a
+        // session — otherwise a stale localStorage profile (or the login
+        // page itself) triggers calls that fail with "Session expired".
+        if (getSessionToken()) {
+            if (page === 'request') {
+                loadProjectsDropdown();
+            }
+            if (page === 'record-cash') {
+                setTimeout(loadIncomingProjectsDropdown, 100);
+            }
         }
 
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -271,6 +284,7 @@ const App = {
     },
 
     async updateApprovalBadge() {
+        if (!getSessionToken()) return;   // v7.0.1: no session, no call
         try {
             const user = this.getUser();
             if (!user) return;
