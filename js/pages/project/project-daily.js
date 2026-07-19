@@ -750,36 +750,163 @@ Object.assign(ProjectPage, {
     },
 
     // ─── PHOTOS ────────────────────────────────────────────────
+    /**
+     * renderPhotos - Project photo gallery (v7.4)
+     *
+     * The photos already exist inside the daily records; previously they
+     * were shown as one flat, unlabelled grid, which made it impossible
+     * to answer questions like "what did the foundation look like in
+     * May?" without opening every report.
+     *
+     * Each image now carries its provenance (date, SOW item, source
+     * section), which enables three views:
+     *   · By Date    - a site diary, newest first
+     *   · By SOW     - every photo for one scope of work
+     *   · Timeline   - one SOW across time, each photo paired with the
+     *                  % complete recorded on that date, which is what
+     *                  makes the gallery useful in client meetings and
+     *                  in disputes.
+     */
     renderPhotos(p) {
         const container = document.getElementById('proj-tab-photos');
-        // v5 (item 10): the gallery never included record.photos — the
-        // photos users actually upload on the daily form — and old rows
-        // contain fakepath junk. Collect everything, keep only real URLs,
-        // and rewrite Drive viewer links to embeddable thumbnails.
-        let images = [];
+        if (!container) return;
+
+        // ── collect with provenance ──
+        const sowName = {};
+        (p.sowItems || []).forEach(s => { sowName[s.id] = s.description || s.id; });
+
+        const items = [];
         (p.dailyRecords || []).forEach(record => {
-            (record.photos || []).forEach(u => images.push(u));
-            (record.workAccomplished || []).forEach(w => { if (w.image) images.push(w.image); });
-            (record.issues || []).forEach(iss => { if (iss.image) images.push(iss.image); });
+            if (record.status === 'rejected') return;
+            const date = record.date || '';
+            (record.photos || []).forEach(u => {
+                items.push({ url: u, date: date, sowId: '', source: 'General', pct: null });
+            });
+            (record.workAccomplished || []).forEach(w => {
+                if (!w.image) return;
+                items.push({
+                    url: w.image, date: date, sowId: w.scope || '',
+                    source: 'Work Accomplished',
+                    pct: w.percentComplete !== undefined && w.percentComplete !== ''
+                        ? parseFloat(w.percentComplete) : null
+                });
+            });
+            (record.issues || []).forEach(iss => {
+                if (!iss.image) return;
+                items.push({
+                    url: iss.image, date: date, sowId: '', source: 'Issue',
+                    pct: null, note: iss.description || ''
+                });
+            });
         });
-        images = images
-            .filter(u => typeof u === 'string' && u.indexOf('http') === 0)
-            .map(u => driveImgSrc(u));
-        if (images.length === 0) {
-            images.push('https://placehold.co/600x400/24455A/FFFFFF?text=No+Photos');
+
+        const photos = items
+            .filter(i => typeof i.url === 'string' && i.url.indexOf('http') === 0)
+            .map(i => Object.assign({}, i, { url: driveImgSrc(i.url) }))
+            .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+
+        this._galleryItems = photos;
+        if (!this._galleryView) this._galleryView = 'date';
+        if (!this._gallerySow) this._gallerySow = '';
+
+        const sowsWithPhotos = [...new Set(photos.filter(i => i.sowId).map(i => i.sowId))];
+
+        let html = `
+            <div class="section-head"><h2>Project Photos</h2><div class="rule"></div>
+                <span class="badge">${photos.length} image${photos.length === 1 ? '' : 's'}</span>
+            </div>`;
+
+        if (!photos.length) {
+            html += `<div class="panel"><div class="empty">
+                <div class="empty-ico">📷</div>
+                <h4>No photos yet</h4>
+                <p>Photos attached to Daily Site Records appear here automatically -
+                   from the Photos section, work-accomplished rows, and issue reports.</p>
+            </div></div>`;
+            container.innerHTML = html;
+            return;
         }
 
-        let html = `<div class="section-head"><h2>Project Photos</h2><div class="rule"></div><span class="badge">${images.length} images</span></div>
-                <div class="photo-grid">`;
-        images.forEach((img, idx) => {
-            html += `
-                    <div class="photo-item" onclick="Lightbox.open(${JSON.stringify(images)}, ${idx})">
-                        <img src="${img}" alt="Project photo" />
-                    </div>`;
-        });
+        html += `<div class="gallery-toolbar">
+            <button class="btn-sm ${this._galleryView === 'date' ? 'primary' : ''}" onclick="ProjectPage.setGalleryView('date')">By Date</button>
+            <button class="btn-sm ${this._galleryView === 'sow' ? 'primary' : ''}" onclick="ProjectPage.setGalleryView('sow')">By SOW</button>
+            <button class="btn-sm ${this._galleryView === 'timeline' ? 'primary' : ''}" onclick="ProjectPage.setGalleryView('timeline')">Timeline</button>`;
+        if (this._galleryView === 'timeline' || this._galleryView === 'sow') {
+            html += `<select class="gallery-sow-select" onchange="ProjectPage.setGallerySow(this.value)">
+                <option value="">All SOW items</option>
+                ${sowsWithPhotos.map(id => `<option value="${id}" ${this._gallerySow === id ? 'selected' : ''}>${id} - ${(sowName[id] || '').slice(0, 40)}</option>`).join('')}
+            </select>`;
+        }
         html += `</div>`;
+
+        const urls = photos.map(i => i.url);
+        const tile = (i) => {
+            const gi = urls.indexOf(i.url);
+            return `<div class="gal-item" onclick="ProjectPage.openGalleryLightbox(${gi})">
+                <img src="${i.url}" alt="${i.source}" loading="lazy" />
+                ${i.sowId ? `<span class="gal-sow">${i.sowId}</span>` : ''}
+                <span class="gal-meta">${i.source}${i.pct !== null && !isNaN(i.pct) ? ' · ' + i.pct + '%' : ''}</span>
+            </div>`;
+        };
+
+        if (this._galleryView === 'date') {
+            const byDate = {};
+            photos.forEach(i => { (byDate[i.date] = byDate[i.date] || []).push(i); });
+            Object.keys(byDate).sort((a, b) => b.localeCompare(a)).forEach(d => {
+                html += `<div class="gal-group-head">${d || 'Undated'}<span class="rule"></span>
+                    <span class="mono" style="font-size:10px;">${byDate[d].length} photo${byDate[d].length === 1 ? '' : 's'}</span></div>
+                    <div class="gal-grid">${byDate[d].map(tile).join('')}</div>`;
+            });
+        } else if (this._galleryView === 'sow') {
+            const list = this._gallerySow ? photos.filter(i => i.sowId === this._gallerySow) : photos;
+            const bySow = {};
+            list.forEach(i => { const k = i.sowId || 'General / Issues'; (bySow[k] = bySow[k] || []).push(i); });
+            Object.keys(bySow).sort().forEach(k => {
+                html += `<div class="gal-group-head">${k}${sowName[k] ? ' - ' + sowName[k] : ''}<span class="rule"></span>
+                    <span class="mono" style="font-size:10px;">${bySow[k].length}</span></div>
+                    <div class="gal-grid">${bySow[k].map(tile).join('')}</div>`;
+            });
+        } else {
+            // Timeline: one SOW across time, oldest first, with the %
+            // complete recorded on that date beside each photo.
+            const sid = this._gallerySow || sowsWithPhotos[0] || '';
+            const list = photos.filter(i => i.sowId === sid).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+            html += `<div class="gal-group-head">${sid}${sowName[sid] ? ' - ' + sowName[sid] : ''}<span class="rule"></span>
+                <span class="mono" style="font-size:10px;">progress over time</span></div>`;
+            if (!list.length) {
+                html += `<div class="panel"><div class="empty"><p>No photos tagged to this SOW item yet.
+                    Attach photos to work-accomplished rows to build a progress timeline.</p></div></div>`;
+            } else {
+                html += `<div class="gal-timeline">` + list.map(i => {
+                    const gi = urls.indexOf(i.url);
+                    return `<div class="gal-tl-item" onclick="ProjectPage.openGalleryLightbox(${gi})">
+                        <div class="gal-tl-img"><img src="${i.url}" alt="${i.date}" loading="lazy" />
+                            ${i.pct !== null && !isNaN(i.pct) ? `<span class="gal-tl-pct">${i.pct}%</span>` : ''}
+                        </div>
+                        <div class="gal-tl-cap">${i.date}</div>
+                    </div>`;
+                }).join('') + `</div>`;
+            }
+        }
+
+        html += `<div class="data-source-note">Photos are collected from every non-rejected Daily Site Record - the Photos section, work-accomplished rows, and issue reports. Nothing is uploaded separately here.</div>`;
         container.innerHTML = html;
-        this._photoImages = images;
     },
+
+    setGalleryView(v) {
+        this._galleryView = v;
+        this.renderPhotos(this._data);
+    },
+
+    setGallerySow(id) {
+        this._gallerySow = id;
+        this.renderPhotos(this._data);
+    },
+
+    openGalleryLightbox(idx) {
+        const urls = (this._galleryItems || []).map(i => i.url);
+        if (urls.length) Lightbox.open(urls, idx);
+    },
+
 
 });
