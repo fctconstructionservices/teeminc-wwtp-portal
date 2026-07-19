@@ -68,10 +68,24 @@ function doPost(e) {
     }
 
     // ── v7.0 CONCURRENCY: serialize writes ──
+    // v7.0.3: getDocumentLock() can return null (and getScriptLock can
+    // throw) depending on how the script is invoked, which crashed the
+    // request with "cannot read properties of null". A lock is a safety
+    // measure, not a precondition — if the service will not give us one,
+    // continue without it rather than blocking the user entirely.
     if (WRITE_ACTION_RE.test(action)) {
-      lock = LockService.getDocumentLock();
-      if (!lock.tryLock(20000)) {
-        throw new Error('The system is busy with another update. Please try again in a moment.');
+      try {
+        lock = LockService.getDocumentLock() || LockService.getScriptLock();
+      } catch (lockErr) {
+        lock = null;
+      }
+      if (lock && typeof lock.tryLock === 'function') {
+        if (!lock.tryLock(20000)) {
+          lock = null;   // nothing to release in `finally`
+          throw new Error('The system is busy with another update. Please try again in a moment.');
+        }
+      } else {
+        lock = null;
       }
       _resetReadCache_();   // re-read fresh inside the lock
     }
@@ -103,6 +117,8 @@ const API_ACTIONS = {
   // v7.0: backup
   runBackupNow: runBackupNow,
   getBackupStatus: getBackupStatus,
+  // v7.2: portfolio dashboard
+  getPortfolioData: getPortfolioData,
   getHomeData: getHomeData,
   getProjectData: getProjectData,
   getFinanceData: getFinanceData,
