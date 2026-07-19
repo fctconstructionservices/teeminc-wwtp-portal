@@ -643,7 +643,8 @@ function getProjectData(projectId) {
   // contract basis. Future months are null (walang mahuhulaang EV).
   const evSeries = monthsArr.map(function (mm) {
     if (mm.y * 12 + mm.m > nowKey) return null;
-    const cut = monthEnd_(mm) < today ? monthEnd_(mm) : today;
+    const cutD = monthEnd_(mm) < today ? monthEnd_(mm) : today;
+    const cut = fmtDate_(cutD);   // v6.8.1: string cutoff, inclusive
     let ev = 0;
     sowItems.forEach(function (x) {
       if (x.isMilestone) return;
@@ -890,19 +891,26 @@ function getSOWItemsForProject(projectId) {
  * used. Returns 0-100.
  */
 /**
- * computeSOWProgressAsOf_ (v6.8) - Same "latest report date wins" rule
+ * computeSOWProgressAsOf_ (v6.8.1) - Same "latest report date wins" rule
  * as computeSOWProgress_, but only counting reports dated on/before the
- * cutoff. Reconstructs a SOW's % complete at any past date, which lets
- * the EVM chart draw EV as a full HISTORICAL line instead of a single
- * point at today.
+ * cutoff, so the EVM chart can draw EV as a historical line.
+ *
+ * DATES ARE COMPARED AS 'yyyy-MM-dd' STRINGS, not as parsed Dates. The
+ * mapped records carry fmtDate_ output, which is always zero-padded ISO,
+ * so lexicographic comparison is exact and timezone-proof. Parsing to
+ * Date instead silently dropped (a) records whose stored value didn't
+ * parse cleanly and (b) records dated on the cutoff day itself, because
+ * an ISO string parses as UTC midnight while the cutoff was local
+ * midnight — that off-by-hours gap zeroed the whole EV line even though
+ * the EV KPI (computed by the tolerant computeSOWProgress_) was correct.
  */
-function computeSOWProgressAsOf_(sowId, dailyRecords, cutoff) {
-  let bestDate = null;
+function computeSOWProgressAsOf_(sowId, dailyRecords, cutoffStr) {
+  let bestKey = '';
   let best = 0;
   (dailyRecords || []).forEach(function (d) {
     if (d.status === 'rejected') return;
-    const dt = new Date(d.date);
-    if (isNaN(dt) || dt > cutoff) return;
+    const key = String(d.date || '');
+    if (!key || key > cutoffStr) return;
     const rows = (d.workAccomplished || []).filter(function (w) {
       return String(w.scope) === String(sowId);
     });
@@ -910,8 +918,8 @@ function computeSOWProgressAsOf_(sowId, dailyRecords, cutoff) {
     const pct = rows.reduce(function (mx, w) {
       return Math.max(mx, parseFloat(w.percentComplete) || 0);
     }, 0);
-    if (bestDate === null || dt > bestDate || (dt.getTime() === bestDate.getTime() && pct > best)) {
-      bestDate = dt;
+    if (bestKey === '' || key > bestKey || (key === bestKey && pct > best)) {
+      bestKey = key;
       best = pct;
     }
   });
