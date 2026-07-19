@@ -317,6 +317,22 @@ const DataService = {
 
     // ── v6: billings, variation orders, contract ──
     // v6.6: per-project editors (Super Admin)
+    // v6.9: location-based transfers + warehouse
+    async getTransferOptions(fromLoc, itemType) {
+        return await gasCall('getTransferOptions', fromLoc, itemType);
+    },
+    async requestTransfer(data) {
+        return await gasCall('requestTransfer', data);
+    },
+    async approveTransfer(id) {
+        return await gasCall('approveTransfer', id);
+    },
+    async rejectTransfer(id) {
+        return await gasCall('rejectTransfer', id);
+    },
+    async getWarehouseStock() {
+        return await gasCall('getWarehouseStock');
+    },
     async setProjectEditors(projectId, emails) {
         return await gasCall('setProjectEditors', projectId, emails);
     },

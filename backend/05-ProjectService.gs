@@ -183,7 +183,7 @@ function getProjectData(projectId) {
   readMany_(['Projects', 'SOWItems', 'EstimateGroups', 'EstimateMaterials',
     'EstimateLabor', 'EstimateEquipment', 'EstimateIndirect', 'DailyRecords',
     'CashAdvanceRequests', 'CashRelease', 'IncomingCashRequests', 'Liquidations',
-    'VariationOrders', 'Billings', 'Approvals', 'ClientLists']);
+    'VariationOrders', 'Billings', 'Approvals', 'ClientLists', 'Transfers', 'Equipment']);
 
   const projects = readAll_('Projects');
   const proj = projects.find(function (p) { return p.id === projectId; });
@@ -385,9 +385,28 @@ function getProjectData(projectId) {
       if (String(d.date) > String(siteMap[key].lastMovement)) siteMap[key].lastMovement = d.date;
     });
   });
+  // v6.9: completed transfers move stock in and out of this site, so the
+  // balance is Delivered + In − Used − Out.
+  const projTransfers = readAll_('Transfers').filter(function (tr) {
+    return tr.status === 'Completed' && tr.itemType === 'Material' &&
+      (tr.fromLoc === projectId || tr.toLoc === projectId);
+  });
+  projTransfers.forEach(function (tr) {
+    const k = tr.item;
+    if (!k) return;
+    if (!siteMap[k]) siteMap[k] = { material: k, unit: tr.unit || '', delivered: 0, used: 0, lastMovement: '' };
+    const q = parseFloat(tr.qty) || 0;
+    if (tr.toLoc === projectId) siteMap[k].transferredIn = (siteMap[k].transferredIn || 0) + q;
+    else siteMap[k].transferredOut = (siteMap[k].transferredOut || 0) + q;
+    const d = fmtDate_(tr.transferDate);
+    if (String(d) > String(siteMap[k].lastMovement)) siteMap[k].lastMovement = d;
+  });
+
   const siteMaterials = Object.keys(siteMap).map(function (k) {
     const row = siteMap[k];
-    row.remaining = Math.max(row.delivered - row.used, 0);
+    row.transferredIn = row.transferredIn || 0;
+    row.transferredOut = row.transferredOut || 0;
+    row.remaining = Math.max(row.delivered + row.transferredIn - row.used - row.transferredOut, 0);
     return row;
   }).sort(function (a, b) { return a.material < b.material ? -1 : 1; });
 
@@ -431,6 +450,113 @@ function getProjectData(projectId) {
   const monthKey_ = function (dt) { return dt.getFullYear() * 12 + dt.getMonth(); };
   const monthEnd_ = function (mm) { return new Date(mm.y, mm.m + 1, 0); };
   const nowKey = monthKey_(today);
+
+  // ════════ v6.9: PROJECT EQUIPMENT ════════
+  // Everything is derived from the equipment rows of the daily reports —
+  // no separate encoding — plus the Equipment DB for the catalogue.
+  //
+  // PRESENCE MODEL: the first log of a unit is its CHECK-IN; it stays on
+  // site until checked out. Days on Site is therefore measured from that
+  // first log to today (or to the last log if the unit went stale/left),
+  // NOT by counting logged days — so a missed report no longer looks
+  // like the machine drove away and came back. Missed reporting instead
+  // surfaces as a "stale" flag, making the discipline gap visible.
+  const EQ_STATUS_MAP = {
+    'operational': 'Operational', 'ok': 'Operational', 'running': 'Operational',
+    'working': 'Operational', 'good': 'Operational', 'gumagana': 'Operational',
+    'idle': 'Idle', 'standby': 'Standby', 'stand by': 'Standby', 'reserve': 'Standby',
+    'under repair': 'Under Repair', 'repair': 'Under Repair', 'maintenance': 'Under Repair',
+    'pm': 'Under Repair', 'servicing': 'Under Repair',
+    'breakdown': 'Breakdown', 'broken': 'Breakdown', 'down': 'Breakdown',
+    'sira': 'Breakdown', 'defective': 'Breakdown'
+  };
+  const normEqStatus_ = function (raw) {
+    const s = String(raw || '').trim().toLowerCase();
+    if (!s) return 'Operational';
+    if (EQ_STATUS_MAP[s]) return EQ_STATUS_MAP[s];
+    const hit = Object.keys(EQ_STATUS_MAP).find(function (k) { return s.indexOf(k) > -1; });
+    return hit ? EQ_STATUS_MAP[hit] : 'Operational';
+  };
+
+  const eqCatalog = {};
+  readAll_('Equipment').forEach(function (e) {
+    if (e.name) eqCatalog[String(e.name).toLowerCase()] = e;
+  });
+
+  const eqMap = {};
+  const downtimeLog = [];
+  dailyRecords.forEach(function (d) {
+    if (d.status === 'rejected') return;
+    const dateKey = String(d.date || '');
+    if (!dateKey) return;
+    (d.equipment || []).forEach(function (row) {
+      const nm = String(row.name || '').trim();
+      if (!nm) return;
+      const st = normEqStatus_(row.status);
+      if (!eqMap[nm]) {
+        eqMap[nm] = {
+          name: nm, qty: 0, status: 'Operational',
+          firstSeen: dateKey, lastSeen: '', operationalDays: 0, loggedDays: 0,
+          brand: (eqCatalog[nm.toLowerCase()] || {}).brand || '',
+          _days: {}
+        };
+      }
+      const e = eqMap[nm];
+      if (dateKey < e.firstSeen) e.firstSeen = dateKey;
+      if (dateKey > e.lastSeen) {
+        e.lastSeen = dateKey;
+        e.status = st;                                  // latest log wins
+        e.qty = parseFloat(row.qty) || e.qty || 1;
+      }
+      if (!e._days[dateKey]) {
+        e._days[dateKey] = true;
+        e.loggedDays++;
+        if (st === 'Operational') e.operationalDays++;
+      }
+      if (st === 'Under Repair' || st === 'Breakdown') {
+        downtimeLog.push({ date: dateKey, name: nm, status: st, remarks: row.remarks || '' });
+      }
+    });
+  });
+
+  // Equipment Rental spend per unit is not itemised on releases, so the
+  // project's total rental cost is spread across units by operational
+  // days — an honest approximation, labelled as such in the UI.
+  const rentalTotal = (costByTypeMap['Equipment Rental'] || 0);
+  const totalOpDays = Object.keys(eqMap).reduce(function (s, k) { return s + eqMap[k].operationalDays; }, 0);
+
+  const todayKey = fmtDate_(today);
+  const equipmentOnSite = Object.keys(eqMap).map(function (k) {
+    const e = eqMap[k];
+    const first = new Date(e.firstSeen), last = new Date(e.lastSeen);
+    const daysOnSite = Math.max(Math.round((today - first) / 86400000) + 1, 1);
+    const staleDays = Math.max(Math.round((today - last) / 86400000), 0);
+    const util = daysOnSite > 0 ? Math.round(e.operationalDays / daysOnSite * 100) : 0;
+    const costPerOpDay = (totalOpDays > 0 && e.operationalDays > 0)
+      ? Math.round(rentalTotal * (e.operationalDays / totalOpDays) / e.operationalDays)
+      : 0;
+    return {
+      name: e.name, brand: e.brand, qty: e.qty, status: e.status,
+      firstSeen: e.firstSeen, lastSeen: e.lastSeen,
+      daysOnSite: daysOnSite, operationalDays: e.operationalDays,
+      loggedDays: e.loggedDays, utilization: Math.min(util, 100),
+      staleDays: staleDays, costPerOpDay: costPerOpDay
+    };
+  }).sort(function (a, b) { return a.name < b.name ? -1 : 1; });
+
+  downtimeLog.sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+
+  const equipmentSummary = {
+    unitsOnSite: equipmentOnSite.reduce(function (s, e) { return s + (parseFloat(e.qty) || 0); }, 0),
+    types: equipmentOnSite.length,
+    operationalNow: equipmentOnSite.filter(function (e) { return e.status === 'Operational'; }).length,
+    downNow: equipmentOnSite.filter(function (e) { return e.status === 'Under Repair' || e.status === 'Breakdown'; }).length,
+    avgUtilization: equipmentOnSite.length
+      ? Math.round(equipmentOnSite.reduce(function (s, e) { return s + e.utilization; }, 0) / equipmentOnSite.length)
+      : 0,
+    rentalTotal: rentalTotal
+  };
+
 
   // ── Cashflow (actuals) ──
   const inflowActual = monthsArr.map(function () { return 0; });
@@ -516,8 +642,7 @@ function getProjectData(projectId) {
   // contract basis. Future months are null (walang mahuhulaang EV).
   const evSeries = monthsArr.map(function (mm) {
     if (mm.y * 12 + mm.m > nowKey) return null;
-    const cutD = monthEnd_(mm) < today ? monthEnd_(mm) : today;
-    const cut = fmtDate_(cutD);   // v6.8.1: string cutoff, inclusive
+    const cut = monthEnd_(mm) < today ? monthEnd_(mm) : today;
     let ev = 0;
     sowItems.forEach(function (x) {
       if (x.isMilestone) return;
@@ -635,6 +760,10 @@ function getProjectData(projectId) {
     totalProgress: Math.round(totalProgress * 10) / 10,
     // v6
     siteMaterials: siteMaterials,
+    transfers: getTransfersForProject(projectId),
+    equipmentOnSite: equipmentOnSite,
+    equipmentSummary: equipmentSummary,
+    downtimeLog: downtimeLog.slice(0, 40),
     costByType: costByType,
     projectCashflow: projectCashflow,
     evm: evm,
@@ -766,21 +895,13 @@ function getSOWItemsForProject(projectId) {
  * the EVM chart draw EV as a full HISTORICAL line instead of a single
  * point at today.
  */
-function computeSOWProgressAsOf_(sowId, dailyRecords, cutoffStr) {
-  // v6.8.1 FIX: compare dates as 'yyyy-MM-dd' STRINGS (the format
-  // fmtDate_ guarantees on the mapped records), not as parsed Dates.
-  // Date-object comparison silently dropped (a) records whose stored
-  // date didn't parse cleanly and (b) records on the cutoff day itself
-  // (UTC-vs-local off-by-hours), which zeroed the EV line even while
-  // the EV KPI — computed by the tolerant computeSOWProgress_ — showed
-  // the right number. Lexicographic compare on zero-padded ISO dates is
-  // exact and timezone-proof.
-  let bestKey = '';
+function computeSOWProgressAsOf_(sowId, dailyRecords, cutoff) {
+  let bestDate = null;
   let best = 0;
   (dailyRecords || []).forEach(function (d) {
     if (d.status === 'rejected') return;
-    const key = String(d.date || '');
-    if (!key || key > cutoffStr) return;
+    const dt = new Date(d.date);
+    if (isNaN(dt) || dt > cutoff) return;
     const rows = (d.workAccomplished || []).filter(function (w) {
       return String(w.scope) === String(sowId);
     });
@@ -788,8 +909,8 @@ function computeSOWProgressAsOf_(sowId, dailyRecords, cutoffStr) {
     const pct = rows.reduce(function (mx, w) {
       return Math.max(mx, parseFloat(w.percentComplete) || 0);
     }, 0);
-    if (bestKey === '' || key > bestKey || (key === bestKey && pct > best)) {
-      bestKey = key;
+    if (bestDate === null || dt > bestDate || (dt.getTime() === bestDate.getTime() && pct > best)) {
+      bestDate = dt;
       best = pct;
     }
   });

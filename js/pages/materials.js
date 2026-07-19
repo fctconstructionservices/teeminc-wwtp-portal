@@ -14,6 +14,8 @@ const MaterialsPage = {
 
     async load() {
         this._searchResults = null; // clear search
+        // v6.9: warehouse is rendered from transfers, not the material list
+        if (this._currentFilter === 'warehouse') { await this.renderWarehouse(); return; }
         const container = document.getElementById('materialsContent');
         UI.showLoading(container);
         try {
@@ -77,6 +79,7 @@ const MaterialsPage = {
                 <div class="status-tabs">
                     <button class="${this._currentFilter === 'approved' && this._searchResults === null ? 'active' : ''}" onclick="MaterialsPage.setFilter('approved')">${Icon.checkCircle({size:13})} Approved (${approved.length})</button>
                     <button class="${this._currentFilter === 'pending' && this._searchResults === null ? 'active' : ''}" onclick="MaterialsPage.setFilter('pending')">⏳ Pending (${pending.length})</button>
+                    <button class="${this._currentFilter === 'warehouse' ? 'active' : ''}" onclick="MaterialsPage.setFilter('warehouse')">🏭 Warehouse</button>
                     ${this._searchResults !== null ? `<button class="active" onclick="MaterialsPage.clearSearch()">${Icon.search({size:13})} Search Results (${list.length})</button>` : ''}
                 </div>
                 <div class="list-container">`;
@@ -108,7 +111,86 @@ const MaterialsPage = {
                 UI.setContent(container, html);
     },
 
+
+    /**
+     * renderWarehouse (v6.9) - Stock currently held at the single office
+     * warehouse. Everything here is derived from completed transfers —
+     * there is no manual encoding, and "Issue to Project" is itself just
+     * another transfer (Warehouse → Project).
+     */
+    async renderWarehouse() {
+        const container = document.getElementById('materialsContent');
+        UI.showLoading(container);
+        let wh;
+        try {
+            wh = await DataService.getWarehouseStock();
+        } catch (err) {
+            UI.toast('' + err.message, 'error');
+            container.innerHTML = `<div class="empty"><p>Could not load warehouse stock.</p></div>`;
+            return;
+        }
+        const mats = wh.materials || [];
+        const eqs = wh.equipment || [];
+        let html = `
+            <div class="section-head"><h2>Material Database</h2><div class="rule"></div></div>
+            <div class="status-tabs">
+                <button onclick="MaterialsPage.setFilter('approved')">${Icon.checkCircle({size:13})} Approved</button>
+                <button onclick="MaterialsPage.setFilter('pending')">⏳ Pending</button>
+                <button class="active" onclick="MaterialsPage.setFilter('warehouse')">🏭 Warehouse</button>
+            </div>
+
+            <div class="kpi-strip" style="margin:14px 0;">
+                <div class="kpi-card"><div class="k-label">Material Items</div><div class="k-val">${mats.length}</div><div class="k-sub">may natitirang stock</div></div>
+                <div class="kpi-card"><div class="k-label">Equipment Units</div><div class="k-val">${fmtNum(eqs.reduce((s, e) => s + e.qty, 0))}</div><div class="k-sub">idle sa warehouse</div></div>
+                <div class="kpi-card warn"><div class="k-label">Pending Transfers</div><div class="k-val">${wh.pendingCount || 0}</div><div class="k-sub">naghihintay ng approval</div></div>
+                <div class="kpi-card good"><div class="k-label">Est. Value</div><div class="k-val">₱${fmtMoney(wh.estValue || 0)}</div><div class="k-sub">sa DB rate</div></div>
+            </div>
+
+            <div class="panel"><div class="panel-head"><h3>Materials</h3></div>
+            <table><thead><tr><th>Material</th><th>Unit</th><th style="text-align:right">On Hand</th><th>Huling Galing</th><th>Petsa</th></tr></thead><tbody>`;
+        if (!mats.length) {
+            html += `<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:22px">Walang laman ang warehouse. Ang stock dito ay galing sa mga completed transfer mula sa mga proyekto.</td></tr>`;
+        } else {
+            mats.forEach(m => {
+                html += `<tr>
+                    <td>${m.item}</td>
+                    <td class="mono" style="font-size:11.5px">${m.unit || '—'}</td>
+                    <td class="amt"><b>${fmtNum(m.qty)}</b></td>
+                    <td class="mono" style="font-size:11px">${m.lastFrom}</td>
+                    <td class="mono" style="font-size:11px">${m.lastDate || '—'}</td>
+                </tr>`;
+            });
+        }
+        html += `</tbody></table></div>`;
+
+        html += `<div class="panel"><div class="panel-head"><h3>Equipment</h3></div>
+            <table><thead><tr><th>Equipment</th><th style="text-align:right">Qty</th><th>Huling Galing</th><th>Petsa</th></tr></thead><tbody>`;
+        if (!eqs.length) {
+            html += `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);padding:22px">Walang equipment sa warehouse.</td></tr>`;
+        } else {
+            eqs.forEach(e => {
+                html += `<tr>
+                    <td>${e.item}</td>
+                    <td class="amt"><b>${fmtNum(e.qty)}</b></td>
+                    <td class="mono" style="font-size:11px">${e.lastFrom}</td>
+                    <td class="mono" style="font-size:11px">${e.lastDate || '—'}</td>
+                </tr>`;
+            });
+        }
+        html += `</tbody></table></div>
+            <div class="data-source-note">Ang laman ng warehouse ay puro galing sa <b>completed transfers</b> — walang manual na encoding. Para mag-isyu sa isang proyekto, gumawa ng transfer (Warehouse → Project) mula sa Site Materials tab ng proyektong iyon. Bago bumili ng bago, tingnan muna dito kung may natira pa.</div>`;
+        container.innerHTML = html;
+    },
+
     setFilter(filter) {
+        // v6.9: the Warehouse is a LOCATION, not a project — its stock
+        // lives entirely in completed transfers, so it renders separately.
+        if (filter === 'warehouse') {
+            this._currentFilter = 'warehouse';
+            this._searchResults = null;
+            this.renderWarehouse();
+            return;
+        }
         this._currentFilter = filter;
         this._searchResults = null; // clear search
         this.load();

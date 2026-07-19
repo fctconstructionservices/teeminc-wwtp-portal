@@ -34,6 +34,7 @@ const TABS = {
   CLIENT_LISTS: 'ClientLists',
   MANPOWER: 'Manpower',
   BILLINGS: 'Billings',
+  TRANSFERS: 'Transfers',
   VARIATION_ORDERS: 'VariationOrders'
 };
 
@@ -115,6 +116,14 @@ const SCHEMAS = {
   // budget and the revised contract value (computed live, non-destructive).
   VariationOrders: ['id', 'projectId', 'sowId', 'description', 'amount',
     'status', 'requestedBy', 'createdAt', 'decidedAt'],
+
+  // v6.9 NEW: location-to-location transfers of materials/equipment.
+  // fromLoc/toLoc hold either a projectId or the literal 'WAREHOUSE'
+  // (a location, deliberately NOT a project — it must never appear in
+  // project lists, Gantt, or finance). Approving a transfer moves stock
+  // on BOTH sides at once, so the two halves can never drift apart.
+  Transfers: ['id', 'fromLoc', 'toLoc', 'itemType', 'item', 'unit', 'qty',
+    'reason', 'transferDate', 'status', 'requestedBy', 'createdAt', 'decidedBy', 'decidedAt'],
 
   Approvals: ['requestId', 'approver', 'decision', 'timestamp', 'remarks'],
   ActivityLog: ['timestamp', 'text', 'type', 'refId']

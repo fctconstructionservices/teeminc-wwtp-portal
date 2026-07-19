@@ -127,6 +127,13 @@ const API_ACTIONS = {
   updateDailyRecord: updateDailyRecord,
   // v6.6: per-project editors
   setProjectEditors: setProjectEditors,
+  // v6.9: location-based transfers + warehouse
+  getTransferOptions: getTransferOptions,
+  requestTransfer: requestTransfer,
+  approveTransfer: approveTransfer,
+  rejectTransfer: rejectTransfer,
+  getWarehouseStock: getWarehouseStock,
+  getTransfersForProject: getTransfersForProject,
   getAssignableUsers: getAssignableUsers,
   deleteDailyRecord: deleteDailyRecord,
   requestVariationOrder: requestVariationOrder,

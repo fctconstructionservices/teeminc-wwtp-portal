@@ -140,6 +140,7 @@ const ProjectPage = {
                 <button data-tab="sow" onclick="ProjectPage.switchTab('sow')">SOW Budget</button>
                 <button data-tab="estimates" onclick="ProjectPage.switchTab('estimates')">${Icon.ruler({size:14})} Estimates</button>
                 <button data-tab="materials" onclick="ProjectPage.switchTab('materials')">Site Materials</button>
+                <button data-tab="equipment" onclick="ProjectPage.switchTab('equipment')">Equipment</button>
                 <button data-tab="billings" onclick="ProjectPage.switchTab('billings')">Billings</button>
                 <button data-tab="variations" onclick="ProjectPage.switchTab('variations')">Variations</button>
             </div>
@@ -151,6 +152,7 @@ const ProjectPage = {
             <div id="proj-tab-sow" class="project-tab-content"></div>
             <div id="proj-tab-estimates" class="project-tab-content"></div>
             <div id="proj-tab-materials" class="project-tab-content"></div>
+            <div id="proj-tab-equipment" class="project-tab-content"></div>
             <div id="proj-tab-billings" class="project-tab-content"></div>
             <div id="proj-tab-variations" class="project-tab-content"></div>
 
@@ -164,6 +166,7 @@ const ProjectPage = {
             this.renderSOWBudget(p);
             this.renderEstimates(p);
             this.renderSiteMaterials(p);
+            this.renderEquipment(p);
             this.renderBillings(p);
             this.renderVariations(p);
             // v6.5 (D): a quiet refresh returns you to the tab you were
