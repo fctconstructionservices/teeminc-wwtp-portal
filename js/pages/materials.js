@@ -1,288 +1,286 @@
-#!/usr/bin/env node
-/**
- * tests/run.js — Regression tests for FCTC ERP critical logic
- * ============================================================
- * Run before every push:   node tests/run.js
- *
- * WHY THIS EXISTS: the EV chart silently regressed twice — a fix landed,
- * then a later delivery that touched the same file quietly reverted it,
- * and nobody noticed until the chart showed zeros in production. These
- * tests pin down the behaviours that are easy to break by accident and
- * impossible to eyeball.
- *
- * They run in plain Node (no Apps Script), by re-implementing the exact
- * algorithms under test. When you change one of these algorithms in the
- * backend, change it here too — a failing test then means "the behaviour
- * changed", which is precisely the signal you want.
- */
+// ================================================================
+//  pages/materials.js — Materials database page
+//
+//  PURPOSE: Approved/Pending catalog views with search, the
+//  material detail datasheet (MatPrintModal) and the role-gated
+//  Approve action. New entries are requested through the material
+//  request form (features/form-submissions.js).
+// ================================================================
 
-// The production server runs in Asia/Manila. Some date bugs only appear
-// outside UTC, so default to that timezone unless one is already set —
-// otherwise the tests would pass here and still fail in production.
-if (!process.env.TZ) {
-  process.env.TZ = 'Asia/Manila';
-}
+const MaterialsPage = {
+    _allMaterials: [],
+    _currentFilter: 'approved',
+    _searchResults: null, // null means use filter
 
-let pass = 0, fail = 0;
-const results = [];
+    async load() {
+        this._searchResults = null; // clear search
+        // v6.9: warehouse is rendered from transfers, not the material list
+        if (this._currentFilter === 'warehouse') { await this.renderWarehouse(); return; }
+        const container = document.getElementById('materialsContent');
+        UI.showLoading(container);
+        try {
+            this._allMaterials = (await DataService.getAllMaterials() || []).map(x => ({ ...x, status: String(x.status || '').toLowerCase() }));   // v6.1: legacy rows hold 'Pending'
+            this.render(container);
+        } catch (err) { console.error('Materials error:', err);
+            UI.toast('Error loading materials.', 'error'); }
+    },
 
-function check(name, actual, expected) {
-  const a = JSON.stringify(actual), e = JSON.stringify(expected);
-  if (a === e) { pass++; results.push(['PASS', name, '']); }
-  else { fail++; results.push(['FAIL', name, `expected ${e}, got ${a}`]); }
-}
-function checkTrue(name, cond, detail) {
-  if (cond) { pass++; results.push(['PASS', name, '']); }
-  else { fail++; results.push(['FAIL', name, detail || 'expected true']); }
-}
+    render(container, items = null) {
+        // If items provided, use them; else use filtered list
+        let list = items;
+        if (!list) {
+            const approved = this._allMaterials.filter(m => m.status === 'approved');
+            const pending = this._allMaterials.filter(m => m.status === 'pending');
+            list = this._currentFilter === 'approved' ? approved : pending;
+        }
+        // If searchResults is set, use that instead (override)
+        if (this._searchResults !== null) {
+            list = this._searchResults;
+        }
 
-// ══════════════════════════════════════════════════════════════
-// 1. PROGRESS AS OF A DATE  (the EV-line regression)
-// ══════════════════════════════════════════════════════════════
-function computeSOWProgressAsOf(sowId, records, cutoffStr) {
-  let bestKey = '', best = 0;
-  (records || []).forEach(d => {
-    if (d.status === 'rejected') return;
-    const key = String(d.date || '');
-    if (!key || key > cutoffStr) return;
-    const rows = (d.workAccomplished || []).filter(w => String(w.scope) === String(sowId));
-    if (!rows.length) return;
-    const pct = rows.reduce((mx, w) => Math.max(mx, parseFloat(w.percentComplete) || 0), 0);
-    if (bestKey === '' || key > bestKey || (key === bestKey && pct > best)) { bestKey = key; best = pct; }
-  });
-  return Math.min(100, Math.max(0, best));
-}
+        const approved = this._allMaterials.filter(m => m.status === 'approved');
+        const pending = this._allMaterials.filter(m => m.status === 'pending');
 
-const recs = [
-  { status: 'approved', date: '2026-05-31', workAccomplished: [{ scope: 'SOW-1', percentComplete: 20 }] },
-  { status: 'approved', date: '2026-06-30', workAccomplished: [{ scope: 'SOW-1', percentComplete: 45 }] },
-  { status: 'draft',    date: '2026-07-19', workAccomplished: [{ scope: 'SOW-1', percentComplete: 72 }] },
-  { status: 'rejected', date: '2026-07-20', workAccomplished: [{ scope: 'SOW-1', percentComplete: 99 }] },
-];
-
-// These three are the exact cases the Date-comparison version got wrong.
-check('progress: last day of month counts in that month',  computeSOWProgressAsOf('SOW-1', recs, '2026-05-31'), 20);
-check('progress: month-end boundary (Jun)',                computeSOWProgressAsOf('SOW-1', recs, '2026-06-30'), 45);
-check('progress: report dated TODAY is included',          computeSOWProgressAsOf('SOW-1', recs, '2026-07-19'), 72);
-check('progress: before any report is 0',                  computeSOWProgressAsOf('SOW-1', recs, '2026-04-30'), 0);
-check('progress: rejected reports ignored',                computeSOWProgressAsOf('SOW-1', recs, '2026-12-31'), 72);
-check('progress: unknown SOW is 0',                        computeSOWProgressAsOf('SOW-9', recs, '2026-12-31'), 0);
-
-// A full EV series must be non-decreasing and non-zero once work exists.
-const months = ['2026-04-30','2026-05-31','2026-06-30','2026-07-19'];
-const basis = 1000000;
-const evSeries = months.map(c => Math.round(basis * computeSOWProgressAsOf('SOW-1', recs, c) / 100));
-check('EV series climbs with progress', evSeries, [0, 200000, 450000, 720000]);
-checkTrue('EV series never all-zero when progress exists', evSeries.some(v => v > 0),
-  'every EV point was 0 — this is the exact production bug');
-
-
-// ── The production path, reproduced exactly ────────────────────
-// The regression was NOT visible with string cutoffs — it appeared only
-// because the caller passed a Date object (monthEnd_) while the records
-// carry 'yyyy-MM-dd' strings. Outside UTC, `new Date('2026-05-31')` is
-// UTC midnight = 08:00 local in Manila, which sorts AFTER a local-midnight
-// cutoff, so the whole month's progress was discarded. These tests pin the
-// behaviour under the real server timezone.
-function monthEnd(y, m) { return new Date(y, m + 1, 0); }
-function fmtDate(d) {
-  const p = n => String(n).padStart(2, '0');
-  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
-}
-// caller must hand the function a STRING, produced the same way the
-// backend's fmtDate_ does — this is what makes it timezone-proof.
-// The bug lived in the CALLER pairing, so the test must exercise both
-// halves together: how the cutoff is produced AND how it is compared.
-function evAtMonth_correct(y, m) {
-  return computeSOWProgressAsOf('SOW-1', recs, fmtDate(monthEnd(y, m)));   // string cutoff
-}
-function evAtMonth_dateCutoff(y, m) {
-  // reproduces the regression: Date object cutoff, Date-parsed records
-  const cutoff = monthEnd(y, m);
-  let bestDate = null, best = 0;
-  recs.forEach(d => {
-    if (d.status === 'rejected') return;
-    const dt = new Date(d.date);
-    if (isNaN(dt) || dt > cutoff) return;
-    const rows = (d.workAccomplished || []).filter(w => String(w.scope) === 'SOW-1');
-    if (!rows.length) return;
-    const pct = rows.reduce((mx, w) => Math.max(mx, parseFloat(w.percentComplete) || 0), 0);
-    if (bestDate === null || dt > bestDate) { bestDate = dt; best = pct; }
-  });
-  return best;
-}
-
-check('production path: May cutoff keeps May progress', evAtMonth_correct(2026, 4), 20);
-check('production path: Jun cutoff keeps Jun progress', evAtMonth_correct(2026, 5), 45);
-checkTrue('production path: cutoff is a STRING, never a Date object',
-  typeof fmtDate(monthEnd(2026, 4)) === 'string');
-
-// Guard rail: if someone reintroduces Date-object cutoffs, this fails in
-// any timezone east of UTC (i.e. on the real server) and passes in UTC —
-// so it is asserted as a DIFFERENCE, which is timezone-independent.
-const tzOffsetMin = -new Date(2026, 4, 31).getTimezoneOffset();
-if (tzOffsetMin > 0) {
-  checkTrue('REGRESSION GUARD: Date-object cutoff loses progress east of UTC',
-    evAtMonth_dateCutoff(2026, 4) !== evAtMonth_correct(2026, 4),
-    'the buggy pairing produced the same answer — check the test, not the code');
-} else {
-  results.push(['SKIP', 'REGRESSION GUARD (run with TZ=Asia/Manila to exercise)', '']);
-}
-
-// ══════════════════════════════════════════════════════════════
-// 2. CONTRACT BASIS  (approved estimates + client-approved VOs)
-// ══════════════════════════════════════════════════════════════
-function contractBasis(sow) { return (sow.estimateTotal || 0) + (sow.voAdjustment || 0); }
-check('basis: approved estimate only',        contractBasis({ estimateTotal: 500000 }), 500000);
-check('basis: estimate + approved VO',        contractBasis({ estimateTotal: 500000, voAdjustment: 120000 }), 620000);
-check('basis: deductive VO subtracts',        contractBasis({ estimateTotal: 500000, voAdjustment: -80000 }), 420000);
-check('basis: draft estimate contributes 0',  contractBasis({ estimateTotal: 0, voAdjustment: 0 }), 0);
-
-// Weighted total progress must use the contract basis, not the budget.
-const items = [
-  { id: 'A', estimateTotal: 800000, voAdjustment: 0,      progress: 50, budget: 2000000 },
-  { id: 'B', estimateTotal: 200000, voAdjustment: 100000, progress: 100, budget: 100000 },
-];
-const wSum = items.reduce((s, x) => s + contractBasis(x), 0);
-const weighted = items.reduce((s, x) => s + contractBasis(x) * x.progress / 100, 0) / wSum * 100;
-// (800k × 50%) + (300k × 100%) = 700k ÷ 1.1M = 63.6%
-check('weighted progress uses contract basis', Math.round(weighted * 10) / 10, 63.6);
-
-// ══════════════════════════════════════════════════════════════
-// 3. TRANSFERS  (stock must be conserved across locations)
-// ══════════════════════════════════════════════════════════════
-function availableAt(loc, daily, transfers) {
-  let q = 0;
-  if (loc !== 'WAREHOUSE' && daily[loc]) q = daily[loc].delivered - daily[loc].used;
-  transfers.forEach(t => {
-    if (t.status !== 'Completed') return;
-    if (t.toLoc === loc) q += t.qty;
-    if (t.fromLoc === loc) q -= t.qty;
-  });
-  return q;
-}
-const daily = { A: { delivered: 500, used: 320 }, B: { delivered: 0, used: 0 } };
-const transfers = [
-  { status: 'Completed', item: 'Cement', qty: 80, fromLoc: 'A', toLoc: 'WAREHOUSE' },
-  { status: 'Completed', item: 'Cement', qty: 50, fromLoc: 'WAREHOUSE', toLoc: 'B' },
-  { status: 'Pending',   item: 'Cement', qty: 30, fromLoc: 'A', toLoc: 'B' },
-];
-check('transfer: source reduced',      availableAt('A', daily, transfers), 100);
-check('transfer: warehouse holds rest', availableAt('WAREHOUSE', daily, transfers), 30);
-check('transfer: destination received', availableAt('B', daily, transfers), 50);
-check('transfer: pending does NOT move stock',
-  availableAt('A', daily, transfers) + availableAt('WAREHOUSE', daily, transfers) + availableAt('B', daily, transfers), 180);
-
-// ══════════════════════════════════════════════════════════════
-// 4. APPROVAL RULES  (multi-signature engine)
-// ══════════════════════════════════════════════════════════════
-function requiredSigners(users, submitter) {
-  return users.filter(u => (u.role === 'admin' || u.role === 'superadmin')
-    && u.email.toLowerCase() !== String(submitter).toLowerCase()).map(u => u.email.toLowerCase());
-}
-function allApproved(required, decisions) {
-  return required.length > 0 && required.every(e => decisions[e] === 'approved');
-}
-const users = [
-  { email: 'a@x.com', role: 'admin' }, { email: 'b@x.com', role: 'admin' },
-  { email: 's@x.com', role: 'superadmin' }, { email: 'r@x.com', role: 'request-only' },
-];
-check('signers: admins only, submitter excluded', requiredSigners(users, 'a@x.com'), ['b@x.com', 's@x.com']);
-check('signers: request-only never signs', requiredSigners(users, 'zzz@x.com').includes('r@x.com'), false);
-checkTrue('approval: not final until ALL sign',
-  !allApproved(['b@x.com', 's@x.com'], { 'b@x.com': 'approved' }), 'finalized with only one signature');
-checkTrue('approval: final when all sign',
-  allApproved(['b@x.com', 's@x.com'], { 'b@x.com': 'approved', 's@x.com': 'approved' }));
-
-// ══════════════════════════════════════════════════════════════
-// 5. BILLING MATH
-// ══════════════════════════════════════════════════════════════
-function billing(prevPct, curPct, contract, retentionPct) {
-  const gross = (curPct - prevPct) / 100 * contract;
-  const retention = gross * retentionPct;
-  return { gross: Math.round(gross), retention: Math.round(retention), net: Math.round(gross - retention) };
-}
-check('billing: first billing at 25%', billing(0, 25, 20000000, 0.10), { gross: 5000000, retention: 500000, net: 4500000 });
-check('billing: incremental 25→45%',   billing(25, 45, 20000000, 0.10), { gross: 4000000, retention: 400000, net: 3600000 });
-check('billing: client-revised lower %', billing(25, 35, 20000000, 0.10), { gross: 2000000, retention: 200000, net: 1800000 });
-
-// ══════════════════════════════════════════════════════════════
-// 6. AXIS MONEY FORMAT
-// ══════════════════════════════════════════════════════════════
-function fmtAxisMoney(v) {
-  const a = Math.abs(v);
-  if (a >= 1000000) { const m = v / 1000000; return '₱' + (Number.isInteger(m) ? m : +m.toFixed(2)) + 'M'; }
-  if (a >= 1000) return '₱' + Math.round(v / 1000) + 'k';
-  return '₱' + v;
-}
-check('axis: 850k',   fmtAxisMoney(850000), '₱850k');
-check('axis: exactly 1M shows M not 1,000k', fmtAxisMoney(1000000), '₱1M');
-check('axis: 1.15M',  fmtAxisMoney(1150000), '₱1.15M');
-check('axis: 20.64M', fmtAxisMoney(20640000), '₱20.64M');
-
-// ══════════════════════════════════════════════════════════════
-// 7. SESSION EXPIRY  (sliding window)
-// ══════════════════════════════════════════════════════════════
-const TTL = 8 * 3600 * 1000;
-function resolveSession(sess, nowMs) {
-  if (!sess || sess.revoked) return null;
-  if (nowMs > sess.expiresAt) return null;
-  sess.expiresAt = nowMs + TTL;
-  return { email: sess.email };
-}
-let sess = { email: 'a@x.com', expiresAt: Date.now() + TTL, revoked: false };
-const t0 = Date.now();
-checkTrue('session: valid immediately', !!resolveSession(sess, t0));
-checkTrue('session: still valid after 7h of activity', !!resolveSession(sess, t0 + 7 * 3600 * 1000));
-checkTrue('session: expires after 8h idle from last activity',
-  resolveSession(sess, t0 + 7 * 3600 * 1000 + 8.1 * 3600 * 1000) === null);
-let revoked = { email: 'a@x.com', expiresAt: Date.now() + TTL, revoked: true };
-checkTrue('session: revoked token rejected', resolveSession(revoked, Date.now()) === null);
+        // Build HTML: add form first, then list
+        let html = `
+                <div class="section-head"><h2>Material Database</h2><div class="rule"></div>
+                    <button class="btn-primary" onclick="MaterialsPage.showAddForm()" style="padding:6px 14px;font-size:11px;">+ Add New Material</button>
+                </div>
+                <div id="matAddForm" style="display:none;margin-bottom:20px;">
+                    <div class="panel"><div class="panel-head"><h3>Add New Material</h3><button class="btn-ghost" onclick="MaterialsPage.hideAddForm()" style="padding:4px 12px;font-size:11px;">Cancel</button></div>
+                    <div style="padding:16px;">
+                        <form id="matForm" onsubmit="return MaterialsPage.submitMaterial(event)">
+                            <div class="db-form-grid">
+                                <div class="field"><label>Material Name *</label><input type="text" id="mat-name" required /></div>
+                                <div class="field full"><label>Material Description *</label><input type="text" id= "mat-desc" required /></div>
+                                <div class="field"><label>Category *</label><select id="mat-category" required><option value="">Select...</option><option>Structural Steel</option><option>Concrete</option><option>Finishing</option><option>Electrical</option><option>Plumbing</option><option>Safety</option><option>Other</option></select></div>
+                                <div class="field"><label>Subcategory</label><select id="mat-subcategory"><option value="">Select...</option><option>Rebar</option><option>Cement</option><option>Aggregates</option><option>Pipes</option><option>Wires</option><option>Paint</option><option>Other</option></select></div>
+                                <div class="field"><label>Unit *</label><select id="mat-unit" required><option value="">Select...</option><option>pcs</option><option>kg</option><option>tons</option><option>m</option><option>sqm</option><option>cu.m</option><option>liters</option><option>bags</option><option>rolls</option></select></div>
+                                <div class="field"><label>Brand *</label><input type="text" id="mat-brand" required /></div>
+                                <div class="field"><label>Model / Serial</label><input type="text" id="mat-model" /></div>
+                                <div class="field full"><label>Specifications</label><textarea id="mat-specs" rows="2"></textarea></div>
+                                <div class="field"><label>Grade</label><input type="text" id="mat-grade" /></div>
+                                <div class="field"><label>Size</label><input type="text" id="mat-size" /></div>
+                                <div class="field"><label>Length</label><input type="text" id="mat-length" /></div>
+                                <div class="field"><label>Thickness</label><input type="text" id="mat-thickness" /></div>
+                                <div class="field"><label>Weight</label><input type="text" id="mat-weight" /></div>
+                                <div class="field full"><label>Standard Code</label><input type="text" id="mat-standard" /></div>
+                                <div class="field full"><label>PDF Spec Sheet</label><div class="file-drop"><input type="file" accept=".pdf" id="mat-pdf" /></div></div>
+                                <div class="field"><label>Application</label><input type="text" id="mat-application" /></div>
+                                <div class="field"><label>Notes</label><input type="text" id="mat-notes" /></div>
+                                <div class="field full"><label>Image</label><div class="file-drop"><input type="file" accept="image/*" id="mat-image" onchange="MaterialsPage.previewMatImage(event)" /></div>
+                                <div class="image-preview" id="matImagePreview"><img id="matImagePreviewImg" src="#" alt="Preview" /></div></div>
+                            </div>
+                            <div class="submit-row"><button type="submit" class="btn-primary">Submit for Approval</button><button type="button" class="btn-ghost" onclick="MaterialsPage.hideAddForm()">Cancel</button></div>
+                        </form>
+                    </div></div>
+                </div>
+                <div class="searchbar"><span class="search-icon">${Icon.search({size:15})}</span><input type="text" id="matSearch" placeholder="Search by ID, Brand, Specs..." oninput="MaterialsPage.search()" /></div>
+                <div class="status-tabs">
+                    <button class="${this._currentFilter === 'approved' && this._searchResults === null ? 'active' : ''}" onclick="MaterialsPage.setFilter('approved')">${Icon.checkCircle({size:13})} Approved (${approved.length})</button>
+                    <button class="${this._currentFilter === 'pending' && this._searchResults === null ? 'active' : ''}" onclick="MaterialsPage.setFilter('pending')">⏳ Pending (${pending.length})</button>
+                    <button class="${this._currentFilter === 'warehouse' ? 'active' : ''}" onclick="MaterialsPage.setFilter('warehouse')">🏭 Warehouse</button>
+                    ${this._searchResults !== null ? `<button class="active" onclick="MaterialsPage.clearSearch()">${Icon.search({size:13})} Search Results (${list.length})</button>` : ''}
+                </div>
+                <div class="list-container">`;
+                if (list.length === 0) html += `<div class="empty"><p>No materials found.</p></div>`;
+                else {
+                    list.forEach(m => {
+                        const imgHtml = m.image ? `<img src="${m.image}" alt="${m.name || m.brand || ''}" />` :
+                            `<span>${Icon.package({size:24})}</span>`;
+                        html += `
+                        <div class="mat-card" onclick="MaterialsPage.viewMaterial('${m.id}')">
+                            <div class="mc-thumb">${imgHtml}</div>
+                            <div class="mc-body">
+                                <div class="mc-title">${m.name || m.brand || 'Unnamed'}</div>
+                                <div class="mc-meta">
+                                    <span class="req-id">${m.id}</span>
+                                    ${m.brand ? `<span>${m.brand}</span>` : ''}
+                                    <span>${m.category || ''} ${m.subcategory ? '→ ' + m.subcategory : ''}</span>
+                                    <span>${m.unit || ''}</span>
+                                    ${m.status === 'pending' ? '<span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">Pending</span>' : ''}
+                                    ${m.status === 'approved' ? '<span class="stamp approved" style="transform:none;padding:1px 8px;font-size:9px;">Approved</span>' : ''}
+                                    ${m.status === 'pending' && App.isApprover() ? `<button class="btn-sm success" onclick="event.stopPropagation();MaterialsPage.approveMaterial('${m.id}')" style="margin-left:8px;">Approve</button>` : ''}
+                                </div>
+                            </div>
+                            <div style="color:var(--ink-soft);">›</div>
+                        </div>`;
+                    });
+                }
+                html += `</div>`;
+                UI.setContent(container, html);
+    },
 
 
-// ══════════════════════════════════════════════════════════════
-// 8. SECURITY: login lockout and soft delete  (v7.5)
-// ══════════════════════════════════════════════════════════════
-const LOGIN_MAX = 5, LOCKOUT_MS = 15 * 60 * 1000;
-function lockoutState(failures, elapsedMs) {
-  // returns true if login is currently ALLOWED
-  if (failures < LOGIN_MAX) return true;
-  return elapsedMs > LOCKOUT_MS;
-}
-checkTrue('lockout: 4 failures still allowed', lockoutState(4, 0));
-checkTrue('lockout: 5 failures blocks', !lockoutState(5, 0));
-checkTrue('lockout: still blocked at 14 minutes', !lockoutState(5, 14 * 60 * 1000));
-checkTrue('lockout: released after 15 minutes', lockoutState(5, 16 * 60 * 1000));
+    /**
+     * renderWarehouse (v6.9) - Stock currently held at the single office
+     * warehouse. Everything here is derived from completed transfers —
+     * there is no manual encoding, and "Issue to Project" is itself just
+     * another transfer (Warehouse → Project).
+     */
+    async renderWarehouse() {
+        const container = document.getElementById('materialsContent');
+        UI.showLoading(container);
+        let wh;
+        try {
+            wh = await DataService.getWarehouseStock();
+        } catch (err) {
+            UI.toast('' + err.message, 'error');
+            container.innerHTML = `<div class="empty"><p>Could not load warehouse stock.</p></div>`;
+            return;
+        }
+        const mats = wh.materials || [];
+        const eqs = wh.equipment || [];
+        let html = `
+            <div class="section-head"><h2>Material Database</h2><div class="rule"></div></div>
+            <div class="status-tabs">
+                <button onclick="MaterialsPage.setFilter('approved')">${Icon.checkCircle({size:13})} Approved</button>
+                <button onclick="MaterialsPage.setFilter('pending')">⏳ Pending</button>
+                <button class="active" onclick="MaterialsPage.setFilter('warehouse')">🏭 Warehouse</button>
+            </div>
 
-const softRecs = [
-  { id: 'DR-1', projectId: 'P1', date: '2026-07-15', status: 'draft', deletedAt: null },
-  { id: 'DR-2', projectId: 'P1', date: '2026-07-16', status: 'draft', deletedAt: null }
-];
-const liveOnly = rs => rs.filter(r => !r.deletedAt);
-check('soft delete: all records live initially', liveOnly(softRecs).length, 2);
-softRecs[0].deletedAt = '2026-07-20';
-check('soft delete: hidden from live list', liveOnly(softRecs).length, 1);
-check('soft delete: row retained for recovery', softRecs.length, 2);
-const dupOf = (rs, pid, date) => liveOnly(rs).find(r => r.projectId === pid && r.date === date && r.status !== 'rejected');
-checkTrue('soft delete: deleted date can be reused', !dupOf(softRecs, 'P1', '2026-07-15'));
-checkTrue('soft delete: live date still blocks duplicates', !!dupOf(softRecs, 'P1', '2026-07-16'));
+            <div class="kpi-strip" style="margin:14px 0;">
+                <div class="kpi-card"><div class="k-label">Material Items</div><div class="k-val">${mats.length}</div><div class="k-sub">with stock remaining</div></div>
+                <div class="kpi-card"><div class="k-label">Equipment Units</div><div class="k-val">${fmtNum(eqs.reduce((s, e) => s + e.qty, 0))}</div><div class="k-sub">idle in warehouse</div></div>
+                <div class="kpi-card warn"><div class="k-label">Pending Transfers</div><div class="k-val">${wh.pendingCount || 0}</div><div class="k-sub">awaiting approval</div></div>
+                <div class="kpi-card good"><div class="k-label">Est. Value</div><div class="k-val">₱${fmtMoney(wh.estValue || 0)}</div><div class="k-sub">sa DB rate</div></div>
+            </div>
 
-// Public API surface: only login may be unauthenticated.
-const PUBLIC_ACTIONS = { loginWithPassword: true };
-checkTrue('security: setupSheets is NOT public', !PUBLIC_ACTIONS.setupSheets,
-  'setupSheets reachable without a token would let anyone reseed admin users');
-checkTrue('security: migrateSchemas is NOT public', !PUBLIC_ACTIONS.migrateSchemas);
-checkTrue('security: loginUser is gone', !PUBLIC_ACTIONS.loginUser);
+            <div class="panel"><div class="panel-head"><h3>Materials</h3></div>
+            <table><thead><tr><th>Material</th><th>Unit</th><th style="text-align:right">On Hand</th><th>Last From</th><th>Date</th></tr></thead><tbody>`;
+        if (!mats.length) {
+            html += `<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:22px">The warehouse is empty. Stock here comes from completed transfers out of projects.</td></tr>`;
+        } else {
+            mats.forEach(m => {
+                html += `<tr>
+                    <td>${m.item}</td>
+                    <td class="mono" style="font-size:11.5px">${m.unit || '—'}</td>
+                    <td class="amt"><b>${fmtNum(m.qty)}</b></td>
+                    <td class="mono" style="font-size:11px">${m.lastFrom}</td>
+                    <td class="mono" style="font-size:11px">${m.lastDate || '—'}</td>
+                </tr>`;
+            });
+        }
+        html += `</tbody></table></div>`;
 
-// ══════════════════════════════════════════════════════════════
-// REPORT
-// ══════════════════════════════════════════════════════════════
-console.log('\n  FCTC ERP — regression tests\n' + '  ' + '─'.repeat(58));
-let section = '';
-results.forEach(([status, name, detail]) => {
-  const mark = status === 'PASS' ? '  ✓' : status === 'SKIP' ? '  ·' : '  ✗';
-  console.log(`${mark} ${name}${detail ? '\n      → ' + detail : ''}`);
-});
-console.log('  ' + '─'.repeat(58));
-console.log(`  ${pass} passed, ${fail} failed\n`);
-process.exit(fail === 0 ? 0 : 1);
+        html += `<div class="panel"><div class="panel-head"><h3>Equipment</h3></div>
+            <table><thead><tr><th>Equipment</th><th style="text-align:right">Qty</th><th>Last From</th><th>Date</th></tr></thead><tbody>`;
+        if (!eqs.length) {
+            html += `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);padding:22px">No equipment in the warehouse.</td></tr>`;
+        } else {
+            eqs.forEach(e => {
+                html += `<tr>
+                    <td>${e.item}</td>
+                    <td class="amt"><b>${fmtNum(e.qty)}</b></td>
+                    <td class="mono" style="font-size:11px">${e.lastFrom}</td>
+                    <td class="mono" style="font-size:11px">${e.lastDate || '—'}</td>
+                </tr>`;
+            });
+        }
+        html += `</tbody></table></div>
+            <div class="data-source-note">Warehouse contents are derived entirely from <b>completed transfers</b> - there is no manual encoding. To issue stock to a project, create a transfer (Warehouse → Project) from that project's Site Materials tab. Check here for surplus before purchasing new stock.</div>`;
+        container.innerHTML = html;
+    },
+
+    setFilter(filter) {
+        // v6.9: the Warehouse is a LOCATION, not a project — its stock
+        // lives entirely in completed transfers, so it renders separately.
+        if (filter === 'warehouse') {
+            this._currentFilter = 'warehouse';
+            this._searchResults = null;
+            this.renderWarehouse();
+            return;
+        }
+        this._currentFilter = filter;
+        this._searchResults = null; // clear search
+        this.load();
+    },
+
+    clearSearch() {
+        this._searchResults = null;
+        this.load();
+    },
+
+    search() {
+        const query = document.getElementById('matSearch').value;
+        if (!query.trim()) {
+            this._searchResults = null;
+            this.load();
+            return;
+        }
+        const container = document.getElementById('materialsContent');
+        UI.showLoading(container);
+        setTimeout(async () => {
+            const results = await DataService.searchMaterials(query);
+            this._searchResults = results;
+            this.render(container);
+        }, 300);
+    },
+
+    showAddForm() { const f = document.getElementById('matAddForm'); if (f) f.style.display = 'block'; },
+    hideAddForm() { const f = document.getElementById('matAddForm'); if (f) f.style.display = 'none'; },
+    previewMatImage(e) {
+        const file = e.target.files[0];
+        const preview = document.getElementById('matImagePreview');
+        const img = document.getElementById('matImagePreviewImg');
+        if (file) { const r = new FileReader();
+            r.onload = function(ev) { img.src = ev.target.result;
+                preview.classList.add('open'); };
+            r.readAsDataURL(file); } else preview.classList.remove('open');
+    },
+    async submitMaterial(e) {
+        e.preventDefault();
+        const data = {
+            name: document.getElementById('mat-name').value,
+            description: document.getElementById('mat-desc').value,
+            category: document.getElementById('mat-category').value,
+            subcategory: document.getElementById('mat-subcategory').value,
+            unit: document.getElementById('mat-unit').value,
+            brand: document.getElementById('mat-brand').value.trim(),
+            model: document.getElementById('mat-model').value.trim(),
+            specs: document.getElementById('mat-specs').value.trim(),
+            grade: document.getElementById('mat-grade').value.trim(),
+            size: document.getElementById('mat-size').value.trim(),
+            length: document.getElementById('mat-length').value.trim(),
+            thickness: document.getElementById('mat-thickness').value.trim(),
+            weight: document.getElementById('mat-weight').value.trim(),
+            standardCode: document.getElementById('mat-standard').value.trim(),
+            application: document.getElementById('mat-application').value.trim(),
+            notes: document.getElementById('mat-notes').value.trim(),
+            image: document.getElementById('matImagePreviewImg').src || 'https://placehold.co/600x400/5B6360/FFFFFF?text=Material'
+        };
+        if (!data.name || !data.description || !data.category || !data.brand || !data.unit) { UI.toast('Required: Material Name, Description,Category, Brand, Unit.',
+                'error'); return; }
+        const confirmed = await Confirm.open('Submit for Approval?', '');
+        if (!confirmed) return;
+        try { 
+            const result = await DataService.requestMaterial(data);
+            UI.toast(`${result.id} submitted for approval!`, 'success');
+            document.getElementById('matForm').reset();
+            document.getElementById('matImagePreview').classList.remove('open');
+            this.hideAddForm();
+            this._allMaterials = (await DataService.getAllMaterials() || []).map(x => ({ ...x, status: String(x.status || '').toLowerCase() }));   // v6.1: legacy rows hold 'Pending'
+            this._searchResults = null;
+            
+            // ✅ FIX: Automatically switch to Pending tab after submission (Bug #1)
+            this._currentFilter = 'pending';
+            this.load();
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+        return false;
+    },
+    async approveMaterial(id) {
+        const confirmed = await Confirm.open('Approve Material?', '');
+        if (!confirmed) return;
+        try { await DataService.approveMaterial(id);
+            UI.toast('Material approved!', 'success');
+            this._allMaterials = (await DataService.getAllMaterials() || []).map(x => ({ ...x, status: String(x.status || '').toLowerCase() }));   // v6.1: legacy rows hold 'Pending'
+            this._searchResults = null;
+            this.load(); } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
+    async viewMaterial(id) {
+        const all = await DataService.getAllMaterials();
+        const mat = all.find(m => m.id === id);
+        if (!mat) { UI.toast('Not found.', 'error'); return; }
+        MatPrintModal.open(mat);
+    }
+};
