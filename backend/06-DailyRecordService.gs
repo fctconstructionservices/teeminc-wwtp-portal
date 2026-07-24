@@ -24,7 +24,7 @@
  * means new code gets it by default instead of having to remember.
  */
 function liveDailyRecords_() {
-  return liveDailyRecords_().filter(function (d) { return !d.deletedAt; });
+  return readAll_('DailyRecords').filter(function (d) { return !d.deletedAt; });
 }
 
 function addDailyRecord(projectId, data) {

@@ -267,6 +267,17 @@ const dupOf = (rs, pid, date) => liveOnly(rs).find(r => r.projectId === pid && r
 checkTrue('soft delete: deleted date can be reused', !dupOf(softRecs, 'P1', '2026-07-15'));
 checkTrue('soft delete: live date still blocks duplicates', !!dupOf(softRecs, 'P1', '2026-07-16'));
 
+
+// A helper that filters a table must not call itself - an easy mistake
+// when swapping read paths in bulk, and one that only surfaces at
+// runtime as "Maximum call stack size exceeded".
+function liveOf(rows) { return rows.filter(r => !r.deletedAt); }
+const recursionProbe = [
+  { id: 'A', deletedAt: null },
+  { id: 'B', deletedAt: '2026-07-20' }
+];
+check('soft delete: filter helper terminates', liveOf(recursionProbe).map(r => r.id), ['A']);
+
 // Public API surface: only login may be unauthenticated.
 const PUBLIC_ACTIONS = { loginWithPassword: true };
 checkTrue('security: setupSheets is NOT public', !PUBLIC_ACTIONS.setupSheets,
