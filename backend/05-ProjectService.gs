@@ -217,7 +217,7 @@ function getProjectData(projectId) {
     });
 
   const incomingCash = readAll_('IncomingCashRequests').filter(function (c) { return c.projectId === projectId && c.status === 'Approved'; });
-  const dailyRecords = readAll_('DailyRecords')
+  const dailyRecords = liveDailyRecords_()
     .filter(function (d) { return d.projectId === projectId; })
     .map(function (d) {
       return {

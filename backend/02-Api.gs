@@ -28,7 +28,19 @@ function doGet(e) {
  * Everything else requires authentication, enforced here in ONE place
  * so a new action can never accidentally ship unauthenticated.
  */
-const PUBLIC_ACTIONS = { loginWithPassword: true, loginUser: true, migrateSchemas: true, setupSheets: true };
+// v7.5 SECURITY: only the login endpoint may be called without a token.
+//
+// Previously this list also contained loginUser (the pre-token login,
+// which compared plaintext passwords and revealed whether an email was
+// registered), migrateSchemas, and setupSheets. setupSheets recreates
+// the seed users — including a Super Admin with a known password — so
+// exposing it without authentication meant anyone holding the /exec URL
+// could grant themselves full access with a single request.
+//
+// Schema setup and migration are administrative operations. Run them
+// from the Apps Script editor, where the operator is already
+// authenticated by Google; they must never be reachable over the API.
+const PUBLIC_ACTIONS = { loginWithPassword: true };
 
 /**
  * WRITE_ACTION_RE - actions that mutate data take a document lock, so two
@@ -107,7 +119,6 @@ function jsonResponse_(obj) {
  * API_ACTIONS - Maps action names to handler functions
  */
 const API_ACTIONS = {
-  loginUser: loginUser,
   // v7.0: sessions + impersonation
   loginWithPassword: loginWithPassword,
   logout: logout,
@@ -205,6 +216,10 @@ const API_ACTIONS = {
   getTransfersForProject: getTransfersForProject,
   getAssignableUsers: getAssignableUsers,
   deleteDailyRecord: deleteDailyRecord,
+  // v7.5: soft-delete recovery
+  listDeletedRecords: listDeletedRecords,
+  restoreDailyRecord: restoreDailyRecord,
+  purgeDeletedRecords: purgeDeletedRecords,
   requestVariationOrder: requestVariationOrder,
   approveVariationOrder: approveVariationOrder,
   rejectVariationOrder: rejectVariationOrder

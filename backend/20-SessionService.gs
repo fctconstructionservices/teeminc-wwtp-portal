@@ -59,6 +59,70 @@ function newToken_() {
   return Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
 }
 
+
+// ─────────────────── brute-force protection ───────────────────
+
+var LOGIN_MAX_ATTEMPTS = 5;                     // consecutive failures allowed
+var LOGIN_LOCKOUT_MS = 15 * 60 * 1000;          // then locked for 15 minutes
+
+/**
+ * checkLoginLockout_ - Throws if this email is currently locked out.
+ *
+ * Without this, the login endpoint accepts unlimited guesses, so any
+ * password short enough to be guessed will eventually be guessed. The
+ * lockout is per EMAIL rather than per IP because Apps Script does not
+ * expose the caller's IP, and an email lock is the meaningful unit here:
+ * it protects the specific account under attack.
+ *
+ * The remaining time is disclosed deliberately — a locked-out legitimate
+ * user needs to know how long to wait, and an attacker learns nothing
+ * useful from it.
+ */
+function checkLoginLockout_(email) {
+  var row = readAll_('LoginAttempts').find(function (r) {
+    return String(r.email).toLowerCase() === email;
+  });
+  if (!row || !row.lockedUntil) return;
+  var until = new Date(row.lockedUntil);
+  if (isNaN(until) || new Date() > until) return;
+  var mins = Math.max(1, Math.ceil((until - new Date()) / 60000));
+  throw new Error('Too many failed login attempts. Please try again in ' + mins + ' minute' + (mins === 1 ? '' : 's') + '.');
+}
+
+/** recordLoginFailure_ - Increments the counter and locks past the limit. */
+function recordLoginFailure_(email) {
+  var rows = readAll_('LoginAttempts');
+  var row = rows.find(function (r) { return String(r.email).toLowerCase() === email; });
+  var now = new Date();
+
+  if (!row) {
+    appendRow_('LoginAttempts', {
+      email: email, failCount: 1, lastFailAt: now, lockedUntil: ''
+    });
+    logActivity_('Failed login attempt: ' + email, 'a');
+    return;
+  }
+
+  var count = (parseInt(row.failCount, 10) || 0) + 1;
+  var patch = { failCount: count, lastFailAt: now };
+  if (count >= LOGIN_MAX_ATTEMPTS) {
+    patch.lockedUntil = new Date(now.getTime() + LOGIN_LOCKOUT_MS);
+    patch.failCount = 0;                        // restart after the lock expires
+    logActivity_('Account locked after ' + LOGIN_MAX_ATTEMPTS + ' failed logins: ' + email, 'a');
+  } else {
+    logActivity_('Failed login attempt (' + count + '/' + LOGIN_MAX_ATTEMPTS + '): ' + email, 'a');
+  }
+  updateRow_('LoginAttempts', 'email', row.email, patch);
+}
+
+/** clearLoginFailures_ - Called on success, so a good login resets the count. */
+function clearLoginFailures_(email) {
+  var row = readAll_('LoginAttempts').find(function (r) {
+    return String(r.email).toLowerCase() === email;
+  });
+  if (row) deleteRow_('LoginAttempts', 'email', row.email);
+}
+
 /**
  * loginWithPassword - Validates credentials and issues a session token.
  * Returns the token plus the user profile the UI needs.
@@ -67,12 +131,17 @@ function loginWithPassword(email, password) {
   email = String(email || '').trim().toLowerCase();
   if (!email || !password) throw new Error('Email and password are required.');
 
+  checkLoginLockout_(email);   // v7.5
+
   var users = readAll_('Users');
   var record = users.find(function (u) { return String(u.email).toLowerCase() === email; });
   // Same message for unknown email and wrong password: revealing which
   // one was wrong tells an attacker which accounts exist.
   var GENERIC = 'Invalid email or password.';
-  if (!record) throw new Error(GENERIC);
+  if (!record) {
+    recordLoginFailure_(email);   // count unknown emails too, or they are a free oracle
+    throw new Error(GENERIC);
+  }
 
   var ok = false;
   if (record.passwordHash && record.passwordSalt) {
@@ -89,7 +158,11 @@ function loginWithPassword(email, password) {
       });
     }
   }
-  if (!ok) throw new Error(GENERIC);
+  if (!ok) {
+    recordLoginFailure_(email);   // v7.5
+    throw new Error(GENERIC);
+  }
+  clearLoginFailures_(email);     // v7.5: a good login resets the counter
 
   var now = new Date();
   var token = newToken_();

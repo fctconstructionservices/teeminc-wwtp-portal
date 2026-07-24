@@ -89,21 +89,15 @@ function getAdminEmails_() {
 //  AUTH
 // ============================================================
 
-function loginUser(email, password) {
-  email = String(email || '').trim().toLowerCase();
-  const users = readAll_('Users');
-  const record = users.find(function (u) { return String(u.email).toLowerCase() === email; });
-  if (!record) {
-    throw new Error('This email is not registered. Please contact your administrator for access.');
-  }
-  if (String(record.password) !== String(password)) {
-    throw new Error('Invalid password. Please try again.');
-  }
-  return {
-    email: record.email,
-    name: record.name,
-    role: record.role,
-    roleLabel: record.roleLabel,
-    loggedIn: true
-  };
-}
+/**
+ * loginUser - REMOVED in v7.5.
+ *
+ * This was the pre-token login. It compared plaintext passwords, and it
+ * returned a different error for "unknown email" than for "wrong
+ * password", which allowed anyone to enumerate valid accounts. It also
+ * issued no session token, so nothing it returned could be trusted.
+ *
+ * Authentication now goes exclusively through loginWithPassword in
+ * 20-SessionService.gs, which hashes passwords, rate-limits attempts,
+ * and issues a server-side session.
+ */

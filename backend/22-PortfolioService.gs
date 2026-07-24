@@ -31,7 +31,7 @@ function getPortfolioData() {
   clients.forEach(function (c) { clientById[c.id] = c.name || c.clientName || ''; });
 
   var allSOW = readAll_('SOWItems');
-  var allDaily = readAll_('DailyRecords');
+  var allDaily = liveDailyRecords_();
   var allBillings = readAll_('Billings');
   var allVOs = readAll_('VariationOrders');
   var allReleases = readAll_('CashRelease');

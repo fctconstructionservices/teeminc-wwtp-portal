@@ -15,6 +15,18 @@
 //  DAILY RECORDS
 // ============================================================
 
+/**
+ * liveDailyRecords_ (v7.5) - Every daily record EXCEPT soft-deleted ones.
+ *
+ * Soft delete only works if deleted rows disappear from every read path;
+ * a single missed filter would leave "deleted" records still counting
+ * toward progress, stock and earned value. Centralising the rule here
+ * means new code gets it by default instead of having to remember.
+ */
+function liveDailyRecords_() {
+  return liveDailyRecords_().filter(function (d) { return !d.deletedAt; });
+}
+
 function addDailyRecord(projectId, data) {
   assertProjectEditor_(projectId);   // v6.6
   // ─── v3 SERVER-SIDE GUARD: one non-rejected record per date ───
@@ -26,7 +38,7 @@ function addDailyRecord(projectId, data) {
   // 'yyyy-MM-dd' NEVER matched — the guard silently let duplicates in.
   // Normalizing both sides with fmtDate_ makes the compare reliable.
   const wanted = fmtDate_(data.date);
-  const dup = readAll_('DailyRecords').find(function (d) {
+  const dup = liveDailyRecords_().find(function (d) {
     return d.projectId === projectId &&
       fmtDate_(d.date) === wanted &&
       d.status !== 'rejected';
@@ -79,7 +91,7 @@ function addDailyRecord(projectId, data) {
   const usedRows = data.materialsUsed || [];
   if (usedRows.length) {
     const stock = {};
-    readAll_('DailyRecords').forEach(function (d) {
+    liveDailyRecords_().forEach(function (d) {
       if (d.projectId !== projectId || d.status === 'rejected') return;
       safeParse_(d.materialsDeliveredJSON, []).forEach(function (m) {
         if (!m.material) return;
@@ -154,7 +166,7 @@ function rejectDailyRecord(recordId) {
 }
 
 function getPendingDailyRecords() {
-  return readAll_('DailyRecords').filter(function (d) { return d.status === 'pending'; });
+  return liveDailyRecords_().filter(function (d) { return d.status === 'pending'; });
 }
 
 /**
@@ -182,7 +194,7 @@ function updateDailyRecord(recordId, data) {
 
   // duplicate-date guard, excluding this record itself
   const wanted = fmtDate_(data.date);
-  const dup = readAll_('DailyRecords').find(function (d) {
+  const dup = liveDailyRecords_().find(function (d) {
     return d.id !== recordId && d.projectId === projectId &&
       fmtDate_(d.date) === wanted && d.status !== 'rejected';
   });
@@ -192,7 +204,7 @@ function updateDailyRecord(recordId, data) {
   const usedRows = data.materialsUsed || [];
   if (usedRows.length) {
     const stock = {};
-    readAll_('DailyRecords').forEach(function (d) {
+    liveDailyRecords_().forEach(function (d) {
       if (d.id === recordId) return;   // exclude self — its new rows are validated below
       if (d.projectId !== projectId || d.status === 'rejected') return;
       safeParse_(d.materialsDeliveredJSON, []).forEach(function (m) {
@@ -245,14 +257,22 @@ function updateDailyRecord(recordId, data) {
 }
 
 /**
- * deleteDailyRecord (v6.4) - Deletes a DRAFT record. Only the creator or
- * the Super Admin; submitted/approved records are permanent.
+ * deleteDailyRecord (soft delete, v7.5) - Marks a DRAFT record as deleted
+ * instead of removing the row.
+ *
+ * The previous behaviour destroyed the row immediately, so a misclick was
+ * unrecoverable unless a spreadsheet backup happened to exist. Records now
+ * disappear from every view but remain on the sheet, restorable by a Super
+ * Admin for 30 days, after which purgeDeletedRecords() clears them.
+ *
+ * Only the creator or the Super Admin may delete, and only while the
+ * record is still a draft - submitted records stay for the approval trail.
  */
 function deleteDailyRecord(recordId) {
   const rec = readAll_('DailyRecords').find(function (d) { return d.id === recordId; });
   if (!rec) throw new Error('Daily record not found.');
   if (rec.status !== 'draft') throw new Error('Only draft records can be deleted.');
-  assertProjectEditor_(rec.projectId);   // v6.6
+  if (rec.deletedAt) throw new Error('This record is already deleted.');
 
   const me = currentUserEmail_().toLowerCase();
   const user = readAll_('Users').find(function (u) { return u.email.toLowerCase() === me; });
@@ -261,7 +281,82 @@ function deleteDailyRecord(recordId) {
     throw new Error('Only the creator can delete this draft.');
   }
 
-  deleteRow_('DailyRecords', 'id', recordId);
-  logActivity_('Daily record ' + recordId + ' (draft, ' + fmtDate_(rec.date) + ') deleted', 'a', recordId);
+  updateRow_('DailyRecords', 'id', recordId, {
+    deletedAt: new Date(),
+    deletedBy: currentUserEmail_()
+  });
+  logActivity_('Daily record ' + recordId + ' (draft, ' + fmtDate_(rec.date) + ') deleted - recoverable for 30 days', 'a', recordId);
   return { success: true };
+}
+
+/**
+ * listDeletedRecords (v7.5) - Super Admin view of what can still be
+ * restored, newest first, with the days remaining before purge.
+ */
+function listDeletedRecords(projectId) {
+  requireSuperAdmin_('viewing deleted records');
+  const now = new Date();
+  return readAll_('DailyRecords')
+    .filter(function (d) {
+      if (!d.deletedAt) return false;
+      return !projectId || d.projectId === projectId;
+    })
+    .map(function (d) {
+      const del = new Date(d.deletedAt);
+      const age = isNaN(del) ? 0 : Math.floor((now - del) / 86400000);
+      return {
+        id: d.id,
+        projectId: d.projectId,
+        date: fmtDate_(d.date),
+        createdBy: d.createdBy || '',
+        deletedAt: fmtDate_(d.deletedAt),
+        deletedBy: d.deletedBy || '',
+        daysLeft: Math.max(0, 30 - age)
+      };
+    })
+    .sort(function (a, b) { return a.deletedAt < b.deletedAt ? 1 : -1; });
+}
+
+/**
+ * restoreDailyRecord (v7.5) - Brings a soft-deleted draft back.
+ *
+ * The duplicate-date rule is re-checked at restore time: another record
+ * may have been created for the same date while this one was deleted, and
+ * restoring blindly would break the one-record-per-date guarantee.
+ */
+function restoreDailyRecord(recordId) {
+  requireSuperAdmin_('restoring a deleted record');
+  const rec = readAll_('DailyRecords').find(function (d) { return d.id === recordId; });
+  if (!rec) throw new Error('Daily record not found.');
+  if (!rec.deletedAt) throw new Error('This record is not deleted.');
+
+  const wanted = fmtDate_(rec.date);
+  const clash = readAll_('DailyRecords').find(function (d) {
+    return d.id !== recordId && d.projectId === rec.projectId &&
+      !d.deletedAt && fmtDate_(d.date) === wanted && d.status !== 'rejected';
+  });
+  if (clash) {
+    throw new Error('Cannot restore: another record already exists for ' + wanted +
+      ' (' + clash.id + '). Remove or re-date that record first.');
+  }
+
+  updateRow_('DailyRecords', 'id', recordId, { deletedAt: '', deletedBy: '' });
+  logActivity_('Daily record ' + recordId + ' (' + wanted + ') restored', 'g', recordId);
+  return { success: true };
+}
+
+/**
+ * purgeDeletedRecords (v7.5) - Permanently removes records deleted more
+ * than 30 days ago. Safe to run from a daily trigger, or manually.
+ */
+function purgeDeletedRecords() {
+  const cutoff = new Date(new Date().getTime() - 30 * 86400000);
+  const old = readAll_('DailyRecords').filter(function (d) {
+    if (!d.deletedAt) return false;
+    const del = new Date(d.deletedAt);
+    return !isNaN(del) && del < cutoff;
+  });
+  old.forEach(function (d) { deleteRow_('DailyRecords', 'id', d.id); });
+  if (old.length) logActivity_('Purged ' + old.length + ' record(s) deleted over 30 days ago', 'a');
+  return { success: true, purged: old.length };
 }

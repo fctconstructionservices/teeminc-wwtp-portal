@@ -48,7 +48,7 @@ function availableAt_(loc, itemType) {
   };
 
   if (loc !== WAREHOUSE_LOC) {
-    var records = readAll_('DailyRecords').filter(function (d) {
+    var records = liveDailyRecords_().filter(function (d) {
       return d.projectId === loc && d.status !== 'rejected';
     });
     if (itemType === 'Material') {

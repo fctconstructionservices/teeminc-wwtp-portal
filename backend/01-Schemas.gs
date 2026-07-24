@@ -36,6 +36,8 @@ const TABS = {
   BILLINGS: 'Billings',
   TRANSFERS: 'Transfers',
   SESSIONS: 'Sessions',
+  LOGIN_ATTEMPTS: 'LoginAttempts',
+  LOGIN_ATTEMPTS: 'LoginAttempts',
   VARIATION_ORDERS: 'VariationOrders'
 };
 
@@ -66,9 +68,14 @@ const SCHEMAS = {
     'budgetMode', 'predecessors', 'isMilestone', 'baselineStart', 'baselineEnd'],
   // v6: materialsUsedJSON appended — consumption rows; site stock =
   // delivered − used, computed live in getProjectData.
+  // v7.5: deletedAt/deletedBy implement SOFT DELETE. Deleting a draft used
+  // to remove the row outright, which made an accidental click permanent
+  // and unrecoverable without a spreadsheet backup. The row is now kept
+  // and hidden, restorable by a Super Admin, and purged after 30 days.
   DailyRecords: ['id', 'projectId', 'date', 'weatherAM', 'weatherPM', 'status',
     'manpowerJSON', 'equipmentJSON', 'workAccomplishedJSON', 'materialsDeliveredJSON',
-    'issuesJSON', 'visitorsJSON', 'photosJSON', 'createdBy', 'createdAt', 'materialsUsedJSON'],
+    'issuesJSON', 'visitorsJSON', 'photosJSON', 'createdBy', 'createdAt', 'materialsUsedJSON',
+    'deletedAt', 'deletedBy'],
   // v3: submittedBy appended — who sent the estimate for approval,
   // so the Approve button can be hidden from the submitter.
   EstimateGroups: ['id', 'projectId', 'sowId', 'sowDescription', 'status', 'submittedBy'],
@@ -135,6 +142,16 @@ const SCHEMAS = {
   // authenticated call, so an active user is never interrupted and an
   // idle one is logged out.
   Sessions: ['token', 'email', 'createdAt', 'lastSeen', 'expiresAt', 'revoked', 'viewAs'],
+
+  // v7.5: brute-force protection. One row per email, holding the running
+  // count of consecutive failures and the time a lockout expires. Rows
+  // are cleared on a successful login, so this stays small.
+  LoginAttempts: ['email', 'failCount', 'lastFailAt', 'lockedUntil'],
+
+  // v7.5: failed-login tracking. Without this, an attacker holding the
+  // /exec URL can try passwords indefinitely at machine speed. Rows are
+  // cleared on a successful login and swept periodically.
+  LoginAttempts: ['email', 'failCount', 'firstFailAt', 'lastFailAt', 'lockedUntil'],
 
   Approvals: ['requestId', 'approver', 'decision', 'timestamp', 'remarks'],
   ActivityLog: ['timestamp', 'text', 'type', 'refId']

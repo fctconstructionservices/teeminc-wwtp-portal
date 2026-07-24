@@ -101,7 +101,7 @@ function getPendingApprovals() {
   const equipment = readAll_('Equipment').filter(function (e) { 
     return low_(e.status) === 'pending' && e.requestedBy && e.requestedBy.toLowerCase() !== userEmail; 
   });
-  const dailyRecords = readAll_('DailyRecords').filter(function (d) { 
+  const dailyRecords = liveDailyRecords_().filter(function (d) { 
     return d.status === 'pending' && d.createdBy && d.createdBy.toLowerCase() !== userEmail; 
   });
   // v5 (item 13): exclude the submitter — same rule as every other type.
@@ -154,7 +154,7 @@ function getMyPendingRequests() {
     return e.requestedBy && e.requestedBy.toLowerCase() === email && low_(e.status) === 'pending'; 
   }).map(function(e) { e.type = 'Equipment'; return e; });
   
-  const dailyRecords = readAll_('DailyRecords').filter(function (d) { 
+  const dailyRecords = liveDailyRecords_().filter(function (d) { 
     return d.createdBy && d.createdBy.toLowerCase() === email && d.status === 'pending'; 
   }).map(function(d) { d.type = 'DailyRecord'; return d; });
   
@@ -191,7 +191,7 @@ function getMyApprovedRequests() {
     return e.requestedBy && e.requestedBy.toLowerCase() === email && e.status === 'approved'; 
   }).map(function(e) { e.type = 'Equipment'; return e; });
   
-  const dailyRecords = readAll_('DailyRecords').filter(function (d) { 
+  const dailyRecords = liveDailyRecords_().filter(function (d) { 
     return d.createdBy && d.createdBy.toLowerCase() === email && d.status === 'approved'; 
   }).map(function(d) { d.type = 'DailyRecord'; return d; });
 
@@ -224,7 +224,7 @@ function getMyRejectedRequests() {
     return e.requestedBy && e.requestedBy.toLowerCase() === email && e.status === 'rejected'; 
   }).map(function(e) { e.type = 'Equipment'; return e; });
   
-  const dailyRecords = readAll_('DailyRecords').filter(function (d) { 
+  const dailyRecords = liveDailyRecords_().filter(function (d) { 
     return d.createdBy && d.createdBy.toLowerCase() === email && d.status === 'rejected'; 
   }).map(function(d) { d.type = 'DailyRecord'; return d; });
 
