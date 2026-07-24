@@ -280,6 +280,7 @@ Object.assign(ProjectPage, {
         let html = `
             <div class="add-record-toggle">
                 ${this._canEdit !== false ? `<button class="btn-ghost" onclick="ProjectPage.toggleAddRecord()">+ Add Daily Site Record</button>` : ''}
+                ${(App.getUser() || {}).role === 'superadmin' ? `<button class="btn-sm" style="margin-left:8px;" onclick="ProjectPage.openDeletedRecords()">🗑 Recently Deleted</button>` : ''}
             </div>
             <div class="add-record-form" id="dailyAddForm">
                 ${this._buildDailyFormHTML()}
@@ -565,6 +566,63 @@ Object.assign(ProjectPage, {
         this._renderDailyStep();
     },
 
+
+    /**
+     * openDeletedRecords (v7.5) - Super Admin recovery view.
+     *
+     * Deleted drafts are retained for 30 days rather than removed, so an
+     * accidental deletion is a nuisance instead of data loss.
+     */
+    async openDeletedRecords() {
+        let rows = [];
+        try {
+            rows = await DataService.listDeletedRecords(this._currentProjectId);
+        } catch (err) { UI.toast('' + err.message, 'error'); return; }
+
+        const overlay = document.createElement('div');
+        overlay.id = 'deletedRecordsModal';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(28,35,33,.55);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;';
+        overlay.innerHTML = `
+            <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;max-width:640px;width:100%;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;">
+                <div style="padding:13px 18px;border-bottom:1px solid var(--line);background:var(--blueprint-tint);display:flex;justify-content:space-between;align-items:center;">
+                    <h3 style="font-family:'Oswald';font-size:13px;text-transform:uppercase;color:var(--blueprint);margin:0;">Recently Deleted</h3>
+                    <span style="cursor:pointer;color:var(--ink-soft);" onclick="document.getElementById('deletedRecordsModal').remove()">✕</span>
+                </div>
+                <div style="padding:14px 18px;overflow:auto;">
+                    ${rows.length ? `
+                    <table><thead><tr>
+                        <th>Date</th><th>Record</th><th>Deleted By</th><th>Deleted</th><th style="text-align:right">Days Left</th><th></th>
+                    </tr></thead><tbody>
+                    ${rows.map(r => `<tr>
+                        <td class="mono" style="font-size:11.5px">${r.date}</td>
+                        <td><span class="req-id">${r.id}</span></td>
+                        <td style="font-size:11.5px;color:var(--ink-soft)">${r.deletedBy}</td>
+                        <td class="mono" style="font-size:11px">${r.deletedAt}</td>
+                        <td class="amt"><span class="stamp ${r.daysLeft <= 7 ? 'rejected' : 'pending'}">${r.daysLeft}</span></td>
+                        <td><button class="btn-sm success" onclick="ProjectPage.restoreRecord('${r.id}')">Restore</button></td>
+                    </tr>`).join('')}
+                    </tbody></table>` : `
+                    <div class="empty">
+                        <div class="empty-ico">🗑</div>
+                        <h4>Nothing deleted</h4>
+                        <p>Deleted drafts appear here for 30 days before being permanently removed.</p>
+                    </div>`}
+                </div>
+            </div>`;
+        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+        document.body.appendChild(overlay);
+    },
+
+    async restoreRecord(id) {
+        try {
+            await DataService.restoreDailyRecord(id);
+            UI.toast('Record restored.', 'success');
+            const m = document.getElementById('deletedRecordsModal');
+            if (m) m.remove();
+            await this.open(this._currentProjectId, true);
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
+
     toggleAddRecord() {
         const form = document.getElementById('dailyAddForm');
         if (form) form.classList.toggle('open');
@@ -653,7 +711,7 @@ Object.assign(ProjectPage, {
     },
 
     async deleteDailyRecordUI(id) {
-        const ok = await Confirm.open('Delete draft?', 'This permanently removes the draft record. This cannot be undone.');
+        const ok = await Confirm.open('Delete draft?', 'The draft will be hidden and can be restored by a Super Admin for 30 days.');
         if (!ok) return;
         try {
             await DataService.deleteDailyRecord(id);

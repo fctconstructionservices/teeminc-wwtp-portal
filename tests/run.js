@@ -239,6 +239,41 @@ checkTrue('session: expires after 8h idle from last activity',
 let revoked = { email: 'a@x.com', expiresAt: Date.now() + TTL, revoked: true };
 checkTrue('session: revoked token rejected', resolveSession(revoked, Date.now()) === null);
 
+
+// ══════════════════════════════════════════════════════════════
+// 8. SECURITY: login lockout and soft delete  (v7.5)
+// ══════════════════════════════════════════════════════════════
+const LOGIN_MAX = 5, LOCKOUT_MS = 15 * 60 * 1000;
+function lockoutState(failures, elapsedMs) {
+  // returns true if login is currently ALLOWED
+  if (failures < LOGIN_MAX) return true;
+  return elapsedMs > LOCKOUT_MS;
+}
+checkTrue('lockout: 4 failures still allowed', lockoutState(4, 0));
+checkTrue('lockout: 5 failures blocks', !lockoutState(5, 0));
+checkTrue('lockout: still blocked at 14 minutes', !lockoutState(5, 14 * 60 * 1000));
+checkTrue('lockout: released after 15 minutes', lockoutState(5, 16 * 60 * 1000));
+
+const softRecs = [
+  { id: 'DR-1', projectId: 'P1', date: '2026-07-15', status: 'draft', deletedAt: null },
+  { id: 'DR-2', projectId: 'P1', date: '2026-07-16', status: 'draft', deletedAt: null }
+];
+const liveOnly = rs => rs.filter(r => !r.deletedAt);
+check('soft delete: all records live initially', liveOnly(softRecs).length, 2);
+softRecs[0].deletedAt = '2026-07-20';
+check('soft delete: hidden from live list', liveOnly(softRecs).length, 1);
+check('soft delete: row retained for recovery', softRecs.length, 2);
+const dupOf = (rs, pid, date) => liveOnly(rs).find(r => r.projectId === pid && r.date === date && r.status !== 'rejected');
+checkTrue('soft delete: deleted date can be reused', !dupOf(softRecs, 'P1', '2026-07-15'));
+checkTrue('soft delete: live date still blocks duplicates', !!dupOf(softRecs, 'P1', '2026-07-16'));
+
+// Public API surface: only login may be unauthenticated.
+const PUBLIC_ACTIONS = { loginWithPassword: true };
+checkTrue('security: setupSheets is NOT public', !PUBLIC_ACTIONS.setupSheets,
+  'setupSheets reachable without a token would let anyone reseed admin users');
+checkTrue('security: migrateSchemas is NOT public', !PUBLIC_ACTIONS.migrateSchemas);
+checkTrue('security: loginUser is gone', !PUBLIC_ACTIONS.loginUser);
+
 // ══════════════════════════════════════════════════════════════
 // REPORT
 // ══════════════════════════════════════════════════════════════

@@ -13,7 +13,7 @@
 //  wrapper method here — pages never call fetch() directly.
 // ================================================================
 
-const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbwoInhyBINQwtEw66Dh94xT1q6L9aC225NtN86FSygY1PiaUbfBTPhciShCor-puMuc/exec';
+const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbw6f2tk5aSYY1Pz-c0vQ_9wTCCbd_KBTdqT-8oRYQbO9mxUjrUY-SWchtqYX9iEaqjV/exec';
 
 /**
  * getCurrentUserEmail - Retrieves the current user's email from localStorage
@@ -104,8 +104,13 @@ const DataService = {
     _equipment: [],
 
     // ─── AUTH ──────────────────────────────────────────────────
+    /**
+     * login - kept only so older call sites keep working; the legacy
+     * plaintext endpoint was removed in v7.5. Delegates to the session
+     * login, which is the single authentication path.
+     */
     async login(email, password) {
-        return await gasCall('loginUser', email, password);
+        return await gasCall('loginWithPassword', email, password);
     },
 
     // ─── HOME ──────────────────────────────────────────────────
@@ -231,6 +236,13 @@ const DataService = {
     // v6.4: draft daily record edit/delete
     async updateDailyRecord(recordId, data) {
         return await gasCall('updateDailyRecord', recordId, data);
+    },
+    // v7.5: soft-delete recovery (Super Admin)
+    async listDeletedRecords(projectId) {
+        return await gasCall('listDeletedRecords', projectId);
+    },
+    async restoreDailyRecord(recordId) {
+        return await gasCall('restoreDailyRecord', recordId);
     },
     async deleteDailyRecord(recordId) {
         return await gasCall('deleteDailyRecord', recordId);
