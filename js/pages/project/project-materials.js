@@ -29,7 +29,7 @@ Object.assign(ProjectPage, {
             <div class="section-head"><h2>Material Balance</h2><div class="rule"></div>
                 <input id="siteMatSearch" placeholder="Search material..." oninput="ProjectPage.filterSiteMaterials(this.value)"
                     style="border:1px solid var(--line);border-radius:6px;padding:5px 10px;font-size:11px;background:var(--surface);color:var(--ink);" />
-                ${this._canEdit !== false ? `<button class="btn-sm primary" onclick="ProjectPage.openTransferModal()">⇄ New Transfer</button>` : ''}
+                ${this._canEdit !== false ? `<button class="btn-sm primary" onclick="ProjectPage.openTransferModal('Material')">⇄ New Transfer</button>` : ''}
             </div>
             <div class="panel"><table><thead><tr>
                 <th>Material</th><th>Unit</th>
@@ -107,22 +107,25 @@ Object.assign(ProjectPage, {
     },
 
 
-    // ════════ v6.9: TRANSFERS ════════
+    // ════════ v6.9 / v8: TRANSFERS ════════
 
     /**
-     * openTransferModal - Source defaults to this project. Item list is
-     * fetched per source+type so you can only move what actually exists
-     * there; qty is capped at the live available amount (the server
-     * re-checks on approval, since stock can move in between).
+     * openTransferModal(itemType) - v8 rewrite:
+     *   - The Type dropdown is GONE. Site Materials opens a Material
+     *     transfer; the Equipment tab opens an Equipment transfer.
+     *   - MULTIPLE items can be moved in one request: each line has
+     *     its own item + qty, validated against live source stock;
+     *     the whole batch submits together (requestTransferBatch).
      */
-    async openTransferModal() {
+    async openTransferModal(itemType) {
+        this._trfType = itemType === 'Equipment' ? 'Equipment' : 'Material';
         const overlay = document.createElement('div');
         overlay.id = 'transferModal';
         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(28,35,33,.55);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;';
         overlay.innerHTML = `
-            <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;max-width:470px;width:100%;max-height:86vh;display:flex;flex-direction:column;overflow:hidden;">
+            <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;max-width:540px;width:100%;max-height:86vh;display:flex;flex-direction:column;overflow:hidden;">
                 <div style="padding:13px 18px;border-bottom:1px solid var(--line);background:var(--blueprint-tint);display:flex;justify-content:space-between;align-items:center;">
-                    <h3 style="font-family:'Oswald';font-size:13px;text-transform:uppercase;color:var(--blueprint);margin:0;">New Transfer</h3>
+                    <h3 style="font-family:'Oswald';font-size:13px;text-transform:uppercase;color:var(--blueprint);margin:0;">New ${this._trfType} Transfer</h3>
                     <span style="cursor:pointer;color:var(--ink-soft);" onclick="document.getElementById('transferModal').remove()">✕</span>
                 </div>
                 <div style="padding:14px 18px;overflow:auto;" id="trfBody">
@@ -137,8 +140,9 @@ Object.assign(ProjectPage, {
         document.body.appendChild(overlay);
 
         try {
-            const opts = await DataService.getTransferOptions(this._currentProjectId, 'Material');
+            const opts = await DataService.getTransferOptions(this._currentProjectId, this._trfType);
             this._trfLocations = opts.locations || [];
+            this._trfItems = opts.items || [];
             const body = document.getElementById('trfBody');
             if (!body) return;
             const locOpts = (sel) => this._trfLocations.map(l =>
@@ -150,21 +154,16 @@ Object.assign(ProjectPage, {
                     <div style="margin-bottom:11px;"><label style="display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:3px;">To</label>
                         <select id="trf-to" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--surface);color:var(--ink);">${locOpts('WAREHOUSE')}</select></div>
                 </div>
-                <div style="margin-bottom:11px;"><label style="display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:3px;">Type</label>
-                    <select id="trf-type" onchange="ProjectPage.reloadTransferItems()" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--surface);color:var(--ink);">
-                        <option value="Material">Material</option><option value="Equipment">Equipment</option></select></div>
-                <div style="margin-bottom:11px;"><label style="display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:3px;">Item (only items available at the source)</label>
-                    <select id="trf-item" onchange="ProjectPage.syncTransferMax()" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--surface);color:var(--ink);">${this._transferItemOptions(opts.items)}</select></div>
+                <label style="display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:3px;">Items (only items available at the source)</label>
+                <div id="trfLines"></div>
+                <div style="margin:2px 0 12px;"><button class="btn-sm primary" onclick="ProjectPage.addTransferLine()">+ Add Item</button></div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                    <div style="margin-bottom:11px;"><label style="display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:3px;">Qty</label>
-                        <input type="number" id="trf-qty" min="0" step="any" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--surface);color:var(--ink);" />
-                        <div id="trf-max" style="font-size:10px;color:var(--ink-soft);margin-top:3px;"></div></div>
                     <div style="margin-bottom:11px;"><label style="display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:3px;">Date</label>
                         <input type="date" id="trf-date" value="${new Date().toISOString().slice(0, 10)}" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--surface);color:var(--ink);" /></div>
-                </div>
-                <div style="margin-bottom:4px;"><label style="display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:3px;">Reason</label>
-                    <input type="text" id="trf-reason" placeholder="e.g. Surplus stock needed at another site" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--surface);color:var(--ink);" /></div>`;
-            this.syncTransferMax();
+                    <div style="margin-bottom:11px;"><label style="display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:3px;">Reason</label>
+                        <input type="text" id="trf-reason" placeholder="e.g. Surplus needed at another site" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--surface);color:var(--ink);" /></div>
+                </div>`;
+            this.addTransferLine();
         } catch (err) {
             const body = document.getElementById('trfBody');
             if (body) body.innerHTML = `<div style="color:var(--red);font-size:12px;">${err.message}</div>`;
@@ -173,53 +172,93 @@ Object.assign(ProjectPage, {
 
     _transferItemOptions(items) {
         if (!items || !items.length) return '<option value="">- No items available at this location -</option>';
-        return items.map(i =>
+        return '<option value="">Select item...</option>' + items.map(i =>
             `<option value="${String(i.item).replace(/"/g, '&quot;')}" data-max="${i.qty}" data-unit="${i.unit || ''}">${i.item} — available: ${fmtNum(i.qty)} ${i.unit || ''}</option>`
         ).join('');
     },
 
+    /** addTransferLine (v8) - one more item + qty row in the modal. */
+    addTransferLine() {
+        const wrap = document.getElementById('trfLines');
+        if (!wrap) return;
+        const row = document.createElement('div');
+        row.className = 'trf-line';
+        row.style.cssText = 'display:grid;grid-template-columns:1fr 110px 30px;gap:8px;margin-bottom:8px;align-items:start;';
+        row.innerHTML = `
+            <div>
+                <select class="trf-item" onchange="ProjectPage.syncTransferMax(this)" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--surface);color:var(--ink);">${this._transferItemOptions(this._trfItems)}</select>
+            </div>
+            <div>
+                <input type="number" class="trf-qty" min="0" step="any" placeholder="Qty" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--surface);color:var(--ink);" />
+                <div class="trf-max" style="font-size:9.5px;color:var(--ink-soft);margin-top:2px;"></div>
+            </div>
+            <button class="btn-sm danger" title="Remove line" style="margin-top:5px;" onclick="ProjectPage.removeTransferLine(this)">✕</button>`;
+        wrap.appendChild(row);
+    },
+
+    removeTransferLine(btn) {
+        const wrap = document.getElementById('trfLines');
+        const row = btn.closest('.trf-line');
+        if (wrap && row && wrap.children.length > 1) row.remove();
+        else UI.toast('At least one item line is required.', 'error');
+    },
+
     async reloadTransferItems() {
         const from = document.getElementById('trf-from')?.value;
-        const type = document.getElementById('trf-type')?.value || 'Material';
-        const sel = document.getElementById('trf-item');
-        if (!from || !sel) return;
-        sel.innerHTML = '<option value="">Loading…</option>';
+        const wrap = document.getElementById('trfLines');
+        if (!from || !wrap) return;
+        wrap.querySelectorAll('.trf-item').forEach(sel => { sel.innerHTML = '<option value="">Loading…</option>'; });
         try {
-            const opts = await DataService.getTransferOptions(from, type);
-            sel.innerHTML = this._transferItemOptions(opts.items);
-            this.syncTransferMax();
+            const opts = await DataService.getTransferOptions(from, this._trfType);
+            this._trfItems = opts.items || [];
+            wrap.querySelectorAll('.trf-line').forEach(line => {
+                line.querySelector('.trf-item').innerHTML = this._transferItemOptions(this._trfItems);
+                const note = line.querySelector('.trf-max');
+                if (note) note.textContent = '';
+                const qty = line.querySelector('.trf-qty');
+                if (qty) qty.value = '';
+            });
         } catch (err) { UI.toast('' + err.message, 'error'); }
     },
 
-    syncTransferMax() {
-        const sel = document.getElementById('trf-item');
-        const qty = document.getElementById('trf-qty');
-        const note = document.getElementById('trf-max');
-        if (!sel || !qty) return;
+    syncTransferMax(sel) {
+        const line = sel.closest('.trf-line');
+        if (!line) return;
+        const qty = line.querySelector('.trf-qty');
+        const note = line.querySelector('.trf-max');
         const opt = sel.selectedOptions[0];
         const max = opt ? parseFloat(opt.dataset.max) : NaN;
         if (!isNaN(max)) {
-            qty.max = max;
-            if (note) note.textContent = `Max ${fmtNum(max)} ${opt.dataset.unit || ''} - cannot be exceeded`;
+            if (qty) qty.max = max;
+            if (note) note.textContent = `Max ${fmtNum(max)} ${opt.dataset.unit || ''}`;
         } else if (note) note.textContent = '';
     },
 
     async submitTransfer() {
-        const data = {
-            fromLoc: document.getElementById('trf-from')?.value,
-            toLoc: document.getElementById('trf-to')?.value,
-            itemType: document.getElementById('trf-type')?.value,
-            item: document.getElementById('trf-item')?.value,
-            qty: parseFloat(document.getElementById('trf-qty')?.value),
-            transferDate: document.getElementById('trf-date')?.value,
-            reason: document.getElementById('trf-reason')?.value
-        };
-        if (!data.item) { UI.toast('Select an item.', 'error'); return; }
-        if (isNaN(data.qty) || data.qty <= 0) { UI.toast('Enter a valid quantity.', 'error'); return; }
-        if (data.fromLoc === data.toLoc) { UI.toast('Source and destination must be different.', 'error'); return; }
+        const fromLoc = document.getElementById('trf-from')?.value;
+        const toLoc = document.getElementById('trf-to')?.value;
+        if (fromLoc === toLoc) { UI.toast('Source and destination must be different.', 'error'); return; }
+        const items = [];
+        let bad = false;
+        document.querySelectorAll('#trfLines .trf-line').forEach(line => {
+            const item = line.querySelector('.trf-item')?.value;
+            const qty = parseFloat(line.querySelector('.trf-qty')?.value);
+            if (!item && isNaN(qty)) return;   // fully blank line — skip
+            if (!item) { UI.toast('Select an item on every line.', 'error'); bad = true; return; }
+            if (isNaN(qty) || qty <= 0) { UI.toast(`Enter a valid quantity for "${item}".`, 'error'); bad = true; return; }
+            items.push({ item, qty });
+        });
+        if (bad) return;
+        if (!items.length) { UI.toast('Add at least one item to transfer.', 'error'); return; }
         try {
-            const res = await DataService.requestTransfer(data);
-            UI.toast(`${res.id} submitted — awaiting admin approval.`, 'success');
+            const res = await DataService.requestTransferBatch({
+                fromLoc, toLoc,
+                itemType: this._trfType,
+                items: items,
+                transferDate: document.getElementById('trf-date')?.value,
+                reason: document.getElementById('trf-reason')?.value
+            });
+            UI.toast(`${res.count} transfer${res.count > 1 ? 's' : ''} submitted (${res.ids.join(', ')}) — awaiting admin approval.`, 'success');
             const m = document.getElementById('transferModal');
             if (m) m.remove();
             await this.open(this._currentProjectId, true);

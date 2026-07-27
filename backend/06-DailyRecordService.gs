@@ -53,11 +53,17 @@ function addDailyRecord(projectId, data) {
   // silently failing on URLs, which is why photosJSON was always
   // empty. URLs are now stored directly; raw base64 (legacy path) is
   // still decoded and uploaded.
+  // v8: photos may now be objects { url, caption } so the record modal
+  // can show WHAT each picture is. Plain URL strings (legacy) still work.
   const photoUrls = [];
   if (data.photos && data.photos.length) {
     data.photos.forEach(function (photo, index) {
+      if (photo && typeof photo === 'object' && photo.url) {
+        photoUrls.push({ url: String(photo.url), caption: String(photo.caption || '') });
+        return;
+      }
       if (typeof photo === 'string' && photo.indexOf('http') === 0) {
-        photoUrls.push(photo);              // already a Drive URL
+        photoUrls.push(photo);              // already a Drive URL (legacy)
         return;
       }
       try {
@@ -233,10 +239,15 @@ function updateDailyRecord(recordId, data) {
     });
   }
 
-  // new photo uploads are appended to what the draft already holds
+  // new photo uploads are appended to what the draft already holds.
+  // v8: entries may be strings (legacy) or { url, caption } objects —
+  // duplicates are detected by URL either way.
   const existingPhotos = safeParse_(rec.photosJSON, []);
-  const mergedPhotos = existingPhotos.concat((data.photos || []).filter(function (u) {
-    return u && existingPhotos.indexOf(u) === -1;
+  const urlOf_ = function (p) { return (p && typeof p === 'object') ? String(p.url || '') : String(p || ''); };
+  const existingUrls = existingPhotos.map(urlOf_);
+  const mergedPhotos = existingPhotos.concat((data.photos || []).filter(function (p) {
+    const u = urlOf_(p);
+    return u && existingUrls.indexOf(u) === -1;
   }));
 
   updateRow_('DailyRecords', 'id', recordId, {

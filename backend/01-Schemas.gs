@@ -33,6 +33,7 @@ const TABS = {
   ACTIVITY_LOG: 'ActivityLog',
   CLIENT_LISTS: 'ClientLists',
   MANPOWER: 'Manpower',
+  PERSONNEL: 'Personnel',
   BILLINGS: 'Billings',
   TRANSFERS: 'Transfers',
   SESSIONS: 'Sessions',
@@ -64,8 +65,10 @@ const SCHEMAS = {
   //   predecessors -> comma-separated SOW IDs (Finish-to-Start) for the Gantt
   //   isMilestone  -> 'TRUE' for zero-duration milestone tasks
   //   baselineStart/baselineEnd -> snapshot saved via saveBaseline()
+  // v8: sortOrder appended — display order of SOW items (Super Admin can
+  // move items up/down). Blank = legacy row; falls back to sheet order.
   SOWItems: ['id', 'projectId', 'description', 'budget', 'actual', 'startDate', 'endDate', 'status', 'qty', 'unit',
-    'budgetMode', 'predecessors', 'isMilestone', 'baselineStart', 'baselineEnd'],
+    'budgetMode', 'predecessors', 'isMilestone', 'baselineStart', 'baselineEnd', 'sortOrder'],
   // v6: materialsUsedJSON appended — consumption rows; site stock =
   // delivered − used, computed live in getProjectData.
   // v7.5: deletedAt/deletedBy implement SOFT DELETE. Deleting a draft used
@@ -117,6 +120,13 @@ const SCHEMAS = {
   // v3 NEW: manpower role catalog (Option A — roles/trades, not individuals).
   // Same request -> Pending -> approved flow as Materials/Equipment.
   Manpower: ['id', 'code', 'role', 'classification', 'notes', 'status', 'requestedBy', 'createdAt'],
+
+  // v8 NEW: Personnel directory — ACTUAL PEOPLE (names), separate from
+  // the Manpower role catalog above. Roles feed the Estimates (planning);
+  // Personnel are the real names used for actual site execution.
+  // status: 'active' | 'inactive' (operational data, no multi-sig needed).
+  Personnel: ['id', 'name', 'role', 'classification', 'contactNumber', 'dailyRate',
+    'notes', 'status', 'addedBy', 'createdAt', 'updatedAt'],
 
   // v6 NEW: progress billings. gross = (currentPct − prevPct) × revised
   // contract; retention withheld; Paid creates an Approved IncomingCash.

@@ -174,7 +174,7 @@ Object.assign(ProjectPage, {
             html += `<div class="empty"><p>No SOW items yet. Click "+ Add SOW" to create one.</p></div>`;
         }
 
-        sowItems.forEach(item => {
+        sowItems.forEach((item, idx) => {
             totalBudget += parseFloat(item.budget || 0);
             totalActual += parseFloat(item.actual || 0);
 
@@ -307,6 +307,13 @@ Object.assign(ProjectPage, {
                                 ⏳ Review
                             </button>` : ''
                         }
+                        ${(App.getUser() || {}).role === 'superadmin' ? `
+                        <span style="margin-left:auto;display:inline-flex;gap:4px;" title="Super Admin controls">
+                            <button class="btn-sm" title="Move up" ${idx === 0 ? 'disabled style="opacity:.35;"' : ''} onclick="event.stopPropagation();ProjectPage.moveSOW('${item.id}','up')">↑</button>
+                            <button class="btn-sm" title="Move down" ${idx === sowItems.length - 1 ? 'disabled style="opacity:.35;"' : ''} onclick="event.stopPropagation();ProjectPage.moveSOW('${item.id}','down')">↓</button>
+                            <button class="btn-sm" title="Edit name" onclick="event.stopPropagation();ProjectPage.renameSOW('${item.id}')">✎</button>
+                            <button class="btn-sm danger" title="Delete SOW" onclick="event.stopPropagation();ProjectPage.deleteSOW('${item.id}')">🗑</button>
+                        </span>` : ''}
                     </div>
                 </div>`;
         });
@@ -447,4 +454,49 @@ Object.assign(ProjectPage, {
         } catch (err) { console.error('SOW chart error:', err); }
     },
 
+});
+// ════════ v8: SUPER ADMIN SOW CONTROLS ════════
+// Rename / reorder / delete SOW items straight from the SOW Budget
+// tab. Server-side these are Super Admin-gated too (moveSOWItem is
+// requireSuperAdmin_; delete/update go through updateSOWItem's
+// existing role checks) — the UI gating here is convenience only.
+
+Object.assign(ProjectPage, {
+
+    async moveSOW(sowId, direction) {
+        try {
+            await DataService.moveSOWItem(this._currentProjectId, sowId, direction);
+            await this.open(this._currentProjectId, true);
+            this.switchTab('sow');
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
+
+    async renameSOW(sowId) {
+        const item = (this._data.sowItems || []).find(s => s.id === sowId);
+        if (!item) return;
+        const current = item.description || '';
+        const name = prompt(`New name for ${sowId}:`, current);
+        if (name === null) return;                       // cancelled
+        const trimmed = name.trim();
+        if (!trimmed || trimmed === current) return;
+        try {
+            await DataService.updateSOWItem(this._currentProjectId, sowId, { description: trimmed });
+            UI.toast(`${sowId} renamed.`, 'success');
+            await this.open(this._currentProjectId, true);
+            this.switchTab('sow');
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
+
+    async deleteSOW(sowId) {
+        const item = (this._data.sowItems || []).find(s => s.id === sowId);
+        const ok = await Confirm.open(`Delete ${sowId}?`,
+            `"${item ? item.description : sowId}" will be removed from the SOW list, together with its schedule bar. Its estimate group (if any) will be orphaned. This cannot be undone.`);
+        if (!ok) return;
+        try {
+            await DataService.deleteSOWItem(this._currentProjectId, sowId);
+            UI.toast(`${sowId} deleted.`, 'success');
+            await this.open(this._currentProjectId, true);
+            this.switchTab('sow');
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    }
 });

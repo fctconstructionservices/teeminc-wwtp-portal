@@ -243,3 +243,24 @@ function reviseBilling(id, clientPct) {
   logActivity_('Billing ' + b.billingNo + ' superseded by client evaluation — revised to ' + pct + '% as ' + b.billingNo + '-R (₱' + fmtMoney_(net) + ' net), for approval', 'blue', newId);
   return { success: true, id: newId, billingNo: b.billingNo + '-R' };
 }
+/**
+ * deleteBilling (v8) - Super Admin only. Removes a billing that is NOT
+ * yet finalized (Pending only — Approved/Paid billings are financial
+ * history and must never be deleted; Rejected/Superseded rows are kept
+ * as an audit trail). Lets a wrongly-generated billing be redone
+ * cleanly before any admin signs it... or after rejection via revise.
+ */
+function deleteBilling(id) {
+  var me = currentUserEmail_().toLowerCase();
+  var user = readAll_('Users').find(function (u) { return u.email.toLowerCase() === me; });
+  if (!user || user.role !== 'superadmin') throw new Error('Only the Super Admin can delete a billing.');
+  var b = readAll_('Billings').find(function (x) { return x.id === id; });
+  if (!b) throw new Error('Billing not found.');
+  if (b.status !== 'Pending') {
+    throw new Error('Only PENDING billings can be deleted. "' + b.status + '" billings are kept as history (use Revise % instead).');
+  }
+  var rowNum = findRowNum_('Billings', 'id', id);
+  if (rowNum > -1) sheet_('Billings').deleteRow(rowNum);
+  logActivity_('Billing ' + (b.billingNo || id) + ' DELETED by Super Admin (was Pending)', 'a', id);
+  return { success: true };
+}

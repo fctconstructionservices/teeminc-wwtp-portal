@@ -450,5 +450,32 @@ const DataService = {
     // ─── SOW ITEMS FOR PROJECT ────────────────────────────────
     async getSOWItemsForProject(projectId) {
         return await gasCall('getSOWItemsForProject', projectId);
+    },
+
+    // ─── v8 ───────────────────────────────────────────────────
+    // Batch transfers: multiple items moved in one request
+    async requestTransferBatch(data) {
+        return await gasCall('requestTransferBatch', data);
+    },
+    // SOW reordering (Super Admin)
+    async moveSOWItem(projectId, sowId, direction) {
+        return await gasCall('moveSOWItem', projectId, sowId, direction);
+    },
+    // Delete a still-pending billing (Super Admin)
+    async deleteBilling(id) {
+        return await gasCall('deleteBilling', id);
+    },
+    // Personnel directory (actual people)
+    _personnel: [],
+    async getAllPersonnel() {
+        const list = await gasCall('getAllPersonnel');
+        this._personnel = list;
+        return list;
+    },
+    async addPersonnel(data) {
+        return await gasCall('addPersonnel', data);
+    },
+    async updatePersonnel(id, data) {
+        return await gasCall('updatePersonnel', id, data);
     }
 };

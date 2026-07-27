@@ -1,47 +1,73 @@
 // ================================================================
-//  pages/materials.js — Materials database page
+//  pages/materials.js — Materials database page (v8)
 //
-//  PURPOSE: Approved/Pending catalog views with search, the
-//  material detail datasheet (MatPrintModal) and the role-gated
-//  Approve action. New entries are requested through the material
-//  request form (features/form-submissions.js).
+//  PURPOSE: Approved/Pending/Warehouse catalog views with search,
+//  the material detail datasheet (MatPrintModal) and the role-gated
+//  Approve action.
+//
+//  v8 UX REWRITE:
+//   - The list is fetched ONCE and cached; switching Approved /
+//     Pending / Warehouse re-renders INSTANTLY from the cache (no
+//     loading spinner, no server round-trip).
+//   - Search is CLIENT-SIDE and instant: typing filters the cached
+//     list without any server call, and only the list re-renders so
+//     the search box never loses focus.
+//   - Clicking a material gives immediate visual feedback (pressed
+//     state) and opens the modal from the cache — no refetch.
+//   - Warehouse stock is cached after the first view, with a manual
+//     Refresh button.
 // ================================================================
 
 const MaterialsPage = {
     _allMaterials: [],
+    _warehouse: null,
     _currentFilter: 'approved',
-    _searchResults: null, // null means use filter
+    _query: '',
+    _loaded: false,
 
-    async load() {
-        this._searchResults = null; // clear search
-        // v6.9: warehouse is rendered from transfers, not the material list
-        if (this._currentFilter === 'warehouse') { await this.renderWarehouse(); return; }
+    async load(force) {
         const container = document.getElementById('materialsContent');
-        UI.showLoading(container);
-        try {
-            this._allMaterials = (await DataService.getAllMaterials() || []).map(x => ({ ...x, status: String(x.status || '').toLowerCase() }));   // v6.1: legacy rows hold 'Pending'
-            this.render(container);
-        } catch (err) { console.error('Materials error:', err);
-            UI.toast('Error loading materials.', 'error'); }
+        if (!this._loaded || force) {
+            UI.showLoading(container);
+            try {
+                this._allMaterials = (await DataService.getAllMaterials() || []).map(x => ({ ...x, status: String(x.status || '').toLowerCase() }));
+                this._loaded = true;
+            } catch (err) {
+                console.error('Materials error:', err);
+                UI.toast('Error loading materials.', 'error');
+                return;
+            }
+        }
+        this._query = '';
+        this.renderShell(container);
     },
 
-    render(container, items = null) {
-        // If items provided, use them; else use filtered list
-        let list = items;
-        if (!list) {
-            const approved = this._allMaterials.filter(m => m.status === 'approved');
-            const pending = this._allMaterials.filter(m => m.status === 'pending');
-            list = this._currentFilter === 'approved' ? approved : pending;
-        }
-        // If searchResults is set, use that instead (override)
-        if (this._searchResults !== null) {
-            list = this._searchResults;
-        }
+    /** _refreshCache - silent background refresh after a write. */
+    async _refreshCache() {
+        try {
+            this._allMaterials = (await DataService.getAllMaterials() || []).map(x => ({ ...x, status: String(x.status || '').toLowerCase() }));
+        } catch (e) {}
+    },
 
-        const approved = this._allMaterials.filter(m => m.status === 'approved');
-        const pending = this._allMaterials.filter(m => m.status === 'pending');
+    _matches(m, q) {
+        return ['id', 'name', 'desc', 'brand', 'model', 'specs', 'category', 'subcategory', 'grade', 'size']
+            .some(f => m[f] && String(m[f]).toLowerCase().includes(q));
+    },
 
-        // Build HTML: add form first, then list
+    _filteredList() {
+        const q = this._query.trim().toLowerCase();
+        if (q) return this._allMaterials.filter(m => this._matches(m, q));
+        if (this._currentFilter === 'approved') return this._allMaterials.filter(m => m.status === 'approved');
+        return this._allMaterials.filter(m => m.status === 'pending');
+    },
+
+    /**
+     * renderShell - Builds the page frame ONCE (form, search bar,
+     * tabs, list container). Tab switches and search keystrokes only
+     * touch the list + tab states, so the input keeps focus and
+     * everything feels instant.
+     */
+    renderShell(container) {
         let html = `
                 <div class="section-head"><h2>Material Database</h2><div class="rule"></div>
                     <button class="btn-primary" onclick="MaterialsPage.showAddForm()" style="padding:6px 14px;font-size:11px;">+ Add New Material</button>
@@ -52,7 +78,7 @@ const MaterialsPage = {
                         <form id="matForm" onsubmit="return MaterialsPage.submitMaterial(event)">
                             <div class="db-form-grid">
                                 <div class="field"><label>Material Name *</label><input type="text" id="mat-name" required /></div>
-                                <div class="field full"><label>Material Description *</label><input type="text" id= "mat-desc" required /></div>
+                                <div class="field full"><label>Material Description *</label><input type="text" id="mat-desc" required /></div>
                                 <div class="field"><label>Category *</label><select id="mat-category" required><option value="">Select...</option><option>Structural Steel</option><option>Concrete</option><option>Finishing</option><option>Electrical</option><option>Plumbing</option><option>Safety</option><option>Other</option></select></div>
                                 <div class="field"><label>Subcategory</label><select id="mat-subcategory"><option value="">Select...</option><option>Rebar</option><option>Cement</option><option>Aggregates</option><option>Pipes</option><option>Wires</option><option>Paint</option><option>Other</option></select></div>
                                 <div class="field"><label>Unit *</label><select id="mat-unit" required><option value="">Select...</option><option>pcs</option><option>kg</option><option>tons</option><option>m</option><option>sqm</option><option>cu.m</option><option>liters</option><option>bags</option><option>rolls</option></select></div>
@@ -75,77 +101,122 @@ const MaterialsPage = {
                         </form>
                     </div></div>
                 </div>
-                <div class="searchbar"><span class="search-icon">${Icon.search({size:15})}</span><input type="text" id="matSearch" placeholder="Search by ID, Brand, Specs..." oninput="MaterialsPage.search()" /></div>
-                <div class="status-tabs">
-                    <button class="${this._currentFilter === 'approved' && this._searchResults === null ? 'active' : ''}" onclick="MaterialsPage.setFilter('approved')">${Icon.checkCircle({size:13})} Approved (${approved.length})</button>
-                    <button class="${this._currentFilter === 'pending' && this._searchResults === null ? 'active' : ''}" onclick="MaterialsPage.setFilter('pending')">⏳ Pending (${pending.length})</button>
-                    <button class="${this._currentFilter === 'warehouse' ? 'active' : ''}" onclick="MaterialsPage.setFilter('warehouse')">🏭 Warehouse</button>
-                    ${this._searchResults !== null ? `<button class="active" onclick="MaterialsPage.clearSearch()">${Icon.search({size:13})} Search Results (${list.length})</button>` : ''}
-                </div>
-                <div class="list-container">`;
-                if (list.length === 0) html += `<div class="empty"><p>No materials found.</p></div>`;
-                else {
-                    list.forEach(m => {
-                        const imgHtml = m.image ? `<img src="${m.image}" alt="${m.name || m.brand || ''}" />` :
-                            `<span>${Icon.package({size:24})}</span>`;
-                        html += `
-                        <div class="mat-card" onclick="MaterialsPage.viewMaterial('${m.id}')">
-                            <div class="mc-thumb">${imgHtml}</div>
-                            <div class="mc-body">
-                                <div class="mc-title">${m.name || m.brand || 'Unnamed'}</div>
-                                <div class="mc-meta">
-                                    <span class="req-id">${m.id}</span>
-                                    ${m.brand ? `<span>${m.brand}</span>` : ''}
-                                    <span>${m.category || ''} ${m.subcategory ? '→ ' + m.subcategory : ''}</span>
-                                    <span>${m.unit || ''}</span>
-                                    ${m.status === 'pending' ? '<span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">Pending</span>' : ''}
-                                    ${m.status === 'approved' ? '<span class="stamp approved" style="transform:none;padding:1px 8px;font-size:9px;">Approved</span>' : ''}
-                                    ${m.status === 'pending' && App.isApprover() ? `<button class="btn-sm success" onclick="event.stopPropagation();MaterialsPage.approveMaterial('${m.id}')" style="margin-left:8px;">Approve</button>` : ''}
-                                </div>
-                            </div>
-                            <div style="color:var(--ink-soft);">›</div>
-                        </div>`;
-                    });
-                }
-                html += `</div>`;
-                UI.setContent(container, html);
+                <div class="searchbar"><span class="search-icon">${Icon.search({size:15})}</span><input type="text" id="matSearch" placeholder="Search by ID, Name, Brand, Specs..." oninput="MaterialsPage.onSearchInput(this.value)" /></div>
+                <div class="status-tabs" id="matStatusTabs"></div>
+                <div class="list-container" id="matListContainer"></div>`;
+        UI.setContent(container, html);
+        this.renderTabs();
+        if (this._currentFilter === 'warehouse' && !this._query.trim()) this.renderWarehouse();
+        else this.renderList();
     },
 
+    renderTabs() {
+        const el = document.getElementById('matStatusTabs');
+        if (!el) return;
+        const q = this._query.trim();
+        const approved = this._allMaterials.filter(m => m.status === 'approved').length;
+        const pending = this._allMaterials.filter(m => m.status === 'pending').length;
+        el.innerHTML = `
+            <button class="${!q && this._currentFilter === 'approved' ? 'active' : ''}" onclick="MaterialsPage.setFilter('approved')">${Icon.checkCircle({size:13})} Approved (${approved})</button>
+            <button class="${!q && this._currentFilter === 'pending' ? 'active' : ''}" onclick="MaterialsPage.setFilter('pending')">⏳ Pending (${pending})</button>
+            <button class="${!q && this._currentFilter === 'warehouse' ? 'active' : ''}" onclick="MaterialsPage.setFilter('warehouse')">🏭 Warehouse</button>
+            ${q ? `<button class="active" onclick="MaterialsPage.clearSearch()">${Icon.search({size:13})} Search Results (${this._filteredList().length}) ✕</button>` : ''}`;
+    },
 
-    /**
-     * renderWarehouse (v6.9) - Stock currently held at the single office
-     * warehouse. Everything here is derived from completed transfers —
-     * there is no manual encoding, and "Issue to Project" is itself just
-     * another transfer (Warehouse → Project).
-     */
-    async renderWarehouse() {
-        const container = document.getElementById('materialsContent');
-        UI.showLoading(container);
-        let wh;
-        try {
-            wh = await DataService.getWarehouseStock();
-        } catch (err) {
-            UI.toast('' + err.message, 'error');
-            container.innerHTML = `<div class="empty"><p>Could not load warehouse stock.</p></div>`;
+    renderList() {
+        const el = document.getElementById('matListContainer');
+        if (!el) return;
+        const list = this._filteredList();
+        if (!list.length) {
+            el.innerHTML = `<div class="empty"><p>No materials found${this._query.trim() ? ` for "${this._query.trim()}"` : ''}.</p></div>`;
             return;
         }
+        let html = '';
+        list.forEach(m => {
+            const imgHtml = m.image ? `<img src="${m.image}" alt="${m.name || m.brand || ''}" loading="lazy" />` :
+                `<span>${Icon.package({size:24})}</span>`;
+            html += `
+            <div class="mat-card" onclick="MaterialsPage.viewMaterial('${m.id}', this)" style="transition:transform .08s ease, box-shadow .08s ease;">
+                <div class="mc-thumb">${imgHtml}</div>
+                <div class="mc-body">
+                    <div class="mc-title">${m.name || m.brand || 'Unnamed'}</div>
+                    <div class="mc-meta">
+                        <span class="req-id">${m.id}</span>
+                        ${m.brand ? `<span>${m.brand}</span>` : ''}
+                        <span>${m.category || ''} ${m.subcategory ? '→ ' + m.subcategory : ''}</span>
+                        <span>${m.unit || ''}</span>
+                        ${m.status === 'pending' ? '<span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">Pending</span>' : ''}
+                        ${m.status === 'approved' ? '<span class="stamp approved" style="transform:none;padding:1px 8px;font-size:9px;">Approved</span>' : ''}
+                        ${m.status === 'pending' && App.isApprover() ? `<button class="btn-sm success" onclick="event.stopPropagation();MaterialsPage.approveMaterial('${m.id}')" style="margin-left:8px;">Approve</button>` : ''}
+                    </div>
+                </div>
+                <div style="color:var(--ink-soft);">›</div>
+            </div>`;
+        });
+        el.innerHTML = html;
+    },
+
+    /** onSearchInput - instant, client-side. Only the list + tabs
+     *  re-render, so the input NEVER loses focus. */
+    onSearchInput(value) {
+        this._query = value || '';
+        this.renderTabs();
+        if (!this._query.trim() && this._currentFilter === 'warehouse') this.renderWarehouse();
+        else this.renderList();
+    },
+
+    clearSearch() {
+        this._query = '';
+        const inp = document.getElementById('matSearch');
+        if (inp) inp.value = '';
+        this.renderTabs();
+        if (this._currentFilter === 'warehouse') this.renderWarehouse();
+        else this.renderList();
+    },
+
+    /** setFilter - INSTANT: renders from the cache, no server call. */
+    setFilter(filter) {
+        this._currentFilter = filter;
+        this._query = '';
+        const inp = document.getElementById('matSearch');
+        if (inp) inp.value = '';
+        this.renderTabs();
+        if (filter === 'warehouse') this.renderWarehouse();
+        else this.renderList();
+    },
+
+    /**
+     * renderWarehouse (v6.9 / v8) - Stock at the office warehouse,
+     * derived entirely from completed transfers. v8: the result is
+     * CACHED after the first fetch, so revisiting the tab is instant;
+     * the Refresh button re-pulls on demand.
+     */
+    async renderWarehouse(force) {
+        const el = document.getElementById('matListContainer');
+        if (!el) return;
+        if (!this._warehouse || force) {
+            el.innerHTML = `<div class="empty"><p>Loading warehouse stock…</p></div>`;
+            try {
+                this._warehouse = await DataService.getWarehouseStock();
+            } catch (err) {
+                UI.toast('' + err.message, 'error');
+                el.innerHTML = `<div class="empty"><p>Could not load warehouse stock.</p></div>`;
+                return;
+            }
+        }
+        const wh = this._warehouse;
         const mats = wh.materials || [];
         const eqs = wh.equipment || [];
         let html = `
-            <div class="section-head"><h2>Material Database</h2><div class="rule"></div></div>
-            <div class="status-tabs">
-                <button onclick="MaterialsPage.setFilter('approved')">${Icon.checkCircle({size:13})} Approved</button>
-                <button onclick="MaterialsPage.setFilter('pending')">⏳ Pending</button>
-                <button class="active" onclick="MaterialsPage.setFilter('warehouse')">🏭 Warehouse</button>
-            </div>
-
             <div class="kpi-strip" style="margin:14px 0;">
                 <div class="kpi-card"><div class="k-label">Material Items</div><div class="k-val">${mats.length}</div><div class="k-sub">with stock remaining</div></div>
                 <div class="kpi-card"><div class="k-label">Equipment Units</div><div class="k-val">${fmtNum(eqs.reduce((s, e) => s + e.qty, 0))}</div><div class="k-sub">idle in warehouse</div></div>
                 <div class="kpi-card warn"><div class="k-label">Pending Transfers</div><div class="k-val">${wh.pendingCount || 0}</div><div class="k-sub">awaiting approval</div></div>
                 <div class="kpi-card good"><div class="k-label">Est. Value</div><div class="k-val">₱${fmtMoney(wh.estValue || 0)}</div><div class="k-sub">sa DB rate</div></div>
             </div>
-
+            <div class="section-head"><h2 style="font-size:13px;">Warehouse Stock</h2><div class="rule"></div>
+                <button class="btn-sm" onclick="MaterialsPage.renderWarehouse(true)" title="Re-pull the latest stock">⟳ Refresh</button>
+            </div>
             <div class="panel"><div class="panel-head"><h3>Materials</h3></div>
             <table><thead><tr><th>Material</th><th>Unit</th><th style="text-align:right">On Hand</th><th>Last From</th><th>Date</th></tr></thead><tbody>`;
         if (!mats.length) {
@@ -162,7 +233,6 @@ const MaterialsPage = {
             });
         }
         html += `</tbody></table></div>`;
-
         html += `<div class="panel"><div class="panel-head"><h3>Equipment</h3></div>
             <table><thead><tr><th>Equipment</th><th style="text-align:right">Qty</th><th>Last From</th><th>Date</th></tr></thead><tbody>`;
         if (!eqs.length) {
@@ -179,42 +249,7 @@ const MaterialsPage = {
         }
         html += `</tbody></table></div>
             <div class="data-source-note">Warehouse contents are derived entirely from <b>completed transfers</b> - there is no manual encoding. To issue stock to a project, create a transfer (Warehouse → Project) from that project's Site Materials tab. Check here for surplus before purchasing new stock.</div>`;
-        container.innerHTML = html;
-    },
-
-    setFilter(filter) {
-        // v6.9: the Warehouse is a LOCATION, not a project — its stock
-        // lives entirely in completed transfers, so it renders separately.
-        if (filter === 'warehouse') {
-            this._currentFilter = 'warehouse';
-            this._searchResults = null;
-            this.renderWarehouse();
-            return;
-        }
-        this._currentFilter = filter;
-        this._searchResults = null; // clear search
-        this.load();
-    },
-
-    clearSearch() {
-        this._searchResults = null;
-        this.load();
-    },
-
-    search() {
-        const query = document.getElementById('matSearch').value;
-        if (!query.trim()) {
-            this._searchResults = null;
-            this.load();
-            return;
-        }
-        const container = document.getElementById('materialsContent');
-        UI.showLoading(container);
-        setTimeout(async () => {
-            const results = await DataService.searchMaterials(query);
-            this._searchResults = results;
-            this.render(container);
-        }, 300);
+        el.innerHTML = html;
     },
 
     showAddForm() { const f = document.getElementById('matAddForm'); if (f) f.style.display = 'block'; },
@@ -249,22 +284,23 @@ const MaterialsPage = {
             notes: document.getElementById('mat-notes').value.trim(),
             image: document.getElementById('matImagePreviewImg').src || 'https://placehold.co/600x400/5B6360/FFFFFF?text=Material'
         };
-        if (!data.name || !data.description || !data.category || !data.brand || !data.unit) { UI.toast('Required: Material Name, Description,Category, Brand, Unit.',
+        if (!data.name || !data.description || !data.category || !data.brand || !data.unit) { UI.toast('Required: Material Name, Description, Category, Brand, Unit.',
                 'error'); return; }
         const confirmed = await Confirm.open('Submit for Approval?', '');
         if (!confirmed) return;
-        try { 
+        try {
             const result = await DataService.requestMaterial(data);
             UI.toast(`${result.id} submitted for approval!`, 'success');
             document.getElementById('matForm').reset();
             document.getElementById('matImagePreview').classList.remove('open');
             this.hideAddForm();
-            this._allMaterials = (await DataService.getAllMaterials() || []).map(x => ({ ...x, status: String(x.status || '').toLowerCase() }));   // v6.1: legacy rows hold 'Pending'
-            this._searchResults = null;
-            
-            // ✅ FIX: Automatically switch to Pending tab after submission (Bug #1)
-            this._currentFilter = 'pending';
-            this.load();
+            await this._refreshCache();
+            this._currentFilter = 'pending';   // show the new entry immediately
+            this._query = '';
+            const inp = document.getElementById('matSearch');
+            if (inp) inp.value = '';
+            this.renderTabs();
+            this.renderList();
         } catch (err) { UI.toast('' + err.message, 'error'); }
         return false;
     },
@@ -273,13 +309,21 @@ const MaterialsPage = {
         if (!confirmed) return;
         try { await DataService.approveMaterial(id);
             UI.toast('Material approved!', 'success');
-            this._allMaterials = (await DataService.getAllMaterials() || []).map(x => ({ ...x, status: String(x.status || '').toLowerCase() }));   // v6.1: legacy rows hold 'Pending'
-            this._searchResults = null;
-            this.load(); } catch (err) { UI.toast('' + err.message, 'error'); }
+            await this._refreshCache();
+            this.renderTabs();
+            this.renderList(); } catch (err) { UI.toast('' + err.message, 'error'); }
     },
-    async viewMaterial(id) {
-        const all = await DataService.getAllMaterials();
-        const mat = all.find(m => m.id === id);
+    /**
+     * viewMaterial (v8) - INSTANT: opens from the cache (no refetch)
+     * with a brief pressed-state so the click visibly registers.
+     */
+    viewMaterial(id, cardEl) {
+        if (cardEl) {
+            cardEl.style.transform = 'scale(.985)';
+            cardEl.style.boxShadow = 'inset 0 0 0 2px var(--safety)';
+            setTimeout(() => { cardEl.style.transform = ''; cardEl.style.boxShadow = ''; }, 180);
+        }
+        const mat = this._allMaterials.find(m => m.id === id);
         if (!mat) { UI.toast('Not found.', 'error'); return; }
         MatPrintModal.open(mat);
     }

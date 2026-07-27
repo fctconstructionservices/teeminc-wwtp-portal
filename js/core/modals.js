@@ -72,6 +72,10 @@ const PrintModal = {
                 </div>
                 <div class="print-section"><div class="ps-title">Work Accomplished</div>
                     ${r.workAccomplished && r.workAccomplished.length ? `<table class="ps-table"><thead><tr><th>Location/Area</th><th>Scope of Work</th><th>Description</th><th>% Complete</th></tr></thead><tbody>${r.workAccomplished.map(w => `<tr><td>${w.location || '—'}</td><td>${w.scope || '—'}</td><td>${w.description || '—'}</td><td>${w.percentComplete || 0}%</td></tr>`).join('')}</tbody></table>` : `<p style="font-size:12px;color:var(--ink-soft);">No work accomplished recorded.</p>`}
+                    ${PrintModal._photoGrid((r.workAccomplished || []).filter(w => w.image).map(w => ({
+                        url: w.image,
+                        caption: 'Work: ' + [w.scope, w.description || w.location].filter(Boolean).join(' — ')
+                    })))}
                 </div>
                 <div class="print-section"><div class="ps-title">Materials Delivered</div>
                     ${r.materialsDelivered && r.materialsDelivered.length ? `<table class="ps-table"><thead><tr><th>Material</th><th>Qty</th><th>Unit</th><th>Supplier / DR No.</th></tr></thead><tbody>${r.materialsDelivered.map(m => `<tr><td>${m.material}</td><td>${m.qty}</td><td>${m.unit || '—'}</td><td>${m.supplier || '—'}</td></tr>`).join('')}</tbody></table>` : `<p style="font-size:12px;color:var(--ink-soft);">No materials delivered recorded.</p>`}
@@ -81,15 +85,46 @@ const PrintModal = {
                 </div>
                 <div class="print-section"><div class="ps-title">Issues / Delays</div>
                     ${r.issues && r.issues.length ? `<table class="ps-table"><thead><tr><th>Description</th><th>Cause</th><th>Time Lost (hrs)</th></tr></thead><tbody>${r.issues.map(iss => `<tr><td>${iss.description || '—'}</td><td>${iss.cause || '—'}</td><td>${iss.timeLost || 0}</td></tr>`).join('')}</tbody></table>` : `<p style="font-size:12px;color:var(--ink-soft);">No issues recorded.</p>`}
+                    ${PrintModal._photoGrid((r.issues || []).filter(i => i.image).map(i => ({
+                        url: i.image,
+                        caption: 'Issue: ' + (i.description || i.cause || '')
+                    })))}
                 </div>
                 <div class="print-section"><div class="ps-title">Visitors</div>
                     ${r.visitors && r.visitors.length ? `<table class="ps-table"><thead><tr><th>Name</th><th>Company / Role</th><th>Purpose</th><th>Time In</th><th>Time Out</th><th>Remarks</th></tr></thead><tbody>${r.visitors.map(v => `<tr><td>${v.name}</td><td>${v.company || '—'} ${v.role ? '· ' + v.role : ''}</td><td>${v.purpose || '—'}</td><td>${v.timeIn || '—'}</td><td>${v.timeOut || '—'}</td><td>${v.remarks || '—'}</td></tr>`).join('')}</tbody></table>` : `<p style="font-size:12px;color:var(--ink-soft);">No visitors recorded.</p>`}
                 </div>
+                ${(r.photos && r.photos.length) ? `
+                <div class="print-section"><div class="ps-title">Site Photos <span style="font-weight:400;font-size:10px;color:var(--ink-soft);">(${r.photos.length})</span></div>
+                    ${PrintModal._photoGrid(r.photos.map((p, i) => {
+                        const isObj = p && typeof p === 'object';
+                        return { url: isObj ? p.url : p, caption: (isObj && p.caption) ? p.caption : ('Site Photo ' + (i + 1)) };
+                    }))}
+                </div>` : ''}
                 <div class="print-actions">
                     <button class="btn-primary" onclick="window.print()">${Icon.printer({size:14})} Print</button>
                     <button class="btn-ghost" onclick="PrintModal.close()">Close</button>
                 </div>`;
         return html;
+    },
+
+    /**
+     * _photoGrid (v8) - Presentation-ready photo grid: the ACTUAL
+     * pictures render (not just links), each with its caption so the
+     * printout reads like a proper site report. Broken images collapse
+     * to a note instead of a broken-icon box.
+     */
+    _photoGrid(items) {
+        if (!items || !items.length) return '';
+        return `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin-top:10px;">
+            ${items.map(it => `
+                <figure style="margin:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--bg);break-inside:avoid;">
+                    <img src="${driveImgSrc(it.url)}" alt="${(it.caption || '').replace(/"/g, '&quot;')}" loading="lazy"
+                        style="width:100%;height:160px;object-fit:cover;display:block;"
+                        onerror="this.style.display='none';this.nextElementSibling.style.display='block';" />
+                    <div style="display:none;padding:18px 10px;text-align:center;font-size:11px;color:var(--ink-soft);">Image unavailable</div>
+                    <figcaption style="padding:6px 9px;font-size:10.5px;line-height:1.4;color:var(--ink);border-top:1px solid var(--line);">${it.caption || '—'}</figcaption>
+                </figure>`).join('')}
+        </div>`;
     }
 };
 
@@ -296,5 +331,47 @@ const SOWBreakdownModal = {
                     <button class="btn-ghost" onclick="SOWBreakdownModal.close()">Close</button>
                 </div>`;
         return html;
+    }
+};
+// ─── SEARCH DETAIL MODAL (v8) ──────────────────────────────────
+//  Generic detail view for a global-search result: renders the
+//  key/value `detail` payload the backend attached to the result.
+//  Materials/Equipment usually route to their own datasheet modals
+//  instead (see SearchPage.open); this is the catch-all.
+
+const SearchDetailModal = {
+    open(result) {
+        const existing = document.getElementById('searchDetailModal');
+        if (existing) existing.remove();
+        const detail = result.detail || {};
+        const overlay = document.createElement('div');
+        overlay.id = 'searchDetailModal';
+        overlay.className = 'print-modal-overlay open';
+        overlay.innerHTML = `
+            <div class="print-modal-content" style="max-width:560px;">
+                <button class="close-modal" onclick="document.getElementById('searchDetailModal').remove();document.body.style.overflow='';">${Icon.close({size:18})}</button>
+                <div class="print-header">
+                    <h2>${result.type} — ${result.id}</h2>
+                    <div class="print-meta">${result.label || ''}</div>
+                </div>
+                ${result.image ? `<div style="text-align:center;margin-bottom:14px;"><img src="${driveImgSrc(result.image)}" alt="" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid var(--line);" onerror="this.style.display='none'" /></div>` : ''}
+                <div class="print-section"><div class="ps-title">Details</div>
+                    <div class="detail-grid">
+                        ${Object.keys(detail).map(k => `
+                            <div class="dg-item ${String(detail[k]).length > 40 ? 'full' : ''}">
+                                <span class="dg-label">${k}</span>
+                                <span class="dg-value">${detail[k]}</span>
+                            </div>`).join('')}
+                    </div>
+                </div>
+                <div class="print-actions">
+                    <button class="btn-ghost" onclick="document.getElementById('searchDetailModal').remove();document.body.style.overflow='';">Close</button>
+                </div>
+            </div>`;
+        overlay.addEventListener('click', e => {
+            if (e.target === overlay) { overlay.remove(); document.body.style.overflow = ''; }
+        });
+        document.body.appendChild(overlay);
+        document.body.style.overflow = 'hidden';
     }
 };

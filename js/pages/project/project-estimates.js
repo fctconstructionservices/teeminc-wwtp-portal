@@ -36,6 +36,21 @@ Object.assign(ProjectPage, {
                 <div class="section-head"><h2>Project Estimates</h2><div class="rule"></div>
                     <span class="badge">Total Estimate: ₱${fmtMoney(grandTotal)}</span>
                 </div>
+                ${(() => {
+                    // v8 (6.9): once EVERY estimate group is approved, the
+                    // project cost is final — unlock DUPA + Summary exports.
+                    const groups = est.groups || [];
+                    const allApproved = groups.length > 0 && groups.every(g => g.status === 'approved');
+                    if (!allApproved) return '';
+                    return `<div class="panel" style="margin-bottom:14px;background:var(--blueprint-tint);">
+                        <div style="padding:11px 14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+                            <b style="font-family:'Oswald';font-size:11.5px;text-transform:uppercase;color:var(--blueprint);">All estimates approved — exports ready:</b>
+                            <button class="btn-sm primary" onclick="ProjectPage.printDUPA()">${Icon.printer({size:12})} Print DUPA (PDF)</button>
+                            <button class="btn-sm" onclick="ProjectPage.printEstimateSummary()">${Icon.printer({size:12})} Summary (PDF)</button>
+                            <button class="btn-sm" onclick="ProjectPage.exportEstimateSummaryExcel()">📊 Summary (Excel)</button>
+                        </div>
+                    </div>`;
+                })()}
                 <p style="font-size:11px;color:var(--ink-soft);margin-bottom:12px;">
                     Each SOW has its own Materials, Labor, Equipment, and Indirect Costs. 
                     <strong>Draft</strong> → <strong>Submit for Approval</strong> → <strong>Approved</strong> (locked).
@@ -92,6 +107,16 @@ Object.assign(ProjectPage, {
                                 ${this._renderEstimateCategory('Labor', group.labor || [], gIdx, 'labor', isLocked, this._approvedManpower || [])}
                                 ${this._renderEstimateCategory('Equipment', group.equipment || [], gIdx, 'equipment', isLocked, approvedEquip)}
                                 ${this._renderEstimateCategory('Indirect Costs', group.indirect || [], gIdx, 'indirect', isLocked)}
+                                ${(() => {
+                                    // v8 (6.8): Cost per Unit = subtotal ÷ SOW quantity
+                                    const sow = (p.sowItems || []).find(s => s.id === group.sowId);
+                                    const qty = sow ? parseFloat(sow.qty) : 0;
+                                    if (!qty || isNaN(qty)) return '';
+                                    return `<div class="eg-subtotal" style="font-size:12px;opacity:.85;">
+                                        <span class="eg-subtotal-label">Cost per Unit <span style="font-weight:400;font-size:10px;">(÷ ${fmtNum(qty)} ${sow.unit || 'unit'})</span></span>
+                                        ₱${fmtMoney((group._total || 0) / qty)}<span style="font-size:10px;color:var(--ink-soft);"> / ${sow.unit || 'unit'}</span>
+                                    </div>`;
+                                })()}
                                 <div class="eg-subtotal">
                                     <span class="eg-subtotal-label">Subtotal</span>
                                     ₱${fmtMoney((group._total || 0))}
@@ -580,4 +605,169 @@ Object.assign(ProjectPage, {
             this.renderSOWBudget(this._data);
         } catch (err) { UI.toast('' + err.message, 'error'); }
     },
+});
+// ════════ v8: DUPA + SUMMARY EXPORTS (item 6.9) ════════
+// Available only when ALL estimate groups are approved. The Summary
+// intentionally HIDES indirect costs by folding them into Material
+// and Labor: if both direct costs exist, each takes half the
+// indirect; if one side is zero, the other absorbs it all.
+// NOTE: equipment cost is folded into the Labor Cost column.
+
+Object.assign(ProjectPage, {
+
+    /** _estimateSummaryRows - one row per approved SOW group, with the
+     *  indirect-cost split applied. */
+    _estimateSummaryRows() {
+        const p = this._data || {};
+        const groups = (this._estimatesData && this._estimatesData.groups) || [];
+        return groups.map(g => {
+            const sow = (p.sowItems || []).find(s => s.id === g.sowId) || {};
+            const mat = (g.materials || []).reduce((s, m) => s + (parseFloat(m.cost) || 0), 0);
+            const lab = (g.labor || []).reduce((s, l) => s + (parseFloat(l.cost) || 0), 0)
+                      + (g.equipment || []).reduce((s, e) => s + (parseFloat(e.cost) || 0), 0);
+            const ind = (g.indirect || []).reduce((s, i) => s + (parseFloat(i.amount) || 0), 0);
+            let matCost, labCost;
+            if (mat > 0 && lab > 0) { matCost = mat + ind / 2; labCost = lab + ind / 2; }
+            else if (mat <= 0)      { matCost = 0;             labCost = lab + ind; }
+            else                    { matCost = mat + ind;     labCost = 0; }
+            const total = matCost + labCost;
+            const qty = parseFloat(sow.qty) || 0;
+            return {
+                itemNo: g.sowId,
+                description: g.sowDescription || sow.description || '',
+                qty: qty,
+                unit: sow.unit || '',
+                unitCost: qty ? total / qty : 0,
+                matCost: matCost,
+                labCost: labCost,
+                total: total
+            };
+        });
+    },
+
+    _openPrintWindow(title, bodyHtml) {
+        const w = window.open('', '_blank');
+        if (!w) { UI.toast('Popup blocked — please allow popups for this site.', 'error'); return; }
+        w.document.write(`<!DOCTYPE html><html><head><title>${title}</title>
+            <style>
+                body{font-family:'Segoe UI',Arial,sans-serif;color:#1c2321;margin:26px;font-size:12px;}
+                h1{font-size:17px;text-transform:uppercase;letter-spacing:.04em;margin:0 0 2px;}
+                h2{font-size:13px;margin:20px 0 6px;text-transform:uppercase;letter-spacing:.03em;border-bottom:2px solid #24455A;padding-bottom:3px;}
+                .meta{font-size:11px;color:#5B6360;margin-bottom:14px;}
+                table{width:100%;border-collapse:collapse;margin-bottom:10px;}
+                th,td{border:1px solid #c9c5b8;padding:5px 7px;font-size:11px;text-align:left;}
+                th{background:#eef1f3;text-transform:uppercase;font-size:9.5px;letter-spacing:.04em;}
+                td.amt,th.amt{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+                tr.total td{font-weight:700;background:#f6f4ec;}
+                .grand{font-size:13px;font-weight:700;text-align:right;margin-top:8px;}
+                .sig{display:grid;grid-template-columns:repeat(3,1fr);gap:26px;margin-top:44px;}
+                .sig div{border-top:1px solid #1c2321;padding-top:5px;text-align:center;font-size:10.5px;text-transform:uppercase;}
+                @media print {.noprint{display:none;}}
+                .break{page-break-inside:avoid;}
+            </style></head><body>${bodyHtml}
+            <div class="noprint" style="margin-top:22px;"><button onclick="window.print()" style="padding:8px 18px;">Print / Save as PDF</button></div>
+            </body></html>`);
+        w.document.close();
+        setTimeout(() => { try { w.focus(); } catch (e) {} }, 300);
+    },
+
+    /** printDUPA - Detailed Unit Price Analysis: full line items per
+     *  approved SOW group (materials, labor, equipment, indirect). */
+    printDUPA() {
+        const p = this._data || {};
+        const groups = (this._estimatesData && this._estimatesData.groups) || [];
+        let grand = 0;
+        let body = `<h1>DUPA — Detailed Unit Price Analysis</h1>
+            <div class="meta"><b>${p.name || this._currentProjectId}</b> · ${p.client || ''} · Generated ${new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</div>`;
+        groups.forEach(g => {
+            const sow = (p.sowItems || []).find(s => s.id === g.sowId) || {};
+            const qty = parseFloat(sow.qty) || 0;
+            const cat = (title, rows, cols) => {
+                if (!rows || !rows.length) return '';
+                let sum = 0;
+                let h = `<table><thead><tr>${cols.map(c => `<th class="${c.amt ? 'amt' : ''}">${c.h}</th>`).join('')}</tr></thead><tbody>`;
+                rows.forEach(r => {
+                    h += `<tr>${cols.map(c => `<td class="${c.amt ? 'amt' : ''}">${c.f(r)}</td>`).join('')}</tr>`;
+                    sum += parseFloat(r.cost !== undefined ? r.cost : r.amount) || 0;
+                });
+                h += `<tr class="total"><td colspan="${cols.length - 1}">${title} Subtotal</td><td class="amt">₱${fmtMoney(sum)}</td></tr></tbody></table>`;
+                return h;
+            };
+            const money = v => '₱' + fmtMoney(parseFloat(v) || 0);
+            body += `<div class="break"><h2>${g.sowId} — ${g.sowDescription || sow.description || ''} <span style="font-weight:400;font-size:10.5px;">(${fmtNum(qty)} ${sow.unit || ''})</span></h2>`;
+            body += cat('Materials', g.materials, [
+                { h: 'Material', f: r => r.name || '—' }, { h: 'Qty', f: r => fmtNum(parseFloat(r.qty) || 0), amt: true },
+                { h: 'Unit', f: r => r.unit || '' }, { h: 'Unit Price', f: r => money(r.price), amt: true }, { h: 'Amount', f: r => money(r.cost), amt: true }]);
+            body += cat('Labor', g.labor, [
+                { h: 'Role', f: r => r.role || r.name || '—' }, { h: 'Count', f: r => fmtNum(parseFloat(r.count || r.qty) || 0), amt: true },
+                { h: 'Days', f: r => fmtNum(parseFloat(r.days) || 0), amt: true }, { h: 'Rate/Day', f: r => money(r.rate), amt: true }, { h: 'Amount', f: r => money(r.cost), amt: true }]);
+            body += cat('Equipment', g.equipment, [
+                { h: 'Equipment', f: r => r.name || '—' }, { h: 'Qty', f: r => fmtNum(parseFloat(r.qty || r.count) || 0), amt: true },
+                { h: 'Duration', f: r => fmtNum(parseFloat(r.days || r.duration) || 0), amt: true }, { h: 'Rate', f: r => money(r.rate), amt: true }, { h: 'Amount', f: r => money(r.cost), amt: true }]);
+            body += cat('Indirect Costs', g.indirect, [
+                { h: 'Item', f: r => r.name || r.label || '—' }, { h: 'Basis', f: r => r.basis || (r.pct ? r.pct + '%' : '—') }, { h: 'Amount', f: r => money(r.amount), amt: true }]);
+            const gt = g._total || 0;
+            grand += gt;
+            body += `<div class="grand">SOW Total: ₱${fmtMoney(gt)}${qty ? ` &nbsp;·&nbsp; Unit Cost: ₱${fmtMoney(gt / qty)} / ${sow.unit || 'unit'}` : ''}</div></div>`;
+        });
+        body += `<div class="grand" style="font-size:15px;border-top:2px solid #1c2321;padding-top:8px;">PROJECT TOTAL: ₱${fmtMoney(grand)}</div>
+            <div class="sig"><div>Prepared by</div><div>Checked by</div><div>Approved by</div></div>`;
+        this._openPrintWindow('DUPA — ' + (p.name || this._currentProjectId), body);
+    },
+
+    /** printEstimateSummary - client-facing summary; indirect hidden
+     *  inside Material/Labor per the split rule. */
+    printEstimateSummary() {
+        const p = this._data || {};
+        const rows = this._estimateSummaryRows();
+        const grand = rows.reduce((s, r) => s + r.total, 0);
+        let body = `<h1>Cost Estimate Summary</h1>
+            <div class="meta"><b>${p.name || this._currentProjectId}</b> · ${p.client || ''} · Generated ${new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+            <table><thead><tr>
+                <th>Item No</th><th>Description</th><th class="amt">Qty</th><th>Unit</th>
+                <th class="amt">Unit Cost</th><th class="amt">Material Cost</th><th class="amt">Labor Cost</th><th class="amt">Total</th>
+            </tr></thead><tbody>`;
+        rows.forEach(r => {
+            body += `<tr>
+                <td>${r.itemNo}</td><td>${r.description}</td>
+                <td class="amt">${fmtNum(r.qty)}</td><td>${r.unit}</td>
+                <td class="amt">₱${fmtMoney(r.unitCost)}</td>
+                <td class="amt">₱${fmtMoney(r.matCost)}</td>
+                <td class="amt">₱${fmtMoney(r.labCost)}</td>
+                <td class="amt">₱${fmtMoney(r.total)}</td>
+            </tr>`;
+        });
+        body += `<tr class="total"><td colspan="5">TOTAL</td>
+            <td class="amt">₱${fmtMoney(rows.reduce((s, r) => s + r.matCost, 0))}</td>
+            <td class="amt">₱${fmtMoney(rows.reduce((s, r) => s + r.labCost, 0))}</td>
+            <td class="amt">₱${fmtMoney(grand)}</td></tr></tbody></table>
+            <div class="sig"><div>Prepared by</div><div>Checked by</div><div>Approved by</div></div>`;
+        this._openPrintWindow('Estimate Summary — ' + (p.name || this._currentProjectId), body);
+    },
+
+    /** exportEstimateSummaryExcel - same summary, as .xlsx (SheetJS). */
+    exportEstimateSummaryExcel() {
+        if (typeof XLSX === 'undefined') { UI.toast('Excel library not loaded — refresh the page and try again.', 'error'); return; }
+        const p = this._data || {};
+        const rows = this._estimateSummaryRows();
+        const aoa = [
+            ['COST ESTIMATE SUMMARY'],
+            [p.name || this._currentProjectId, p.client || ''],
+            ['Generated', new Date().toLocaleDateString('en-PH')],
+            [],
+            ['Item No', 'Description', 'Qty', 'Unit', 'Unit Cost', 'Material Cost', 'Labor Cost', 'Total']
+        ];
+        rows.forEach(r => aoa.push([r.itemNo, r.description, r.qty, r.unit,
+            Math.round(r.unitCost * 100) / 100, Math.round(r.matCost * 100) / 100,
+            Math.round(r.labCost * 100) / 100, Math.round(r.total * 100) / 100]));
+        aoa.push(['', 'TOTAL', '', '',
+            '', Math.round(rows.reduce((s, r) => s + r.matCost, 0) * 100) / 100,
+            Math.round(rows.reduce((s, r) => s + r.labCost, 0) * 100) / 100,
+            Math.round(rows.reduce((s, r) => s + r.total, 0) * 100) / 100]);
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        ws['!cols'] = [{ wch: 10 }, { wch: 42 }, { wch: 9 }, { wch: 7 }, { wch: 13 }, { wch: 15 }, { wch: 15 }, { wch: 15 }];
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Summary');
+        XLSX.writeFile(wb, `Estimate-Summary-${(p.name || this._currentProjectId).replace(/[^\w-]+/g, '_')}.xlsx`);
+    }
 });

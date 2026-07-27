@@ -1,41 +1,61 @@
 // ================================================================
-//  pages/equipment.js — Equipment database page
+//  pages/equipment.js — Equipment database page (v8)
 //
 //  PURPOSE: Mirror of pages/materials.js for the equipment catalog:
 //  filter tabs, search, EquipPrintModal datasheet and role-gated
 //  approval.
+//
+//  v8 UX REWRITE (same treatment as Materials):
+//   - Cached list; Approved/Pending/Warehouse switch instantly.
+//   - Client-side instant search that never steals focus.
+//   - Pressed-state feedback + cache-fed modal on card click.
+//   - NEW: Warehouse tab (equipment currently idle at the warehouse,
+//     from completed transfers), with cached data + manual refresh.
 // ================================================================
 
 const EquipmentPage = {
     _allEquipment: [],
+    _warehouse: null,
     _currentFilter: 'approved',
-    _searchResults: null,
+    _query: '',
+    _loaded: false,
 
-    async load() {
-        this._searchResults = null;
+    async load(force) {
         const container = document.getElementById('equipmentContent');
-        UI.showLoading(container);
-        try {
-            this._allEquipment = (await DataService.getAllEquipment() || []).map(x => ({ ...x, status: String(x.status || '').toLowerCase() }));   // v6.1: legacy rows hold 'Pending'
-            this.render(container);
-        } catch (err) { console.error('Equipment error:', err);
-            UI.toast('Error loading equipment.', 'error'); }
+        if (!this._loaded || force) {
+            UI.showLoading(container);
+            try {
+                this._allEquipment = (await DataService.getAllEquipment() || []).map(x => ({ ...x, status: String(x.status || '').toLowerCase() }));
+                this._loaded = true;
+            } catch (err) {
+                console.error('Equipment error:', err);
+                UI.toast('Error loading equipment.', 'error');
+                return;
+            }
+        }
+        this._query = '';
+        this.renderShell(container);
     },
 
-    render(container, items = null) {
-        let list = items;
-        if (!list) {
-            const approved = this._allEquipment.filter(e => e.status === 'approved');
-            const pending = this._allEquipment.filter(e => e.status === 'pending');
-            list = this._currentFilter === 'approved' ? approved : pending;
-        }
-        if (this._searchResults !== null) {
-            list = this._searchResults;
-        }
+    async _refreshCache() {
+        try {
+            this._allEquipment = (await DataService.getAllEquipment() || []).map(x => ({ ...x, status: String(x.status || '').toLowerCase() }));
+        } catch (e) {}
+    },
 
-        const approved = this._allEquipment.filter(e => e.status === 'approved');
-        const pending = this._allEquipment.filter(e => e.status === 'pending');
+    _matches(e, q) {
+        return ['id', 'name', 'brand', 'model', 'serial', 'category', 'type', 'capacity', 'powerSource', 'ownership']
+            .some(f => e[f] && String(e[f]).toLowerCase().includes(q));
+    },
 
+    _filteredList() {
+        const q = this._query.trim().toLowerCase();
+        if (q) return this._allEquipment.filter(e => this._matches(e, q));
+        if (this._currentFilter === 'approved') return this._allEquipment.filter(e => e.status === 'approved');
+        return this._allEquipment.filter(e => e.status === 'pending');
+    },
+
+    renderShell(container) {
         let html = `
                 <div class="section-head"><h2>Tools & Equipment Database</h2><div class="rule"></div>
                     <button class="btn-primary" onclick="EquipmentPage.showAddForm()" style="padding:6px 14px;font-size:11px;">+ Add New Equipment</button>
@@ -93,65 +113,138 @@ const EquipmentPage = {
                         </form>
                     </div></div>
                 </div>
-                <div class="searchbar"><span class="search-icon">${Icon.search({size:15})}</span><input type="text" id="equipSearch" placeholder="Search by ID, Brand, Model, Category..." oninput="EquipmentPage.search()" /></div>
-                <div class="status-tabs">
-                    <button class="${this._currentFilter === 'approved' && this._searchResults === null ? 'active' : ''}" onclick="EquipmentPage.setFilter('approved')">${Icon.checkCircle({size:13})} Approved (${approved.length})</button>
-                    <button class="${this._currentFilter === 'pending' && this._searchResults === null ? 'active' : ''}" onclick="EquipmentPage.setFilter('pending')">⏳ Pending (${pending.length})</button>
-                    ${this._searchResults !== null ? `<button class="active" onclick="EquipmentPage.clearSearch()">${Icon.search({size:13})} Search Results (${list.length})</button>` : ''}
+                <div class="searchbar"><span class="search-icon">${Icon.search({size:15})}</span><input type="text" id="equipSearch" placeholder="Search by ID, Brand, Model, Category..." oninput="EquipmentPage.onSearchInput(this.value)" /></div>
+                <div class="status-tabs" id="equipStatusTabs"></div>
+                <div class="list-container" id="equipListContainer"></div>`;
+        UI.setContent(container, html);
+        this.renderTabs();
+        if (this._currentFilter === 'warehouse' && !this._query.trim()) this.renderWarehouse();
+        else this.renderList();
+    },
+
+    renderTabs() {
+        const el = document.getElementById('equipStatusTabs');
+        if (!el) return;
+        const q = this._query.trim();
+        const approved = this._allEquipment.filter(e => e.status === 'approved').length;
+        const pending = this._allEquipment.filter(e => e.status === 'pending').length;
+        el.innerHTML = `
+            <button class="${!q && this._currentFilter === 'approved' ? 'active' : ''}" onclick="EquipmentPage.setFilter('approved')">${Icon.checkCircle({size:13})} Approved (${approved})</button>
+            <button class="${!q && this._currentFilter === 'pending' ? 'active' : ''}" onclick="EquipmentPage.setFilter('pending')">⏳ Pending (${pending})</button>
+            <button class="${!q && this._currentFilter === 'warehouse' ? 'active' : ''}" onclick="EquipmentPage.setFilter('warehouse')">🏭 Warehouse</button>
+            ${q ? `<button class="active" onclick="EquipmentPage.clearSearch()">${Icon.search({size:13})} Search Results (${this._filteredList().length}) ✕</button>` : ''}`;
+    },
+
+    renderList() {
+        const el = document.getElementById('equipListContainer');
+        if (!el) return;
+        const list = this._filteredList();
+        if (!list.length) {
+            el.innerHTML = `<div class="empty"><p>No equipment found${this._query.trim() ? ` for "${this._query.trim()}"` : ''}.</p></div>`;
+            return;
+        }
+        let html = '';
+        list.forEach(e => {
+            const imgHtml = e.image ? `<img src="${e.image}" alt="${e.brand}" loading="lazy" />` :
+                `<span>${Icon.wrench({size:24})}</span>`;
+            html += `
+            <div class="mat-card" onclick="EquipmentPage.viewEquipment('${e.id}', this)" style="transition:transform .08s ease, box-shadow .08s ease;">
+                <div class="mc-thumb">${imgHtml}</div>
+                <div class="mc-body">
+                    <div class="mc-title">${e.brand || 'Unnamed'} ${e.model ? '— ' + e.model : ''}</div>
+                    <div class="mc-meta">
+                        <span class="req-id">${e.id}</span>
+                        <span>${e.category || ''} ${e.type && e.type !== e.category ? '→ ' + e.type : ''}</span>
+                        <span>${e.unit || ''}</span>
+                        ${e.status === 'pending' ? '<span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">Pending</span>' : ''}
+                        ${e.status === 'approved' ? '<span class="stamp approved" style="transform:none;padding:1px 8px;font-size:9px;">Approved</span>' : ''}
+                        ${e.status === 'pending' && App.isApprover() ? `<button class="btn-sm success" onclick="event.stopPropagation();EquipmentPage.approveEquipment('${e.id}')" style="margin-left:8px;">Approve</button>` : ''}
+                    </div>
                 </div>
-                <div class="list-container">`;
-                if (list.length === 0) html += `<div class="empty"><p>No equipment found.</p></div>`;
-                else {
-                    list.forEach(e => {
-                        const imgHtml = e.image ? `<img src="${e.image}" alt="${e.brand}" />` :
-                            `<span>${Icon.wrench({size:24})}</span>`;
-                        html += `
-                        <div class="mat-card" onclick="EquipmentPage.viewEquipment('${e.id}')">
-                            <div class="mc-thumb">${imgHtml}</div>
-                            <div class="mc-body">
-                                <div class="mc-title">${e.brand || 'Unnamed'} ${e.model ? '— ' + e.model : ''}</div>
-                                <div class="mc-meta">
-                                    <span class="req-id">${e.id}</span>
-                                    <span>${e.category || ''} ${e.type ? '→ ' + e.type : ''}</span>
-                                    <span>${e.unit || ''}</span>
-                                    ${e.status === 'pending' ? '<span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">Pending</span>' : ''}
-                                    ${e.status === 'approved' ? '<span class="stamp approved" style="transform:none;padding:1px 8px;font-size:9px;">Approved</span>' : ''}
-                                    ${e.status === 'pending' && App.isApprover() ? `<button class="btn-sm success" onclick="event.stopPropagation();EquipmentPage.approveEquipment('${e.id}')" style="margin-left:8px;">Approve</button>` : ''}
-                                </div>
-                            </div>
-                            <div style="color:var(--ink-soft);">›</div>
-                        </div>`;
-                    });
-                }
-                html += `</div>`;
-                UI.setContent(container, html);
+                <div style="color:var(--ink-soft);">›</div>
+            </div>`;
+        });
+        el.innerHTML = html;
+    },
+
+    onSearchInput(value) {
+        this._query = value || '';
+        this.renderTabs();
+        if (!this._query.trim() && this._currentFilter === 'warehouse') this.renderWarehouse();
+        else this.renderList();
+    },
+
+    clearSearch() {
+        this._query = '';
+        const inp = document.getElementById('equipSearch');
+        if (inp) inp.value = '';
+        this.renderTabs();
+        if (this._currentFilter === 'warehouse') this.renderWarehouse();
+        else this.renderList();
     },
 
     setFilter(filter) {
         this._currentFilter = filter;
-        this._searchResults = null;
-        this.load();
+        this._query = '';
+        const inp = document.getElementById('equipSearch');
+        if (inp) inp.value = '';
+        this.renderTabs();
+        if (filter === 'warehouse') this.renderWarehouse();
+        else this.renderList();
     },
 
-    clearSearch() {
-        this._searchResults = null;
-        this.load();
-    },
-
-    search() {
-        const query = document.getElementById('equipSearch').value;
-        if (!query.trim()) {
-            this._searchResults = null;
-            this.load();
-            return;
+    /**
+     * renderWarehouse (v8) - Tools & equipment currently sitting idle
+     * at the office warehouse (from completed transfers). Same cache-
+     * plus-refresh pattern as the Materials page; the cache is shared
+     * with MaterialsPage when available so the two tabs stay in step.
+     */
+    async renderWarehouse(force) {
+        const el = document.getElementById('equipListContainer');
+        if (!el) return;
+        if (!this._warehouse || force) {
+            // reuse the Materials page cache if it already pulled stock
+            if (!force && typeof MaterialsPage !== 'undefined' && MaterialsPage._warehouse) {
+                this._warehouse = MaterialsPage._warehouse;
+            } else {
+                el.innerHTML = `<div class="empty"><p>Loading warehouse stock…</p></div>`;
+                try {
+                    this._warehouse = await DataService.getWarehouseStock();
+                    if (typeof MaterialsPage !== 'undefined') MaterialsPage._warehouse = this._warehouse;
+                } catch (err) {
+                    UI.toast('' + err.message, 'error');
+                    el.innerHTML = `<div class="empty"><p>Could not load warehouse stock.</p></div>`;
+                    return;
+                }
+            }
         }
-        const container = document.getElementById('equipmentContent');
-        UI.showLoading(container);
-        setTimeout(async () => {
-            const results = await DataService.searchEquipment(query);
-            this._searchResults = results;
-            this.render(container);
-        }, 300);
+        const wh = this._warehouse;
+        const eqs = wh.equipment || [];
+        let html = `
+            <div class="kpi-strip" style="margin:14px 0;">
+                <div class="kpi-card"><div class="k-label">Equipment Types</div><div class="k-val">${eqs.length}</div><div class="k-sub">distinct items idle</div></div>
+                <div class="kpi-card"><div class="k-label">Total Units</div><div class="k-val">${fmtNum(eqs.reduce((s, e) => s + e.qty, 0))}</div><div class="k-sub">in the warehouse</div></div>
+                <div class="kpi-card warn"><div class="k-label">Pending Transfers</div><div class="k-val">${wh.pendingCount || 0}</div><div class="k-sub">awaiting approval</div></div>
+            </div>
+            <div class="section-head"><h2 style="font-size:13px;">Equipment in Warehouse</h2><div class="rule"></div>
+                <button class="btn-sm" onclick="EquipmentPage.renderWarehouse(true)" title="Re-pull the latest stock">⟳ Refresh</button>
+            </div>
+            <div class="panel"><table><thead><tr><th>Equipment</th><th style="text-align:right">Qty</th><th>Last From</th><th>Date</th></tr></thead><tbody>`;
+        if (!eqs.length) {
+            html += `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);padding:22px">No equipment in the warehouse. Units land here through completed transfers out of projects.</td></tr>`;
+        } else {
+            eqs.forEach(e => {
+                html += `<tr>
+                    <td>${e.item}</td>
+                    <td class="amt"><b>${fmtNum(e.qty)}</b></td>
+                    <td class="mono" style="font-size:11px">${e.lastFrom}</td>
+                    <td class="mono" style="font-size:11px">${e.lastDate || '—'}</td>
+                </tr>`;
+            });
+        }
+        html += `</tbody></table></div>
+            <div class="data-source-note">Warehouse contents are derived entirely from <b>completed transfers</b>. To pull a unit into a site, create a transfer (Warehouse → Project) from that project's Equipment tab. Check here for idle units before renting or buying.</div>`;
+        el.innerHTML = html;
     },
 
     showAddForm() { const f = document.getElementById('equipAddForm'); if (f) f.style.display = 'block'; },
@@ -187,18 +280,19 @@ const EquipmentPage = {
         if (!data.category || !data.brand) { UI.toast('Category and Brand are required.', 'error'); return; }
         const confirmed = await Confirm.open('Submit for Approval?', '');
         if (!confirmed) return;
-        try { 
+        try {
             const result = await DataService.requestEquipment(data);
             UI.toast(`${result.id} submitted for approval!`, 'success');
             document.getElementById('equipForm').reset();
             document.getElementById('equipImagePreview').classList.remove('open');
             this.hideAddForm();
-            this._allEquipment = (await DataService.getAllEquipment() || []).map(x => ({ ...x, status: String(x.status || '').toLowerCase() }));   // v6.1: legacy rows hold 'Pending'
-            this._searchResults = null;
-            
-            // ✅ FIX: Automatically switch to Pending tab after submission (Bug #1)
+            await this._refreshCache();
             this._currentFilter = 'pending';
-            this.load();
+            this._query = '';
+            const inp = document.getElementById('equipSearch');
+            if (inp) inp.value = '';
+            this.renderTabs();
+            this.renderList();
         } catch (err) { UI.toast('' + err.message, 'error'); }
         return false;
     },
@@ -207,13 +301,17 @@ const EquipmentPage = {
         if (!confirmed) return;
         try { await DataService.approveEquipment(id);
             UI.toast('Equipment approved!', 'success');
-            this._allEquipment = (await DataService.getAllEquipment() || []).map(x => ({ ...x, status: String(x.status || '').toLowerCase() }));   // v6.1: legacy rows hold 'Pending'
-            this._searchResults = null;
-            this.load(); } catch (err) { UI.toast('' + err.message, 'error'); }
+            await this._refreshCache();
+            this.renderTabs();
+            this.renderList(); } catch (err) { UI.toast('' + err.message, 'error'); }
     },
-    async viewEquipment(id) {
-        const all = await DataService.getAllEquipment();
-        const eq = all.find(e => e.id === id);
+    viewEquipment(id, cardEl) {
+        if (cardEl) {
+            cardEl.style.transform = 'scale(.985)';
+            cardEl.style.boxShadow = 'inset 0 0 0 2px var(--safety)';
+            setTimeout(() => { cardEl.style.transform = ''; cardEl.style.boxShadow = ''; }, 180);
+        }
+        const eq = this._allEquipment.find(e => e.id === id);
         if (!eq) { UI.toast('Not found.', 'error'); return; }
         EquipPrintModal.open(eq);
     }

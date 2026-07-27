@@ -82,7 +82,7 @@ Object.assign(ProjectPage, {
             </div>
             <div class="daily-form-section" id="photosSection">
                 <div class="section-label">Additional Photos <span class="rule"></span></div>
-                <div id="photosEntries"><div class="entry-row"><div class="field"><label>Photo</label><input type="file" accept="image/*" class="photo-input" data-photo onchange="ProjectPage.previewSmallImage(this,'photo-preview-${Date.now()}')" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'photos')">${Icon.close({size:13})}</button></div></div></div>
+                <div id="photosEntries"><div class="entry-row"><div class="field"><label>Photo</label><input type="file" accept="image/*" class="photo-input" data-photo onchange="ProjectPage.previewSmallImage(this,'photo-preview-${Date.now()}')" /></div><div class="field"><label>Caption (anong picture ito?)</label><input type="text" class="photo-caption" placeholder="e.g. Liner welding sa NF2 cell 2" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'photos')">${Icon.close({size:13})}</button></div></div></div>
                 <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('photos')">+ Add Photo</button></div>
             </div>
             <div class="submit-row" id="dailyStepNav" hidden>
@@ -220,13 +220,18 @@ Object.assign(ProjectPage, {
 
         data.status = 'draft';
 
-        const photoInputs = document.querySelectorAll('#photosEntries input[type="file"][data-photo]');
+        // v8: each photo carries its CAPTION so the record modal can show
+        // what the picture is. Uploads resolve to { url, caption } objects.
+        const photoRows = document.querySelectorAll('#photosEntries .entry-row');
         const photoPromises = [];
-        photoInputs.forEach(input => {
-            if (input.files && input.files.length > 0) {
+        photoRows.forEach(row => {
+            const input = row.querySelector('input[type="file"][data-photo]');
+            const caption = (row.querySelector('.photo-caption')?.value || '').trim();
+            if (input && input.files && input.files.length > 0) {
                 const file = input.files[0];
                 photoPromises.push(fileToBase64_(file).then(base64 => {
-                    return DataService.uploadImage(base64, file.name, file.type);
+                    return DataService.uploadImage(base64, file.name, file.type)
+                        .then(res => res && res.url ? { url: res.url, caption: caption } : null);
                 }).catch(err => {
                     console.error('Photo upload error:', err);
                     return null;
@@ -234,7 +239,7 @@ Object.assign(ProjectPage, {
             }
         });
         const photoResults = await Promise.all(photoPromises);
-        data.photos = photoResults.filter(r => r && r.url).map(r => r.url);
+        data.photos = photoResults.filter(r => r && r.url);
 
         // v5 (item 10): work-accomplished rows have their own photo input,
         // but getRows() only captured the file input's .value — a useless
@@ -727,11 +732,13 @@ Object.assign(ProjectPage, {
         PrintModal.open(record, this._recordMeta(record));
     },
 
-    /** _recordMeta (v3) - Header info shared by every record modal. */
+    /** _recordMeta (v3/v8) - Header info shared by every record modal.
+     *  v8: preparedBy is the person's NAME (resolved by the backend
+     *  from the Users sheet), never the raw email. */
     _recordMeta(record) {
         return {
             projectName: (this._data && this._data.name) || this._currentProjectId || '',
-            preparedBy: record.createdBy || ''
+            preparedBy: record.createdByName || record.createdBy || ''
         };
     },
 
@@ -838,7 +845,12 @@ Object.assign(ProjectPage, {
             if (record.status === 'rejected') return;
             const date = record.date || '';
             (record.photos || []).forEach(u => {
-                items.push({ url: u, date: date, sowId: '', source: 'General', pct: null });
+                // v8: photos may be { url, caption } objects or plain URL strings
+                const isObj = u && typeof u === 'object';
+                items.push({
+                    url: isObj ? u.url : u, date: date, sowId: '', source: 'General',
+                    pct: null, note: isObj ? (u.caption || '') : ''
+                });
             });
             (record.workAccomplished || []).forEach(w => {
                 if (!w.image) return;

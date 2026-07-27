@@ -8,6 +8,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js">
     </script>
+    <!-- v8: SheetJS for Excel exports (Estimates summary, Billings/SWA) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="css/main.css" />
 </head>
 <body>
@@ -689,24 +691,18 @@
             <div class="crumb"><button onclick="App.navigate('home')">Home</button> / Search Records</div>
             <div class="searchbar">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-soft)" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-                <input type="text" id="searchInput" placeholder="Search by Request ID, requestor, or project name…" oninput="performSearch()" />
+                <input type="text" id="searchInput" placeholder="Search by ID, requestor, project, material, equipment, personnel…" oninput="performSearch()" />
             </div>
-            <div id="searchResults">
-                <div class="panel">
-                    <div class="panel-head"><h3>Results</h3><span class="mono" style="font-size:11px;color:var(--ink-soft)" id="searchCount">0 found</span></div>
-                    <div class="empty" id="searchEmpty">
-                        <div class="glyph">⌕</div>
-                        <p>Mag-type para maghanap.</p>
-                        <p class="small">Naghahanap sa sample data.</p>
-                    </div>
-                    <div id="searchTableWrap" style="display:none;">
-                        <table>
-                            <thead><tr><th>ID</th><th>Requestor</th><th>Project</th><th style="text-align:right">Amount</th><th>Status</th></tr></thead>
-                            <tbody id="searchTableBody"></tbody>
-                        </table>
-                    </div>
+            <div class="panel" style="margin-bottom:14px;">
+                <div class="panel-head"><h3>Results</h3><span class="mono" style="font-size:11px;color:var(--ink-soft)" id="searchCount">0 found</span></div>
+                <div class="empty" id="searchEmpty">
+                    <div class="glyph">⌕</div>
+                    <p>Mag-type para maghanap.</p>
+                    <p class="small">Projects, cash requests, materials, equipment, manpower, billings, at transfers. I-click ang resulta para makita ang detalye.</p>
                 </div>
             </div>
+            <!-- v8: grouped, type-aware result tables render here -->
+            <div id="searchResults"></div>
         </div>
     </section>
 

@@ -54,3 +54,79 @@ function searchManpower(query) {
       (m.classification && String(m.classification).toLowerCase().indexOf(query) > -1);
   });
 }
+
+// ============================================================
+//  v8 — PERSONNEL DIRECTORY (actual people, not roles)
+// ============================================================
+//  The role catalog above is for PLANNING (Estimates use approved
+//  roles). Personnel are the REAL NAMES used on site — foremen,
+//  masons, laborers by name — for actual site execution. This is
+//  operational data, so it is direct-entry (no multi-sig): any
+//  logged-in user may add, admins may edit/deactivate.
+
+function getAllPersonnel() {
+  requireLogin_();
+  return readAll_('Personnel').map(function (p) {
+    return {
+      id: p.id,
+      name: p.name || '',
+      role: p.role || '',
+      classification: p.classification || '',
+      contactNumber: String(p.contactNumber || ''),
+      dailyRate: parseFloat(p.dailyRate) || 0,
+      notes: p.notes || '',
+      status: (p.status || 'active').toLowerCase(),
+      addedBy: p.addedBy || '',
+      createdAt: p.createdAt ? fmtDate_(p.createdAt) : ''
+    };
+  });
+}
+
+function addPersonnel(data) {
+  requireLogin_();
+  var name = String(data && data.name || '').trim();
+  if (!name) throw new Error('Person\'s name is required.');
+  var dup = readAll_('Personnel').find(function (p) {
+    return String(p.name).trim().toLowerCase() === name.toLowerCase() &&
+      (p.status || 'active').toLowerCase() === 'active';
+  });
+  if (dup) throw new Error('"' + name + '" is already in the Personnel directory (' + dup.id + ').');
+  var id = nextId_('PRS');
+  appendRow_('Personnel', {
+    id: id,
+    name: name,
+    role: String(data.role || '').trim(),
+    classification: String(data.classification || '').trim(),
+    contactNumber: String(data.contactNumber || '').trim(),
+    dailyRate: parseFloat(data.dailyRate) || 0,
+    notes: String(data.notes || '').trim(),
+    status: 'active',
+    addedBy: currentUserEmail_(),
+    createdAt: new Date(),
+    updatedAt: new Date()
+  });
+  logActivity_('Personnel "' + name + '" added by ' + currentUserName_(), 'blue', id);
+  return { success: true, id: id };
+}
+
+function updatePersonnel(id, data) {
+  requireLogin_();
+  var me = currentUserEmail_().toLowerCase();
+  var user = readAll_('Users').find(function (u) { return u.email.toLowerCase() === me; });
+  if (!user || (user.role !== 'admin' && user.role !== 'superadmin')) {
+    throw new Error('Only admins can edit personnel records.');
+  }
+  var rec = readAll_('Personnel').find(function (p) { return p.id === id; });
+  if (!rec) throw new Error('Personnel record not found.');
+  var patch = { updatedAt: new Date() };
+  if (data.name !== undefined) patch.name = String(data.name).trim();
+  if (data.role !== undefined) patch.role = String(data.role).trim();
+  if (data.classification !== undefined) patch.classification = String(data.classification).trim();
+  if (data.contactNumber !== undefined) patch.contactNumber = String(data.contactNumber).trim();
+  if (data.dailyRate !== undefined) patch.dailyRate = parseFloat(data.dailyRate) || 0;
+  if (data.notes !== undefined) patch.notes = String(data.notes).trim();
+  if (data.status !== undefined) patch.status = String(data.status).toLowerCase() === 'inactive' ? 'inactive' : 'active';
+  updateRow_('Personnel', 'id', id, patch);
+  logActivity_('Personnel ' + id + ' updated by ' + currentUserName_(), 'blue', id);
+  return { success: true };
+}

@@ -254,3 +254,77 @@ function getTransfersForProject(projectId) {
     })
     .sort(function (a, b) { return a.transferDate < b.transferDate ? 1 : -1; });
 }
+/**
+ * requestTransferBatch (v8) - Multiple items in ONE transfer request.
+ * data = { fromLoc, toLoc, itemType, transferDate, reason,
+ *          items: [{ item, qty }, ...] }
+ * Creates one Transfer row per item (each approved individually by an
+ * admin, same single-signature flow), sharing the same date/reason.
+ * Validates the WHOLE batch against source stock before writing
+ * anything, aggregating duplicate item lines, so a batch can never be
+ * half-created.
+ */
+function requestTransferBatch(data) {
+  requireLogin_();
+  var fromLoc = String(data && data.fromLoc || '').trim();
+  var toLoc = String(data && data.toLoc || '').trim();
+  var itemType = String(data && data.itemType || 'Material').trim();
+  var items = (data && data.items) || [];
+
+  if (!fromLoc || !toLoc) throw new Error('Both source and destination are required.');
+  if (fromLoc === toLoc) throw new Error('Source and destination must be different.');
+  if (itemType !== 'Material' && itemType !== 'Equipment') throw new Error('Invalid item type.');
+  if (!items.length) throw new Error('Add at least one item to transfer.');
+
+  var canFrom = fromLoc === WAREHOUSE_LOC || canEditProject_(fromLoc);
+  var canTo = toLoc === WAREHOUSE_LOC || canEditProject_(toLoc);
+  if (!canFrom && !canTo) {
+    throw new Error('You must be an editor of either the source or the destination project.');
+  }
+
+  // aggregate duplicate lines, then validate the batch as a whole
+  var want = {};
+  items.forEach(function (it) {
+    var nm = String(it && it.item || '').trim();
+    var q = parseFloat(it && it.qty);
+    if (!nm) throw new Error('Every line must have an item selected.');
+    if (isNaN(q) || q <= 0) throw new Error('Quantity for "' + nm + '" must be greater than zero.');
+    want[nm] = (want[nm] || 0) + q;
+  });
+  var stock = availableAt_(fromLoc, itemType);
+  Object.keys(want).forEach(function (nm) {
+    var avail = stock[nm] ? stock[nm].qty : 0;
+    if (want[nm] > avail + 0.0001) {
+      throw new Error('Only ' + avail + ' ' + (stock[nm] ? stock[nm].unit : '') + ' of "' + nm + '" available at the source.');
+    }
+  });
+
+  var tz = Session.getScriptTimeZone();
+  var dateStr = data.transferDate || Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
+  var reason = String(data.reason || '').trim();
+  var ids = [];
+  items.forEach(function (it) {
+    var nm = String(it.item).trim();
+    var id = nextId_('TRF');
+    ids.push(id);
+    appendRow_('Transfers', {
+      id: id,
+      fromLoc: fromLoc,
+      toLoc: toLoc,
+      itemType: itemType,
+      item: nm,
+      unit: stock[nm] ? stock[nm].unit : '',
+      qty: parseFloat(it.qty),
+      reason: reason,
+      transferDate: dateStr,
+      status: 'Pending',
+      requestedBy: currentUserEmail_(),
+      createdAt: new Date(),
+      decidedBy: '',
+      decidedAt: ''
+    });
+  });
+  logActivity_('Transfer batch (' + ids.length + ' item' + (ids.length > 1 ? 's' : '') + '): ' +
+    fromLoc + ' → ' + toLoc + ' [' + ids.join(', ') + '] (for approval)', 'blue', ids[0]);
+  return { success: true, ids: ids, count: ids.length };
+}

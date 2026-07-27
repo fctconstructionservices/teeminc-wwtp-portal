@@ -60,6 +60,7 @@ Object.assign(ProjectPage, {
 
         html += `
             <div class="section-head"><h2>Billing Register</h2><div class="rule"></div>
+                ${billings.length ? `<button class="btn-sm" onclick="ProjectPage.exportBillingsExcel()">📊 Export Excel</button>` : ''}
                 ${isAdmin && cr.ready && this._canEdit !== false ? `<button class="btn-sm primary" onclick="ProjectPage.generateBilling()">+ Generate from Progress (${p.totalProgress || 0}%)</button>` : ''}
             </div>
             <div class="panel"><table><thead><tr>
@@ -88,6 +89,12 @@ Object.assign(ProjectPage, {
                 // (v6.3: also gated on contract readiness, like Generate)
                 if ((b.status === 'Pending' || b.status === 'Approved') && isAdmin && cr.ready) {
                     actions += ` <button class="btn-sm" title="Client approved a different %" onclick="ProjectPage.reviseBillingPrompt('${b.id}', ${b.prevPct})">Revise %</button>`;
+                }
+                // v8 (6.9.2): Super Admin can delete a billing that has NOT
+                // been approved yet (Pending only — approved/paid billings
+                // are part of the financial record and stay).
+                if (b.status === 'Pending' && isSuper) {
+                    actions += ` <button class="btn-sm danger" title="Delete this unapproved billing" onclick="ProjectPage.deleteBillingPrompt('${b.id}', '${b.billingNo}')">🗑</button>`;
                 }
                 html += `<tr>
                     <td><span class="req-id" style="cursor:pointer;text-decoration:underline;" title="View Statement of Work Accomplishment" onclick="ProjectPage.openSWA('${b.id}')">${b.billingNo}</span></td>
@@ -347,4 +354,53 @@ Object.assign(ProjectPage, {
         if (el) el.remove();
     }
 
+});
+// ════════ v8: BILLING EXPORT + DELETE (item 6.9.2) ════════
+
+Object.assign(ProjectPage, {
+
+    /** exportBillingsExcel - the billing register as .xlsx. */
+    exportBillingsExcel() {
+        if (typeof XLSX === 'undefined') { UI.toast('Excel library not loaded — refresh the page and try again.', 'error'); return; }
+        const p = this._data || {};
+        const billings = p.billings || [];
+        if (!billings.length) { UI.toast('No billings to export.', 'error'); return; }
+        const aoa = [
+            ['BILLING REGISTER'],
+            [p.name || this._currentProjectId, p.client || ''],
+            ['Generated', new Date().toLocaleDateString('en-PH')],
+            [],
+            ['Billing #', 'Period', 'Prev %', 'Current %', 'Gross Amount', 'Retention', 'Net Amount', 'Status', 'Date']
+        ];
+        billings.forEach(b => aoa.push([
+            b.billingNo, b.period || '', parseFloat(b.prevPct) || 0, parseFloat(b.currentPct) || 0,
+            Math.round((b.grossAmount || 0) * 100) / 100,
+            Math.round((b.retentionAmount || 0) * 100) / 100,
+            Math.round((b.netAmount || 0) * 100) / 100,
+            b.status || '', b.billingDate || b.createdAt || ''
+        ]));
+        aoa.push(['TOTAL', '', '', '',
+            Math.round(billings.reduce((s, b) => s + (b.grossAmount || 0), 0) * 100) / 100,
+            Math.round(billings.reduce((s, b) => s + (b.retentionAmount || 0), 0) * 100) / 100,
+            Math.round(billings.reduce((s, b) => s + (b.netAmount || 0), 0) * 100) / 100, '', '']);
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        ws['!cols'] = [{ wch: 12 }, { wch: 18 }, { wch: 8 }, { wch: 10 }, { wch: 15 }, { wch: 13 }, { wch: 15 }, { wch: 11 }, { wch: 12 }];
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Billings');
+        XLSX.writeFile(wb, `Billing-Register-${(p.name || this._currentProjectId).replace(/[^\w-]+/g, '_')}.xlsx`);
+    },
+
+    /** deleteBillingPrompt - Super Admin only, Pending only (server
+     *  re-checks both). Approved/Paid billings can never be deleted. */
+    async deleteBillingPrompt(id, billingNo) {
+        const ok = await Confirm.open(`Delete ${billingNo}?`,
+            'This billing has not been approved, so it can still be removed. The billed-% baseline reverts to the previous billing. This cannot be undone.');
+        if (!ok) return;
+        try {
+            await DataService.deleteBilling(id);
+            UI.toast(`${billingNo} deleted.`, 'success');
+            await this.open(this._currentProjectId, true);
+            this.switchTab('billings');
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    }
 });

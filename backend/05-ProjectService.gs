@@ -194,7 +194,11 @@ function getProjectData(projectId) {
   const expenses = getTotalReleasedCashForProject(projectId);
   const cashPosition = revenue - expenses;
 
+  // v8: honor sortOrder (Super Admin can move items up/down). Legacy rows
+  // without a sortOrder keep their sheet position via the index fallback.
   const sowItems = readAll_('SOWItems').filter(function (s) { return s.projectId === projectId; })
+    .map(function (s, i) { s._ord = (s.sortOrder !== '' && s.sortOrder !== undefined && s.sortOrder !== null && !isNaN(parseFloat(s.sortOrder))) ? parseFloat(s.sortOrder) : (i + 1) * 1000; return s; })
+    .sort(function (a, b) { return a._ord - b._ord; })
     .map(function(s) {
       return {
         id: s.id,
@@ -212,11 +216,19 @@ function getProjectData(projectId) {
         predecessors: String(s.predecessors || ''),
         isMilestone: String(s.isMilestone).toUpperCase() === 'TRUE',
         baselineStart: fmtDate_(s.baselineStart),
-        baselineEnd: fmtDate_(s.baselineEnd)
+        baselineEnd: fmtDate_(s.baselineEnd),
+        sortOrder: s._ord
       };
     });
 
   const incomingCash = readAll_('IncomingCashRequests').filter(function (c) { return c.projectId === projectId && c.status === 'Approved'; });
+  // v8: resolve creator emails to display names ONCE, so the Daily
+  // Record modal can show "Prepared By: Juan Dela Cruz" instead of the
+  // raw email address.
+  const userNameByEmail = {};
+  readAll_('Users').forEach(function (u) {
+    if (u.email) userNameByEmail[String(u.email).toLowerCase()] = u.name || u.email;
+  });
   const dailyRecords = liveDailyRecords_()
     .filter(function (d) { return d.projectId === projectId; })
     .map(function (d) {
@@ -237,7 +249,8 @@ function getProjectData(projectId) {
         issues: safeParse_(d.issuesJSON, []),
         visitors: safeParse_(d.visitorsJSON, []),
         photos: safeParse_(d.photosJSON, []),
-        createdBy: d.createdBy || ''
+        createdBy: d.createdBy || '',
+        createdByName: userNameByEmail[String(d.createdBy || '').toLowerCase()] || d.createdBy || ''
       };
     });
 
@@ -686,6 +699,145 @@ function getProjectData(projectId) {
     })
   };
 
+  // ════════ v8: WEEKLY cashflow + EVM series ════════
+  // Same math as the monthly series above, bucketed per week (Mon–Sun)
+  // so the S-curve and cash flow can be viewed in more detail. Capped
+  // at 60 weeks in a window around today for very long projects.
+  const dayMs = 86400000;
+  const projStartD = new Date(proj.startDate);
+  const spanStartW = !isNaN(projStartD) ? projStartD : new Date(mStart);
+  let wFirst = new Date(spanStartW.getFullYear(), spanStartW.getMonth(), spanStartW.getDate());
+  wFirst = new Date(wFirst.getTime() - ((wFirst.getDay() + 6) % 7) * dayMs);   // back to Monday
+  const spanEndW = monthEnd_(monthsArr[monthsArr.length - 1]);
+  let totalWeeks = Math.ceil((spanEndW - wFirst) / (7 * dayMs)) + 1;
+  if (totalWeeks > 60) {
+    // keep a window: ~40 weeks back from today, then cap at 60
+    const back = new Date(today.getTime() - 40 * 7 * dayMs);
+    if (back > wFirst) {
+      wFirst = new Date(back.getTime() - ((back.getDay() + 6) % 7) * dayMs);
+      totalWeeks = Math.ceil((spanEndW - wFirst) / (7 * dayMs)) + 1;
+    }
+    if (totalWeeks > 60) totalWeeks = 60;
+  }
+  const MONTH_SHORT_W = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const weeks = [];
+  for (let wi = 0; wi < totalWeeks; wi++) {
+    const ws = new Date(wFirst.getTime() + wi * 7 * dayMs);
+    const we = new Date(ws.getTime() + 6 * dayMs);
+    weeks.push({ start: ws, end: we, label: MONTH_SHORT_W[ws.getMonth()] + ' ' + ws.getDate() });
+  }
+  const inWeek_ = function (dt, w) { return !isNaN(dt) && dt >= w.start && dt <= new Date(w.end.getFullYear(), w.end.getMonth(), w.end.getDate(), 23, 59, 59); };
+
+  const wkInflow = weeks.map(function () { return 0; });
+  const wkOutflow = weeks.map(function () { return 0; });
+  incomingForProject.forEach(function (c) {
+    const dt = new Date(fmtDate_(c.transactionDate || c.createdAt));
+    const idx = weeks.findIndex(function (w) { return inWeek_(dt, w); });
+    if (idx > -1) wkInflow[idx] += parseFloat(c.amount) || 0;
+  });
+  cashReleases.forEach(function (r) {
+    if (r.status !== 'Reviewed') return;
+    const dt = new Date(fmtDate_(r.releasedAt || r.createdAt));
+    const idx = weeks.findIndex(function (w) { return inWeek_(dt, w); });
+    if (idx > -1) wkOutflow[idx] += parseFloat(r.amount) || 0;
+  });
+
+  const wkProjected = weeks.map(function () { return 0; });
+  sowItems.forEach(function (s) {
+    if (s.isMilestone) return;
+    const remainingSpend = Math.max((s.budget || 0) - (s.actual || 0), 0);
+    if (remainingSpend <= 0) return;
+    const sEnd = new Date(s.endDate);
+    if (isNaN(sEnd)) return;
+    let from = new Date(Math.max(today.getTime(), new Date(s.startDate).getTime() || today.getTime()));
+    if (sEnd < today) {
+      const idx = weeks.findIndex(function (w) { return inWeek_(today, w); });
+      if (idx > -1) wkProjected[idx] += remainingSpend;
+      return;
+    }
+    const totalDays = Math.max(Math.round((sEnd - from) / dayMs) + 1, 1);
+    const perDay = remainingSpend / totalDays;
+    weeks.forEach(function (w, idx) {
+      const a = Math.max(from.getTime(), w.start.getTime());
+      const b = Math.min(sEnd.getTime(), w.end.getTime());
+      if (b < a) return;
+      const days = Math.round((b - a) / dayMs) + 1;
+      wkProjected[idx] += perDay * days;
+    });
+  });
+
+  const wkPv = weeks.map(function (w) {
+    const cut = w.end;
+    let pv = 0;
+    sowItems.forEach(function (s) {
+      const b = s.budget || 0;
+      if (!b) return;
+      const sS = new Date(s.startDate), sE = new Date(s.endDate);
+      if (isNaN(sS) || isNaN(sE)) return;
+      if (cut < sS) return;
+      if (cut >= sE || s.isMilestone) { pv += b; return; }
+      const frac = (cut - sS) / Math.max(sE - sS, 1);
+      pv += b * Math.min(Math.max(frac, 0), 1);
+    });
+    return Math.round(pv);
+  });
+  const wkAc = weeks.map(function (w, idx) {
+    if (w.start > today) return null;
+    let cum = 0;
+    for (let i = 0; i <= idx; i++) cum += wkOutflow[i];
+    return Math.round(cum);
+  });
+  const wkEv = weeks.map(function (w) {
+    if (w.start > today) return null;
+    const cutD = w.end < today ? w.end : today;
+    const cut = fmtDate_(cutD);
+    let ev = 0;
+    sowItems.forEach(function (x) {
+      if (x.isMilestone) return;
+      const basis = (x.estimateTotal || 0) + (x.voAdjustment || 0);
+      if (!basis) return;
+      ev += basis * (computeSOWProgressAsOf_(x.id, dailyRecords, cut) / 100);
+    });
+    return Math.round(ev);
+  });
+  const wkNowIdx = weeks.findIndex(function (w) { return inWeek_(today, w); });
+
+  const evmWeekly = {
+    labels: weeks.map(function (w) { return w.label; }),
+    pvSeries: wkPv,
+    acSeries: wkAc,
+    evSeries: wkEv,
+    nowIndex: wkNowIdx
+  };
+  const projectCashflowWeekly = {
+    labels: weeks.map(function (w) { return w.label; }),
+    inflow: wkInflow.map(function (v) { return Math.round(v); }),
+    outflow: wkOutflow.map(function (v) { return Math.round(v); }),
+    projectedOutflow: wkProjected.map(function (v, i) {
+      return weeks[i].end >= today ? Math.round(v) : null;
+    })
+  };
+
+  // ── v8: every curve now BEGINS AT ZERO at the project start, so day 0
+  //    reads ₱0 instead of jumping straight to the first bucket's
+  //    accumulated value. ──
+  const startLbl = !isNaN(projStartD)
+    ? (MONTH_SHORT_W[projStartD.getMonth()] + ' ' + projStartD.getDate() + ' (start)')
+    : 'Start';
+  const prependZero_ = function (evmObj, cfObj) {
+    evmObj.labels.unshift(startLbl);
+    evmObj.pvSeries.unshift(0);
+    evmObj.acSeries.unshift(0);
+    evmObj.evSeries.unshift(0);
+    if (evmObj.nowIndex !== undefined && evmObj.nowIndex > -1) evmObj.nowIndex += 1;
+    cfObj.labels.unshift(startLbl);
+    cfObj.inflow.unshift(0);
+    cfObj.outflow.unshift(0);
+    cfObj.projectedOutflow.unshift(null);
+  };
+  prependZero_(evm, projectCashflow);
+  prependZero_(evmWeekly, projectCashflowWeekly);
+
   // ── Billings + contract ──
   // v6.1: Sheets auto-parses period strings like "Jul 2026" into Date
   // cells, which serialize back as long ISO strings. Normalize every
@@ -768,7 +920,9 @@ function getProjectData(projectId) {
     downtimeLog: downtimeLog.slice(0, 40),
     costByType: costByType,
     projectCashflow: projectCashflow,
+    projectCashflowWeekly: projectCashflowWeekly,
     evm: evm,
+    evmWeekly: evmWeekly,
     billings: billings,
     variationOrders: projectVOs.slice().reverse(),
     contractValue: parseFloat(proj.contractValue) || 0,
@@ -854,8 +1008,60 @@ function updateSOWItem(projectId, sowId, data) {
   const found = findRowNum_('SOWItems', 'id', sowId);
   if (found === -1) throw new Error('SOW item not found.');
   updateRow_('SOWItems', 'id', sowId, patch);
+  // v8: keep the estimate group's description in sync when the SOW is
+  // renamed, so the Estimates tab and breakdown modal show the new name.
+  if (data.description !== undefined) {
+    const grp = readAll_('EstimateGroups').find(function (g) { return g.projectId === projectId && g.sowId === sowId; });
+    if (grp) updateRow_('EstimateGroups', 'id', grp.id, { sowDescription: data.description });
+  }
   logActivity_('SOW ' + sowId + ' updated', 'blue', sowId);
   return { success: true };
+}
+
+/**
+ * moveSOWItem (v8) - Super Admin moves a SOW item up or down in the
+ * display order. Sort orders are normalized to 1000, 2000, 3000... on
+ * first use (legacy rows fall back to their sheet position), then the
+ * two neighbours simply swap values.
+ */
+function moveSOWItem(projectId, sowId, direction) {
+  requireSuperAdmin_('reordering SOW items');
+  const list = readAll_('SOWItems')
+    .filter(function (s) { return s.projectId === projectId; })
+    .map(function (s, i) {
+      s._ord = (s.sortOrder !== '' && s.sortOrder !== undefined && s.sortOrder !== null && !isNaN(parseFloat(s.sortOrder)))
+        ? parseFloat(s.sortOrder) : (i + 1) * 1000;
+      return s;
+    })
+    .sort(function (a, b) { return a._ord - b._ord; });
+
+  const idx = list.findIndex(function (s) { return s.id === sowId; });
+  if (idx === -1) throw new Error('SOW item not found.');
+  const swapWith = direction === 'up' ? idx - 1 : idx + 1;
+  if (swapWith < 0 || swapWith >= list.length) return { success: true, moved: false };
+
+  // normalize everyone, then swap the two involved
+  list.forEach(function (s, i) { s._ord = (i + 1) * 1000; });
+  const a = list[idx]._ord;
+  list[idx]._ord = list[swapWith]._ord;
+  list[swapWith]._ord = a;
+  // SOW ids (e.g. "A.1") can repeat across projects, so rows are matched
+  // by id AND projectId — never by id alone.
+  const sh = sheet_('SOWItems');
+  const heads = headers_('SOWItems');
+  const idCol = heads.indexOf('id'), pjCol = heads.indexOf('projectId'), soCol = heads.indexOf('sortOrder');
+  if (soCol === -1) throw new Error('sortOrder column is missing — run migrateSchemas() once from the Apps Script editor.');
+  const values = sh.getDataRange().getValues();
+  const ordById = {};
+  list.forEach(function (s) { ordById[s.id] = s._ord; });
+  for (let r = 1; r < values.length; r++) {
+    if (String(values[r][pjCol]) !== String(projectId)) continue;
+    const rid = String(values[r][idCol]);
+    if (ordById[rid] !== undefined) sh.getRange(r + 1, soCol + 1).setValue(ordById[rid]);
+  }
+  _invalidateRead_('SOWItems');
+  logActivity_('SOW ' + sowId + ' moved ' + direction + ' in project ' + projectId, 'blue', sowId);
+  return { success: true, moved: true };
 }
 
 function deleteSOWItem(projectId, sowId) {

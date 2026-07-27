@@ -42,7 +42,9 @@ Object.assign(ProjectPage, {
                 <div class="kpi-card warn"><div class="k-label">Avg Utilization</div><div class="k-val">${sum.avgUtilization || 0}%</div><div class="k-sub">operational ÷ days on site</div></div>
             </div>
 
-            <div class="section-head"><h2>Equipment on Site</h2><div class="rule"></div><span class="cc-note">status from the most recent daily report</span></div>
+            <div class="section-head"><h2>Equipment on Site</h2><div class="rule"></div><span class="cc-note">status from the most recent daily report</span>
+                ${this._canEdit !== false ? `<button class="btn-sm primary" onclick="ProjectPage.openTransferModal('Equipment')">⇄ New Transfer</button>` : ''}
+            </div>
             <div class="panel"><table><thead><tr>
                 <th>Equipment</th><th style="text-align:right">Qty</th><th>Current Status</th>
                 <th style="text-align:right">Days on Site</th><th style="text-align:right">Operational</th>

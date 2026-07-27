@@ -493,8 +493,15 @@ const ProjectPage = {
     },
 
     /**
-     * renderOverview - Renders the overview tab
+     * renderOverview - Renders the overview tab.
+     * v8: Requests-by-Status, Incoming Cash graph, and the two tables
+     * (Cash Advance Requests / Incoming Cash) were removed — walang
+     * data na pumapasok doon and the Finance page already covers cash
+     * detail. Cashflow and the S-curve now have Monthly/Weekly views.
      */
+    _cfView: 'monthly',
+    _evmView: 'monthly',
+
     renderOverview(p) {
         const container = document.getElementById('proj-tab-overview');
         const evm = p.evm || {};
@@ -504,8 +511,16 @@ const ProjectPage = {
         const cpiState = evm.cpi === null || evm.cpi === undefined ? '' : (evm.cpi >= 1 ? 'Within Cost' : evm.cpi >= 0.9 ? 'Slightly Over Cost' : 'Over Cost');
         const healthCls = (evm.spi !== null && evm.spi < 0.9) || (evm.cpi !== null && evm.cpi < 0.9) ? 'bad'
             : (evm.spi !== null && evm.spi < 1) || (evm.cpi !== null && evm.cpi < 1) ? 'warn' : 'good';
+        const toggle = (id, current, fn) => `
+            <span class="status-tabs" style="margin:0 0 0 auto;display:inline-flex;">
+                <button class="${current === 'monthly' ? 'active' : ''}" style="padding:3px 10px;font-size:10px;" onclick="ProjectPage.${fn}('monthly')">Monthly</button>
+                <button class="${current === 'weekly' ? 'active' : ''}" style="padding:3px 10px;font-size:10px;" onclick="ProjectPage.${fn}('weekly')">Weekly</button>
+            </span>`;
         let html = `
-                <div class="section-head"><h2>Project Cashflow</h2><div class="rule"></div><span class="cc-note">solid = actual · dotted = projected from Gantt</span></div>
+                <div class="section-head"><h2>Project Cashflow</h2><div class="rule"></div>
+                    <span class="cc-note">solid = actual · dotted = projected from Gantt · starts at ₱0 on project start</span>
+                    ${toggle('cf', this._cfView, 'setCfView')}
+                </div>
                 <div class="chart-card" style="margin-bottom:16px;"><div class="canvas-wrap"><canvas id="projCfChart"></canvas></div></div>
 
                 <div class="section-head"><h2>Project Health — Earned Value</h2><div class="rule"></div></div>
@@ -515,7 +530,10 @@ const ProjectPage = {
                     <div class="kpi-card warn"><div class="k-label">AC · Actual Cost</div><div class="k-val mono">₱${fmtMoney(evm.ac || 0)}</div><div class="k-sub">actual cost (reviewed releases)</div></div>
                     <div class="kpi-card ${healthCls}"><div class="k-label">SPI ${spiTxt} · CPI ${cpiTxt}</div><div class="k-val" style="font-size:14px;">${spiState}${spiState && cpiState ? ' · ' : ''}${cpiState}</div><div class="k-sub">SPI=EV/PV · CPI=EV/AC · 1.00 = on plan</div></div>
                 </div>
-                <div class="chart-card" style="margin-bottom:10px;"><div class="cc-head"><h3>S-Curve — PV vs EV vs AC</h3><span class="cc-note">PV moves with the schedule · AC is actual spend</span></div><div class="canvas-wrap"><canvas id="evmChart"></canvas></div></div>
+                <div class="chart-card" style="margin-bottom:10px;"><div class="cc-head"><h3>S-Curve — PV vs EV vs AC</h3>
+                    <span class="cc-note">PV moves with the schedule · AC is actual spend</span>
+                    ${toggle('evm', this._evmView, 'setEvmView')}
+                </div><div class="canvas-wrap"><canvas id="evmChart"></canvas></div></div>
                 <div class="evm-help" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-bottom:18px;">
                     <div style="background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:11.5px;line-height:1.5;"><b style="font-family:'IBM Plex Mono';color:var(--blueprint);">PV — Planned Value.</b> What should have been spent by now if the schedule is followed. Recalculates whenever the Timeline changes.</div>
                     <div style="background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:11.5px;line-height:1.5;"><b style="font-family:'IBM Plex Mono';color:var(--blueprint);">EV — Earned Value.</b> The value of work actually completed, on the contract basis: % complete (from Daily Reports) × approved estimate (+ VOs) for each SOW item.</div>
@@ -523,52 +541,36 @@ const ProjectPage = {
                 </div>
 
                 <div class="section-head"><h2>Cost Breakdown</h2><div class="rule"></div><span class="cc-note">by request type</span></div>
-                <div class="chart-card" style="margin-bottom:16px;"><div class="canvas-wrap"><canvas id="projTypeChart"></canvas></div></div>
-
-                <div class="chart-grid">
-                    <div class="chart-card"><div class="cc-head"><h3>Requests by Status</h3></div><div class="canvas-wrap short"><canvas id="projStatusChart"></canvas></div></div>
-                    <div class="chart-card"><div class="cc-head"><h3>Incoming Cash</h3></div><div class="canvas-wrap short"><canvas id="projCashChart"></canvas></div></div>
-                </div>
-                <div class="section-head"><h2>Cash Advance Requests</h2><div class="rule"></div></div>
-                <div class="panel"><table><thead><tr><th>ID</th><th>Requestor</th><th>Purpose</th><th style="text-align:right">Amount</th><th>Status</th></tr></thead><tbody>`;
-        const requests = p.requests || [];
-        if (requests.length === 0) html +=
-            `<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:24px">No requests.</td></tr>`;
-        else {
-            requests.forEach(r => {
-                const cls = r.status === 'Approved for Release' || r.status === 'Released' || r.status ===
-                    'Approved' ? 'approved' : r.status === 'Pending' ? 'pending' : 'rejected';
-                html +=
-                    `<tr><td><span class="req-id">${r.id}</span></td><td>${r.requestor}</td><td>${r.description || r.purpose || '—'}</td><td class="amt">₱${fmtMoney((r.amount || 0))}</td><td><span class="stamp ${cls}">${r.status}</span></td></tr>`;
-            });
-        }
-        html += `</tbody></table></div>
-                <div class="section-head"><h2>Incoming Cash</h2><div class="rule"></div></div>
-                <div class="panel"><table><thead><tr><th>Date</th><th>Name</th><th>Description</th><th style="text-align:right">Amount</th></tr></thead><tbody>`;
-        const incomingCash = p.incomingCash || [];
-        if (incomingCash.length === 0) html +=
-            `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);padding:24px">No cash.</td></tr>`;
-        else {
-            incomingCash.forEach(c => {
-                html +=
-                    `<tr><td class="mono" style="font-size:11.5px">${c.date}</td><td>${c.name}</td><td>${c.desc}</td><td class="amt">₱${fmtMoney((c.amount || 0))}</td></tr>`;
-            });
-        }
-        html += `</tbody></table></div>`;
+                <div class="chart-card" style="margin-bottom:16px;"><div class="canvas-wrap"><canvas id="projTypeChart"></canvas></div></div>`;
         container.innerHTML = html;
     },
 
+    /** setCfView / setEvmView (v8) - Monthly ↔ Weekly toggles. Only the
+     *  affected chart is rebuilt (data already in the payload). */
+    setCfView(view) {
+        this._cfView = view;
+        this.renderOverview(this._data);
+        setTimeout(() => this._buildOverviewCharts(this._data), 50);
+    },
+    setEvmView(view) {
+        this._evmView = view;
+        this.renderOverview(this._data);
+        setTimeout(() => this._buildOverviewCharts(this._data), 50);
+    },
+
     _buildOverviewCharts(p) {
-        if (this._charts.status) this._charts.status.destroy();
-        if (this._charts.cash) this._charts.cash.destroy();
+        if (this._charts.status) { this._charts.status.destroy(); this._charts.status = null; }
+        if (this._charts.cash) { this._charts.cash.destroy(); this._charts.cash = null; }
         if (this._charts.projCf) this._charts.projCf.destroy();
         if (this._charts.evm) this._charts.evm.destroy();
         if (this._charts.projType) this._charts.projType.destroy();
         try {
             if (typeof Chart === 'undefined') return;
 
-            // ── v6: Project cashflow — actual bars + Gantt-driven projection ──
-            const cf = p.projectCashflow;
+            // ── v6/v8: Project cashflow — actual bars + Gantt projection,
+            //    Monthly or Weekly per the toggle ──
+            const cf = this._cfView === 'weekly' && p.projectCashflowWeekly
+                ? p.projectCashflowWeekly : p.projectCashflow;
             const cfCtx = document.getElementById('projCfChart');
             if (cfCtx && cf && cf.labels && cf.labels.length) {
                 let run = 0;
@@ -577,34 +579,35 @@ const ProjectPage = {
                     data: { labels: cf.labels, datasets: [
                         { type: 'bar', label: 'Inflow', data: cf.inflow, backgroundColor: '#2F7A46', borderRadius: 4 },
                         { type: 'bar', label: 'Outflow', data: cf.outflow, backgroundColor: '#B23A2E', borderRadius: 4 },
-                        { type: 'line', label: 'Projected outflow (Gantt)', data: cf.projectedOutflow, borderColor: '#C2860F', borderDash: [5, 4], pointRadius: 3, tension: .3, spanGaps: false },
-                        { type: 'line', label: 'Net (running)', data: net, borderColor: '#24455A', tension: .3, pointRadius: 3 }
+                        { type: 'line', label: 'Projected outflow (Gantt)', data: cf.projectedOutflow, borderColor: '#C2860F', borderDash: [5, 4], pointRadius: this._cfView === 'weekly' ? 2 : 3, tension: .3, spanGaps: false },
+                        { type: 'line', label: 'Net (running)', data: net, borderColor: '#24455A', tension: .3, pointRadius: this._cfView === 'weekly' ? 2 : 3 }
                     ]},
                     options: { responsive: true, maintainAspectRatio: false,
                         plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, font: { size: 10.5 } } },
                             tooltip: { callbacks: { label: c => `${c.dataset.label}: ₱${fmtMoney(c.parsed.y ?? 0)}` } } },
-                        scales: { y: { ticks: { callback: fmtAxisMoney }, grid: { color: '#EEEBE0' } }, x: { grid: { display: false } } } }
+                        scales: { y: { ticks: { callback: fmtAxisMoney }, grid: { color: '#EEEBE0' } },
+                            x: { grid: { display: false }, ticks: this._cfView === 'weekly' ? { maxRotation: 60, minRotation: 40, font: { size: 9.5 }, autoSkip: true, maxTicksLimit: 26 } : {} } } }
                 });
             }
 
-            // ── v6: EVM S-curve — PV full curve, AC to date, EV point now ──
-            const evm = p.evm;
+            // ── v6/v8: EVM S-curve — Monthly or Weekly per the toggle,
+            //    always starting at ₱0 on the project start ──
+            const evm = this._evmView === 'weekly' && p.evmWeekly ? p.evmWeekly : p.evm;
             const evmCtx = document.getElementById('evmChart');
             if (evmCtx && evm && evm.labels && evm.labels.length) {
-                // v6.8: EV is a full historical line (reconstructed from
-                // the daily reports per month-end), not a single point.
                 const evData = evm.evSeries || evm.labels.map((_, i) => i === evm.nowIndex ? evm.ev : null);
                 this._charts.evm = new Chart(evmCtx, {
                     type: 'line',
                     data: { labels: evm.labels, datasets: [
-                        { label: 'PV — Planned (Gantt)', data: evm.pvSeries, borderColor: '#5B6360', borderDash: [6, 4], tension: .35, pointRadius: 2 },
-                        { label: 'AC — Actual Cost', data: evm.acSeries, borderColor: '#B23A2E', tension: .35, pointRadius: 3, spanGaps: false },
-                        { label: 'EV — Earned, contract basis', data: evData, borderColor: '#2F7A46', tension: .35, pointRadius: 3, spanGaps: false }
+                        { label: 'PV — Planned (Gantt)', data: evm.pvSeries, borderColor: '#5B6360', borderDash: [6, 4], tension: .35, pointRadius: this._evmView === 'weekly' ? 1.5 : 2 },
+                        { label: 'AC — Actual Cost', data: evm.acSeries, borderColor: '#B23A2E', tension: .35, pointRadius: this._evmView === 'weekly' ? 2 : 3, spanGaps: false },
+                        { label: 'EV — Earned, contract basis', data: evData, borderColor: '#2F7A46', tension: .35, pointRadius: this._evmView === 'weekly' ? 2 : 3, spanGaps: false }
                     ]},
                     options: { responsive: true, maintainAspectRatio: false,
                         plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, font: { size: 10.5 } } },
                             tooltip: { callbacks: { label: c => `${c.dataset.label}: ₱${fmtMoney(c.parsed.y ?? 0)}` } } },
-                        scales: { y: { ticks: { callback: fmtAxisMoney }, grid: { color: '#EEEBE0' } }, x: { grid: { display: false } } } }
+                        scales: { y: { ticks: { callback: fmtAxisMoney }, grid: { color: '#EEEBE0' } },
+                            x: { grid: { display: false }, ticks: this._evmView === 'weekly' ? { maxRotation: 60, minRotation: 40, font: { size: 9.5 }, autoSkip: true, maxTicksLimit: 26 } : {} } } }
                 });
             }
 
@@ -622,54 +625,6 @@ const ProjectPage = {
                         plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => '₱' + fmtMoney(c.parsed.x) } } },
                         scales: { x: { ticks: { callback: fmtAxisMoney }, grid: { color: '#EEEBE0' } }, y: { grid: { display: false } } } }
                 });
-            }
-            const requests = p.requests || [];
-            const statusCounts = {};
-            requests.forEach(r => { statusCounts[r.status] = (statusCounts[r.status] || 0) + 1; });
-            const labels = Object.keys(statusCounts);
-            const colors = labels.map(s => {
-                if (s === 'Approved for Release' || s === 'Released' || s === 'Approved') return '#2F7A46';
-                if (s === 'Pending' || s === 'Pending Approval') return '#C2860F';
-                return '#B23A2E';
-            });
-            const ctx = document.getElementById('projStatusChart');
-            if (ctx) {
-                this._charts.status = new Chart(ctx, {
-                    type: 'doughnut',
-                    data: {
-                        labels: labels.length ? labels : ['No data'],
-                        datasets: [{ data: labels.length ? labels.map(s => statusCounts[s]) : [1],
-                            backgroundColor: labels.length ? colors : ['#D6D2C4'], borderColor: '#fff',
-                            borderWidth: 2 }]
-                    },
-                    options: { responsive: true, maintainAspectRatio: false, cutout: '62%',
-                        plugins: { legend: { position: 'bottom', labels: { usePointStyle: true,
-                                    boxWidth: 8, font: { size: 10.5 } } } } }
-                });
-            }
-            const cashCtx = document.getElementById('projCashChart');
-            const incomingCash = p.incomingCash || [];
-            if (cashCtx && incomingCash.length > 0) {
-                this._charts.cash = new Chart(cashCtx, {
-                    type: 'bar',
-                    data: {
-                        labels: incomingCash.map(c => c.date),
-                        datasets: [{ data: incomingCash.map(c => c.amount),
-                            backgroundColor: '#24455A', borderRadius: 4 }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { display: false }, tooltip: { callbacks: { label: c =>
-                                        '₱' + fmtMoney(c.parsed.y) } } },
-                        scales: { y: { ticks: { callback: fmtAxisMoney },
-                                grid: { color: '#EEEBE0' } }, x: { grid: { display: false } } }
-                    }
-                });
-            } else if (cashCtx) {
-                const wrap = cashCtx.closest('.canvas-wrap');
-                if (wrap) wrap.innerHTML =
-                    `<div class="empty" style="padding:20px"><p class="small">No cash data.</p></div>`;
             }
         } catch (err) { console.error('Overview chart error:', err); }
     },

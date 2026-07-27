@@ -48,7 +48,7 @@ const PUBLIC_ACTIONS = { loginWithPassword: true };
  * and corrupt each other's changes (e.g. two admins approving the same
  * item, or two estimate saves racing on the same sheet rewrite).
  */
-const WRITE_ACTION_RE = /^(add|create|update|delete|submit|request|approve|reject|save|set|mark|revise|force|review|migrate|setup|liquidat|transfer)/i;
+const WRITE_ACTION_RE = /^(add|create|update|delete|submit|request|approve|reject|save|set|mark|revise|force|review|migrate|setup|liquidat|transfer|move)/i;
 
 function doPost(e) {
   var lock = null;
@@ -222,5 +222,16 @@ const API_ACTIONS = {
   purgeDeletedRecords: purgeDeletedRecords,
   requestVariationOrder: requestVariationOrder,
   approveVariationOrder: approveVariationOrder,
-  rejectVariationOrder: rejectVariationOrder
+  rejectVariationOrder: rejectVariationOrder,
+  // ─── v8 ────────────────────────────────────────────
+  // Batch transfers (multiple items in one request)
+  requestTransferBatch: requestTransferBatch,
+  // SOW reordering (Super Admin)
+  moveSOWItem: moveSOWItem,
+  // Delete a still-pending billing (Super Admin)
+  deleteBilling: deleteBilling,
+  // Personnel directory (actual people, separate from the role catalog)
+  getAllPersonnel: getAllPersonnel,
+  addPersonnel: addPersonnel,
+  updatePersonnel: updatePersonnel
 };
