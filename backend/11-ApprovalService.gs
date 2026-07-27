@@ -23,7 +23,7 @@ function getPendingApprovals() {
   // (approval badge), so it was the most frequent multi-read call.
   readMany_(['Users', 'Approvals', 'CashAdvanceRequests', 'CashRelease',
     'IncomingCashRequests', 'Liquidations', 'Materials', 'Equipment',
-    'Manpower', 'DailyRecords', 'EstimateGroups']);
+    'Manpower', 'DailyRecords', 'EstimateGroups', 'OTRequests']);
 
   const userEmail = currentUserEmail_().toLowerCase();
   const userRecord = readAll_('Users').find(function (u) { 

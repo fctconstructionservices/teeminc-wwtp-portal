@@ -224,6 +224,14 @@ function fmtDateTime_(v) {
   if (Object.prototype.toString.call(v) === '[object Date]') {
     if (isNaN(v.getTime())) return '';
     var tz = Session.getScriptTimeZone();
+    // v9.1 TIME-CELL FIX: when a plain time like "17:00" is written to a
+    // cell, Sheets converts it to a Date anchored at 1899-12-30. Reading
+    // it back and formatting as a date produced garbage like
+    // "1899-12-30 17:00" (seen on OT start/end). Any Date from before
+    // 1901 IS a time value — format it as HH:mm only.
+    if (v.getFullYear() < 1901) {
+      return Utilities.formatDate(v, tz, 'HH:mm');
+    }
     var hasTime = v.getHours() + v.getMinutes() + v.getSeconds() > 0;
     return Utilities.formatDate(v, tz, hasTime ? 'yyyy-MM-dd HH:mm' : 'yyyy-MM-dd');
   }
