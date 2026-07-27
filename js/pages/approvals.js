@@ -64,8 +64,12 @@ const RequestDetailModal = {
         // v4: only ADMIN role approves in the normal flow; super admin
         // force-decides only and is not counted among approvers.
         const isApprover = user && user.role === 'admin';
-        const isRequestor = user && data.requestorEmail && 
-            user.email.toLowerCase() === data.requestorEmail.toLowerCase();
+        // v9.2: cash types carry requestorEmail; DB/OT types carry
+        // requestedBy — check both so the requester never sees Approve
+        // buttons on their own request (server rejects it anyway).
+        const submitterEmail = data.requestorEmail || data.requestedBy || data.submittedBy || data.createdBy || '';
+        const isRequestor = user && submitterEmail &&
+            user.email.toLowerCase() === String(submitterEmail).toLowerCase();
         const statusCls = data.status === 'Approved' ? 'approved' : data.status === 'Pending' ? 'pending' : data.status === 'Reviewing' ? 'pending' : 'rejected';
         
         let attachmentsHtml = '';
@@ -98,21 +102,48 @@ const RequestDetailModal = {
             }
         }
         
+        // v9.2: the detail grid mirrors the fields of the FORM that
+        // created the request. OT requests get their own layout (OT
+        // Date / Start / End / Affected SOW / Reason) instead of the
+        // cash-request fields (requestor/amount) that rendered as
+        // "undefined" for them.
+        let detailsHtml;
+        if (data.type === 'OTRequest') {
+            const sowIds = Array.isArray(data.sowIds) && data.sowIds.length
+                ? data.sowIds
+                : (function () { try { return JSON.parse(data.sowIdsJSON || '[]'); } catch (e) { return []; } })();
+            detailsHtml = `
+            <div class="print-section"><div class="ps-title">⏱ Overtime Request Details</div>
+                <div class="detail-grid">
+                    <div class="dg-item"><span class="dg-label">Requested By</span><span class="dg-value">${data.requestedBy || '—'}</span></div>
+                    <div class="dg-item"><span class="dg-label">Project</span><span class="dg-value">${data.projectId || '—'}</span></div>
+                    <div class="dg-item"><span class="dg-label">OT Date</span><span class="dg-value">${data.otDate || '—'}</span></div>
+                    <div class="dg-item"><span class="dg-label">OT Time</span><span class="dg-value">${data.otStart || '—'} – ${data.otEnd || '—'}</span></div>
+                    <div class="dg-item full"><span class="dg-label">Affected SOW</span><span class="dg-value">${sowIds.length ? sowIds.join(', ') : '—'}</span></div>
+                    <div class="dg-item full"><span class="dg-label">Reason for OT</span><span class="dg-value">${data.reason || '—'}</span></div>
+                </div>
+                <div class="data-source-note" style="margin-top:10px;">Kapag na-approve ng lahat ng Admins, bubukas ang OT In/Out fields ng Daily Site Record para sa ${data.otDate || 'petsang ito'} sa proyektong ito.</div>
+            </div>`;
+        } else {
+            detailsHtml = `
+            <div class="print-section"><div class="ps-title">Request Details</div>
+                <div class="detail-grid">
+                    <div class="dg-item"><span class="dg-label">Requestor</span><span class="dg-value">${data.requestor || data.requestedBy || data.submittedBy || '—'}</span></div>
+                    <div class="dg-item"><span class="dg-label">Project</span><span class="dg-value">${data.project || data.projectId || '—'}</span></div>
+                    <div class="dg-item"><span class="dg-label">Amount</span><span class="dg-value">₱${fmtMoney((data.amount || 0))}</span></div>
+                    <div class="dg-item"><span class="dg-label">Scope of Work</span><span class="dg-value">${data.scope || '—'}</span></div>
+                    <div class="dg-item full"><span class="dg-label">Description</span><span class="dg-value">${data.description || '—'}</span></div>
+                    ${attachmentsHtml}
+                </div>
+            </div>`;
+        }
+
         let html = `
         <div class="print-header">
-            <h2>${data.id} — ${data.type}</h2>
+            <h2>${data.id} — ${data.type === 'OTRequest' ? 'Overtime Request' : (data.type || 'Request')}</h2>
             <div class="print-meta">${data.createdAt || new Date().toLocaleDateString()} · <span class="stamp ${statusCls}">${data.status}</span></div>
         </div>
-        <div class="print-section"><div class="ps-title">Request Details</div>
-            <div class="detail-grid">
-                <div class="dg-item"><span class="dg-label">Requestor</span><span class="dg-value">${data.requestor}</span></div>
-                <div class="dg-item"><span class="dg-label">Project</span><span class="dg-value">${data.project || data.projectId || '—'}</span></div>
-                <div class="dg-item"><span class="dg-label">Amount</span><span class="dg-value">₱${fmtMoney((data.amount || 0))}</span></div>
-                <div class="dg-item"><span class="dg-label">Scope of Work</span><span class="dg-value">${data.scope || '—'}</span></div>
-                <div class="dg-item full"><span class="dg-label">Description</span><span class="dg-value">${data.description || '—'}</span></div>
-                ${attachmentsHtml}
-            </div>
-        </div>
+        ${detailsHtml}
         <div class="print-actions">
             <button class="btn-primary" onclick="window.print()">${Icon.printer({size:14})} Print</button>
             ${actionButtons}
@@ -444,9 +475,9 @@ const ApprovalsPage = {
                     `;
                 }
                 html += `
-                <div class="approval-request-item">
+                <div class="approval-request-item" style="cursor:pointer;">
                     <div class="ar-icon">⏱</div>
-                    <div class="ar-body">
+                    <div class="ar-body" onclick="RequestDetailModal.open('${o.id}','request')">
                         <div class="ar-title">OT ${o.otDate || ''} · ${o.otStart || '?'}–${o.otEnd || '?'} (${o.projectId || '—'})</div>
                         <div class="ar-meta">
                             <span class="ar-id">${o.id}</span>

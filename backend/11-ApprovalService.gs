@@ -260,24 +260,29 @@ function getMyRejectedRequests() {
 }
 
 function getRequestById(id) {
-  let req = readAll_('CashAdvanceRequests').find(function (r) { return r.id === id; });
-  if (req) return req;
-  req = readAll_('CashRelease').find(function (r) { return r.id === id; });
-  if (req) return req;
-  req = readAll_('IncomingCashRequests').find(function (r) { return r.id === id; });
-  if (req) return req;
-  req = readAll_('Liquidations').find(function (l) { return l.id === id; });
-  if (req) return req;
-  req = readAll_('Materials').find(function (m) { return m.id === id; });
-  if (req) return req;
-  req = readAll_('Equipment').find(function (e) { return e.id === id; });
-  if (req) return req;
-  req = readAll_('DailyRecords').find(function (d) { return d.id === id; });
-  if (req) return req;
-  req = readAll_('Manpower').find(function (m) { return m.id === id; });
-  if (req) return req;
-  req = readAll_('OTRequests').find(function (o) { return o.id === id; });
-  if (req) return sanitizeDatesDeep_(req);
+  // v9.2: every result is TAGGED with its type (the detail modal and
+  // its approve/reject buttons need it — raw rows have no such field,
+  // which rendered as "undefined" and broke type-dependent rendering)
+  // and passed through sanitizeDatesDeep_ (clean dates/times).
+  var lookups = [
+    ['CashAdvanceRequests', 'CashAdvance'],
+    ['CashRelease', 'CashRelease'],
+    ['IncomingCashRequests', 'IncomingCash'],
+    ['Liquidations', 'Liquidation'],
+    ['Materials', 'Material'],
+    ['Equipment', 'Equipment'],
+    ['DailyRecords', 'DailyRecord'],
+    ['Manpower', 'Manpower'],
+    ['OTRequests', 'OTRequest']
+  ];
+  for (var i = 0; i < lookups.length; i++) {
+    var req = readAll_(lookups[i][0]).find(function (r) { return r.id === id; });
+    if (req) {
+      req.type = lookups[i][1];
+      if (req.type === 'OTRequest') req.sowIds = safeParse_(req.sowIdsJSON, []);
+      return sanitizeDatesDeep_(req);
+    }
+  }
   return null;
 }
 
