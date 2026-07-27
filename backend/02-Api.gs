@@ -232,6 +232,20 @@ const API_ACTIONS = {
   deleteBilling: deleteBilling,
   // Personnel directory (actual people, separate from the role catalog)
   getAllPersonnel: getAllPersonnel,
+
+  // ── v9: Site ops — OT, punchlist, safety, drawings ──
+  requestOT: requestOT,
+  getOTRequests: getOTRequests,
+  addPunchlistItem: addPunchlistItem,
+  updatePunchlistItem: updatePunchlistItem,
+  deletePunchlistItem: deletePunchlistItem,
+  getPunchlist: getPunchlist,
+  addSafetyRecord: addSafetyRecord,
+  updateSafetyRecord: updateSafetyRecord,
+  getSafetyRecords: getSafetyRecords,
+  addDrawing: addDrawing,
+  deleteDrawing: deleteDrawing,
+  getDrawings: getDrawings,
   addPersonnel: addPersonnel,
   updatePersonnel: updatePersonnel
 };

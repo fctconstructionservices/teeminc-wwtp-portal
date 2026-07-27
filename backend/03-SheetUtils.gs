@@ -214,3 +214,43 @@ function deleteRow_(name, idField, idValue) {
   _invalidateRead_(name);   // v6.5
   return true;
 }
+/**
+ * fmtDateTime_ (v9) - Like fmtDate_ but keeps the TIME part when the
+ * value actually has one ('yyyy-MM-dd HH:mm'). Pure dates stay clean
+ * 'yyyy-MM-dd'. Used for createdAt/timestamps shown in the UI.
+ */
+function fmtDateTime_(v) {
+  if (v === '' || v === null || v === undefined) return '';
+  if (Object.prototype.toString.call(v) === '[object Date]') {
+    if (isNaN(v.getTime())) return '';
+    var tz = Session.getScriptTimeZone();
+    var hasTime = v.getHours() + v.getMinutes() + v.getSeconds() > 0;
+    return Utilities.formatDate(v, tz, hasTime ? 'yyyy-MM-dd HH:mm' : 'yyyy-MM-dd');
+  }
+  return String(v);
+}
+
+/**
+ * sanitizeDatesDeep_ (v9 — item 7 fix) - Recursively converts every
+ * Date object inside a payload (object/array, any nesting) into a
+ * clean script-timezone string via fmtDateTime_.
+ *
+ * WHY: readAll_ returns JS Date objects for any cell Sheets has
+ * auto-formatted as a date (createdAt, date, billingDate, ...). When
+ * such payloads were returned raw — as the Approvals dashboard did —
+ * JSON serialization produced UTC ISO strings ("2026-07-20T16:00:00.000Z"),
+ * which (a) display as ugly raw ISO text and (b) show the WRONG
+ * calendar day for PH time (UTC+8). Passing every outbound approval
+ * payload through this eliminates the whole bug class at the source.
+ */
+function sanitizeDatesDeep_(v) {
+  if (v === null || v === undefined) return v;
+  if (Object.prototype.toString.call(v) === '[object Date]') return fmtDateTime_(v);
+  if (Array.isArray(v)) return v.map(sanitizeDatesDeep_);
+  if (typeof v === 'object') {
+    var out = {};
+    for (var k in v) if (Object.prototype.hasOwnProperty.call(v, k)) out[k] = sanitizeDatesDeep_(v[k]);
+    return out;
+  }
+  return v;
+}

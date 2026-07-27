@@ -38,16 +38,21 @@ Object.assign(ProjectPage, {
             </div>
             <div class="daily-form-section" id="dateWeatherSection"><div class="section-label">Date & Weather <span class="rule"></span></div>
                 <div class="sub-fields">
-                    <div class="field"><label>Date *</label><input type="date" id="dr-date" value="${today}" required /></div>
+                    <div class="field"><label>Date *</label><input type="date" id="dr-date" value="${today}" required onchange="ProjectPage.syncOTLock()" /></div>
                     <div class="field"><label>Weather AM</label><input type="text" id="dr-weather-am" placeholder="e.g. Sunny" /></div>
                     <div class="field"><label>Weather PM</label><input type="text" id="dr-weather-pm" placeholder="e.g. Cloudy" /></div>
                 </div>
             </div>
             <div class="daily-form-section" id="manpowerSection">
-                <div class="section-label">Manpower <span class="rule"></span><span style="font-weight:400;font-size:10px;color:var(--ink-soft);" id="manpowerTotal">Total: 0</span></div>
-                <div id="manpowerEntries"><div class="entry-row"><div class="field"><label>Trade / Role</label><select class="mp-role">${this._manpowerOptions()}</select></div><div class="field"><label>Number Present</label><input type="number" class="mp-count" placeholder="0" min="0" /></div><div class="field" style="grid-column:3/-1;display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'manpower')">${Icon.close({size:13})}</button></div></div></div>
-                <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('manpower')">+ Add Role</button></div>
+                <div class="section-label">Manpower — Attendance <span class="rule"></span><span style="font-weight:400;font-size:10px;color:var(--ink-soft);" id="manpowerTotal">Total: 0</span></div>
+                <div id="otStatusBar" style="margin:0 0 8px;font-size:11px;"></div>
+                <div id="manpowerEntries">${this._manpowerRowHTML()}</div>
+                <div class="add-btn-row" style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <button class="btn-sm primary" onclick="ProjectPage.addEntry('manpower')">+ Add Person</button>
+                    <button class="btn-sm amber" id="btnRequestOT" onclick="ProjectPage.openOTModal()">⏱ Request OT</button>
+                </div>
                 <div class="manpower-total" id="manpowerTotalDisplay">Total: 0</div>
+                <div class="muted" style="font-size:10.5px;color:var(--ink-soft);margin-top:4px;">Pumili ng tao mula sa Personnel database — automatic ang trade/role. Ang OT In/Out ay naka-lock hangga't walang APPROVED na OT request para sa petsa na ito.</div>
             </div>
             <div class="daily-form-section" id="equipmentSection">
                 <div class="section-label">Equipment on Site <span class="rule"></span></div>
@@ -56,8 +61,22 @@ Object.assign(ProjectPage, {
             </div>
             <div class="daily-form-section" id="workSection">
                 <div class="section-label">Work Accomplished <span class="rule"></span></div>
-                <div id="workEntries"><div class="entry-row"><div class="field"><label>Location</label><input type="text" class="wk-location" /></div><div class="field"><label>Scope (SOW Item)</label><select class="wk-scope">${this._sowOptions()}</select></div><div class="field" style="grid-column:1/-1;"><label>Description</label><textarea class="wk-desc" rows="1"></textarea></div><div class="field"><label>% Complete</label><input type="number" class="wk-pct" min="0" max="100" /></div><div class="field"><label>Photo</label><input type="file" accept="image/*" class="wk-image" data-photo onchange="ProjectPage.previewSmallImage(this,'wk-preview-${Date.now()}')" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'work')">${Icon.close({size:13})}</button></div></div></div>
+                <div id="workEntries"><div class="entry-row" style="display:block;border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;background:var(--bg);">
+                    <div style="display:grid;grid-template-columns:2fr 90px 30px;gap:8px;align-items:end;">
+                        <div class="field"><label>1 · Anong SOW ang ginawa? *</label><select class="wk-scope">${this._sowOptions()}</select></div>
+                        <div class="field"><label>2 · % Complete</label><input type="number" class="wk-pct" min="0" max="100" placeholder="0-100" /></div>
+                        <button class="btn-sm danger" style="margin-bottom:6px;" onclick="ProjectPage.removeEntry(this,'work')">✕</button>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px;margin-top:6px;">
+                        <div class="field"><label>3 · Saan? (Location)</label><input type="text" class="wk-location" placeholder="e.g. NF2 Cell 2" /></div>
+                        <div class="field"><label>4 · Ano ang nagawa? (Description)</label><input type="text" class="wk-desc" placeholder="e.g. Liner welding, 3 panels completed" /></div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr;gap:8px;margin-top:6px;">
+                        <div class="field"><label>5 · Photo (proof of work)</label><input type="file" accept="image/*" class="wk-image" data-photo onchange="ProjectPage.previewSmallImage(this,'wk-preview-${Date.now()}')" /></div>
+                    </div>
+                </div></div>
                 <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('work')">+ Add Work Item</button></div>
+                <div class="muted" style="font-size:10.5px;color:var(--ink-soft);margin-top:4px;">Sunod-sunurin lang: SOW → % → saan → ano → picture. Ang % Complete dito ang nagpapagalaw ng project progress at billings.</div>
             </div>
             <div class="daily-form-section" id="materialsSection">
                 <div class="section-label">Materials Delivered <span class="rule"></span></div>
@@ -106,6 +125,150 @@ Object.assign(ProjectPage, {
         return '<option value="">Select SOW...</option>' +
             items.map(s => `<option value="${s.id}">${s.id} — ${(s.description || '').replace(/"/g, '&quot;')}</option>`).join('');
     },
+    /** _personnelOptions (v9) - Active people from the Personnel DB.
+     *  data-role carries the trade so the row auto-fills. */
+    _personnelOptions(selectedId) {
+        const list = (this._data && this._data.personnel) || [];
+        if (!list.length) return '<option value="">No personnel — add names via Manpower DB → Personnel</option>';
+        return '<option value="">Select person...</option>' +
+            list.map(pp => `<option value="${pp.id}" data-role="${(pp.role || '').replace(/"/g, '&quot;')}" data-name="${(pp.name || '').replace(/"/g, '&quot;')}" ${selectedId === pp.id ? 'selected' : ''}>${pp.name}${pp.role ? ' — ' + pp.role : ''}</option>`).join('');
+    },
+
+    /** _manpowerRowHTML (v9) - One attendance row: person → auto role,
+     *  count (default 1), AM/PM in-out, OT in-out (locked until an
+     *  approved OT request exists for the form's date). */
+    _manpowerRowHTML() {
+        return `<div class="entry-row" style="display:block;border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;background:var(--bg);">
+            <div style="display:grid;grid-template-columns:2fr 1.2fr 70px 30px;gap:8px;align-items:end;">
+                <div class="field"><label>Personnel *</label><select class="mp-person" onchange="ProjectPage.syncPersonnelRole(this)">${this._personnelOptions()}</select></div>
+                <div class="field"><label>Trade / Role</label><input type="text" class="mp-role" readonly placeholder="auto" /></div>
+                <div class="field"><label># Present</label><input type="number" class="mp-count" value="1" min="0" /></div>
+                <button class="btn-sm danger" style="margin-bottom:6px;" onclick="ProjectPage.removeEntry(this,'manpower')">✕</button>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-top:6px;">
+                <div class="field"><label style="font-size:9px;">AM In</label><input type="time" class="mp-am-in" /></div>
+                <div class="field"><label style="font-size:9px;">AM Out</label><input type="time" class="mp-am-out" /></div>
+                <div class="field"><label style="font-size:9px;">PM In</label><input type="time" class="mp-pm-in" /></div>
+                <div class="field"><label style="font-size:9px;">PM Out</label><input type="time" class="mp-pm-out" /></div>
+                <div class="field"><label style="font-size:9px;color:var(--amber,#C2860F);">OT In 🔒</label><input type="time" class="mp-ot-in" disabled title="Needs an approved OT request for this date" /></div>
+                <div class="field"><label style="font-size:9px;color:var(--amber,#C2860F);">OT Out 🔒</label><input type="time" class="mp-ot-out" disabled title="Needs an approved OT request for this date" /></div>
+            </div>
+        </div>`;
+    },
+
+    /** syncPersonnelRole (v9) - Person selected → role auto-fills. */
+    syncPersonnelRole(sel) {
+        const row = sel.closest('.entry-row');
+        if (!row) return;
+        const roleInp = row.querySelector('.mp-role');
+        const opt = sel.selectedOptions[0];
+        if (roleInp) roleInp.value = opt ? (opt.dataset.role || '') : '';
+        this.updateManpowerTotal();
+    },
+
+    /** _otForDate (v9) - The APPROVED OT request covering a date. */
+    _otForDate(date) {
+        return ((this._data && this._data.otRequests) || [])
+            .find(o => o.status === 'Approved' && String(o.otDate) === String(date)) || null;
+    },
+
+    /**
+     * syncOTLock (v9) - Enables/disables every OT time field based on
+     * whether an approved OT request exists for the form's date, and
+     * paints the status bar. Runs on load, on date change, and after
+     * each added row.
+     */
+    syncOTLock() {
+        const date = document.getElementById('dr-date')?.value;
+        const ot = date ? this._otForDate(date) : null;
+        const bar = document.getElementById('otStatusBar');
+        document.querySelectorAll('#manpowerEntries .mp-ot-in, #manpowerEntries .mp-ot-out').forEach(inp => {
+            inp.disabled = !ot;
+            if (!ot) inp.value = '';
+        });
+        document.querySelectorAll('#manpowerEntries .field label').forEach(l => {
+            if (l.textContent.indexOf('OT In') === 0) l.textContent = ot ? 'OT In ✓' : 'OT In 🔒';
+            if (l.textContent.indexOf('OT Out') === 0) l.textContent = ot ? 'OT Out ✓' : 'OT Out 🔒';
+        });
+        if (bar) {
+            const pend = date ? ((this._data && this._data.otRequests) || []).find(o => o.status === 'Pending' && String(o.otDate) === String(date)) : null;
+            bar.innerHTML = ot
+                ? `<span class="stamp approved" style="transform:none;">OT Approved ${ot.otStart}–${ot.otEnd}</span> <span style="color:var(--ink-soft);">${ot.reason || ''} (${ot.id}) — OT In/Out fields unlocked.</span>`
+                : pend
+                ? `<span class="stamp pending" style="transform:none;">OT Pending (${pend.id})</span> <span style="color:var(--ink-soft);">Awaiting admin approval — OT fields stay locked.</span>`
+                : `<span style="color:var(--ink-soft);">No approved OT for this date — OT In/Out are locked. Use <b>Request OT</b> kung may overtime.</span>`;
+        }
+    },
+
+    /**
+     * openOTModal (v9) - Files an OT authorization: start/end time,
+     * affected SOWs (multiple), reason. Goes through the standard
+     * multi-sig approval (admins approve; Super Admin can force).
+     */
+    openOTModal() {
+        const date = document.getElementById('dr-date')?.value || new Date().toISOString().slice(0, 10);
+        const existing = document.getElementById('otModal');
+        if (existing) existing.remove();
+        const sows = this._sowItems || [];
+        const overlay = document.createElement('div');
+        overlay.id = 'otModal';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(28,35,33,.55);z-index:1100;display:flex;align-items:center;justify-content:center;padding:20px;';
+        overlay.innerHTML = `
+            <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;max-width:480px;width:100%;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;">
+                <div style="padding:13px 18px;border-bottom:1px solid var(--line);background:var(--blueprint-tint);display:flex;justify-content:space-between;align-items:center;">
+                    <h3 style="font-family:'Oswald';font-size:13px;text-transform:uppercase;color:var(--blueprint);margin:0;">⏱ Request Overtime</h3>
+                    <span style="cursor:pointer;color:var(--ink-soft);" onclick="document.getElementById('otModal').remove()">✕</span>
+                </div>
+                <div style="padding:14px 18px;overflow:auto;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+                        <div class="field"><label>OT Date *</label><input type="date" id="ot-date" value="${date}" /></div>
+                        <div class="field"><label>OT Start *</label><input type="time" id="ot-start" value="17:00" /></div>
+                        <div class="field"><label>OT End *</label><input type="time" id="ot-end" value="20:00" /></div>
+                    </div>
+                    <div class="field" style="margin-top:6px;"><label>Affected SOW (pwedeng multiple) *</label>
+                        <div id="ot-sows" style="border:1px solid var(--line);border-radius:7px;padding:8px 10px;max-height:150px;overflow:auto;background:var(--bg);">
+                            ${sows.length ? sows.map(sw => `<label style="display:flex;gap:7px;align-items:center;font-size:12px;margin:3px 0;cursor:pointer;text-transform:none;letter-spacing:0;"><input type="checkbox" class="ot-sow" value="${sw.id}" style="width:auto;" /> <b>${sw.id}</b> — ${sw.description || ''}</label>`).join('') : '<span style="font-size:11px;color:var(--ink-soft);">No SOW items yet.</span>'}
+                        </div>
+                    </div>
+                    <div class="field" style="margin-top:6px;"><label>Reason for OT *</label><textarea id="ot-reason" rows="2" placeholder="e.g. Concrete pouring must finish today para tuloy-tuloy ang curing"></textarea></div>
+                    <div style="font-size:10.5px;color:var(--ink-soft);margin-top:6px;">Kailangan ng approval ng LAHAT ng admins (Super Admin can force-approve). Kapag approved, bubukas ang OT In/Out sa Daily Site Record ng petsang ito.</div>
+                </div>
+                <div style="padding:12px 18px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px;">
+                    <button class="btn-ghost" onclick="document.getElementById('otModal').remove()">Cancel</button>
+                    <button class="btn-primary" onclick="ProjectPage.submitOTRequest()">Submit for Approval</button>
+                </div>
+            </div>`;
+        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+        document.body.appendChild(overlay);
+    },
+
+    async submitOTRequest() {
+        const sowIds = [...document.querySelectorAll('#ot-sows .ot-sow:checked')].map(c => c.value);
+        const data = {
+            projectId: this._currentProjectId,
+            otDate: document.getElementById('ot-date')?.value,
+            otStart: document.getElementById('ot-start')?.value,
+            otEnd: document.getElementById('ot-end')?.value,
+            sowIds: sowIds,
+            reason: (document.getElementById('ot-reason')?.value || '').trim()
+        };
+        if (!data.otDate || !data.otStart || !data.otEnd) { UI.toast('Complete the OT date, start, and end.', 'error'); return; }
+        if (!sowIds.length) { UI.toast('Select at least one affected SOW.', 'error'); return; }
+        if (!data.reason) { UI.toast('Reason for OT is required.', 'error'); return; }
+        try {
+            const res = await DataService.requestOT(data);
+            UI.toast(`${res.id} submitted — awaiting admin approval.`, 'success');
+            document.getElementById('otModal')?.remove();
+            // pull fresh OT list quietly so the status bar updates
+            try {
+                const list = await DataService.getOTRequests(this._currentProjectId);
+                if (this._data) this._data.otRequests = list;
+            } catch (e) {}
+            this.syncOTLock();
+            if (typeof App.updateApprovalBadge === 'function') App.updateApprovalBadge();
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
+
     _manpowerOptions() {
         const list = this._approvedManpower || [];
         if (!list.length) return '<option value="">No approved roles — add via Manpower DB</option>';
@@ -158,7 +321,22 @@ Object.assign(ProjectPage, {
             date: document.getElementById('dr-date').value,
             weatherAM: document.getElementById('dr-weather-am').value.trim(),
             weatherPM: document.getElementById('dr-weather-pm').value.trim(),
-            manpower: getRows('manpower', { role: '.mp-role', count: '.mp-count' }),
+            // v9: attendance rows — person (from Personnel DB) + times
+            manpower: (function () {
+                const rows = getRows('manpower', {
+                    personnelId: '.mp-person', role: '.mp-role', count: '.mp-count',
+                    amIn: '.mp-am-in', amOut: '.mp-am-out', pmIn: '.mp-pm-in', pmOut: '.mp-pm-out',
+                    otIn: '.mp-ot-in', otOut: '.mp-ot-out'
+                });
+                const people = (ProjectPage._data && ProjectPage._data.personnel) || [];
+                return rows.map(r => {
+                    const pp = people.find(x => x.id === r.personnelId);
+                    r.name = pp ? pp.name : '';
+                    if (pp && !r.role) r.role = pp.role || '';
+                    if (!r.count) r.count = '1';
+                    return r;
+                }).filter(r => r.personnelId || r.role);   // skip fully empty rows
+            })(),
             equipment: getRows('equipment', { name: '.eq-name', qty: '.eq-qty', status: '.eq-status', remarks: '.eq-remarks' }),
             workAccomplished: getRows('work', { location: '.wk-location', scope: '.wk-scope', description: '.wk-desc', percentComplete: '.wk-pct', image: '.wk-image' }),
             materialsDelivered: getRows('materials', { material: '.mat-name', qty: '.mat-qty', unit: '.mat-unit', supplier: '.mat-supplier' }),
@@ -279,6 +457,159 @@ Object.assign(ProjectPage, {
         } catch (err) { UI.toast('Error: ' + err.message, 'error'); }
     },
 
+    /** setDailyView (v9 — item 4) - Records ↔ Attendance sub-views. */
+    setDailyView(view) {
+        this._dailyView = view;
+        this.renderDailyRecords(this._data);
+    },
+
+    /**
+     * _renderAttendanceHTML (v9 — item 4) - ATTENDANCE MONITORING.
+     * Derived 100% from the Daily Site Records' manpower rows (walang
+     * separate encoding): a month matrix of personnel × days, showing
+     * presence, and per-person totals (days present + OT hours). Only
+     * rows tied to a Personnel entry appear; legacy role-only rows are
+     * counted in the record but can't be attributed to a person.
+     */
+    _renderAttendanceHTML(p) {
+        const records = (p.dailyRecords || []).filter(r => r.status !== 'rejected');
+
+        // months that actually have records (yyyy-MM), newest first
+        const months = [...new Set(records.map(r => String(r.date || '').slice(0, 7)).filter(m => /^\d{4}-\d{2}$/.test(m)))].sort().reverse();
+        if (!months.length) {
+            return `<div class="empty"><p>Walang daily records pa — attendance is derived from the Manpower section of each Daily Site Record.</p></div>`;
+        }
+        if (!this._attMonth || !months.includes(this._attMonth)) this._attMonth = months[0];
+        const month = this._attMonth;
+
+        // days in the month that have a record
+        const monthRecords = records.filter(r => String(r.date || '').startsWith(month))
+            .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+        const days = monthRecords.map(r => String(r.date).slice(8, 10));
+
+        // person → { name, role, byDay: { dd: rowdata }, otHours }
+        const people = {};
+        const hrs = (tin, tout) => {
+            if (!tin || !tout) return 0;
+            const [h1, m1] = String(tin).split(':').map(Number);
+            const [h2, m2] = String(tout).split(':').map(Number);
+            if (isNaN(h1) || isNaN(h2)) return 0;
+            let diff = (h2 * 60 + (m2 || 0)) - (h1 * 60 + (m1 || 0));
+            if (diff < 0) diff += 24 * 60;   // OT past midnight
+            return diff / 60;
+        };
+        let legacyRows = 0;
+        monthRecords.forEach(r => {
+            const dd = String(r.date).slice(8, 10);
+            (r.manpower || []).forEach(m => {
+                if (!m.name && !m.personnelId) { legacyRows++; return; }
+                const key = m.personnelId || m.name;
+                if (!people[key]) people[key] = { name: m.name || key, role: m.role || '', byDay: {}, otHours: 0, daysPresent: 0 };
+                people[key].byDay[dd] = m;
+                people[key].daysPresent++;
+                people[key].otHours += hrs(m.otIn, m.otOut);
+                if (m.role) people[key].role = m.role;
+            });
+        });
+        const list = Object.values(people).sort((a, b) => a.name.localeCompare(b.name));
+
+        const cell = m => {
+            if (!m) return '<td style="text-align:center;color:var(--line);">·</td>';
+            const ot = (m.otIn || m.otOut);
+            const tip = [
+                m.amIn || m.amOut ? `AM ${m.amIn || '?'}-${m.amOut || '?'}` : '',
+                m.pmIn || m.pmOut ? `PM ${m.pmIn || '?'}-${m.pmOut || '?'}` : '',
+                ot ? `OT ${m.otIn || '?'}-${m.otOut || '?'}` : ''
+            ].filter(Boolean).join(' · ') || 'Present';
+            return `<td style="text-align:center;" title="${tip}">
+                <span style="color:var(--green,#2F7A46);font-weight:700;">✓</span>${ot ? '<sup style="color:var(--amber,#C2860F);font-size:8px;font-weight:700;">OT</sup>' : ''}
+            </td>`;
+        };
+
+        let html = `
+            <div class="section-head"><h2>Attendance Monitoring</h2><div class="rule"></div>
+                <select onchange="ProjectPage._attMonth=this.value;ProjectPage.renderDailyRecords(ProjectPage._data);" style="padding:5px 9px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--surface);color:var(--ink);">
+                    ${months.map(m => `<option value="${m}" ${m === month ? 'selected' : ''}>${new Date(m + '-02').toLocaleDateString('en-PH', { year: 'numeric', month: 'long' })}</option>`).join('')}
+                </select>
+                <button class="btn-sm" onclick="ProjectPage.exportAttendanceExcel()">📊 Export Excel</button>
+            </div>`;
+
+        if (!list.length) {
+            html += `<div class="empty"><p>Walang attendance rows na naka-link sa Personnel para sa buwang ito.${legacyRows ? ' (' + legacyRows + ' legacy role-only rows ang hindi maiugnay sa tao — simula ngayon, piliin ang tao sa Personnel dropdown ng Daily Record.)' : ''}</p></div>`;
+            return html;
+        }
+
+        html += `<div class="panel" style="overflow:auto;"><table style="min-width:${360 + days.length * 34}px;"><thead><tr>
+            <th style="position:sticky;left:0;background:var(--surface);z-index:1;">Personnel</th><th>Role</th>
+            ${days.map(dd => `<th style="text-align:center;font-size:9.5px;">${parseInt(dd, 10)}</th>`).join('')}
+            <th style="text-align:right;">Days</th><th style="text-align:right;">OT hrs</th>
+        </tr></thead><tbody>`;
+        list.forEach(pp => {
+            html += `<tr>
+                <td style="position:sticky;left:0;background:var(--surface);z-index:1;"><b>${pp.name}</b></td>
+                <td style="font-size:11px;">${pp.role || '—'}</td>
+                ${days.map(dd => cell(pp.byDay[dd])).join('')}
+                <td class="amt"><b>${pp.daysPresent}</b></td>
+                <td class="amt">${pp.otHours ? pp.otHours.toFixed(1) : '—'}</td>
+            </tr>`;
+        });
+        html += `</tbody></table></div>
+            <div class="data-source-note">Hover a ✓ to see the AM/PM/OT times. Ang attendance ay derived sa <b>Manpower — Attendance</b> section ng bawat Daily Site Record (kaya walang dobleng encoding); ang <sup>OT</sup> ay lalabas lang kapag may approved OT request ang araw na iyon.${legacyRows ? ' <b>' + legacyRows + '</b> legacy role-only rows are excluded (walang pangalan).' : ''}</div>`;
+        return html;
+    },
+
+    /** exportAttendanceExcel (v9) - The visible month's matrix as .xlsx. */
+    exportAttendanceExcel() {
+        if (typeof XLSX === 'undefined') { UI.toast('Excel library not loaded — refresh and try again.', 'error'); return; }
+        const p = this._data || {};
+        const month = this._attMonth;
+        const records = (p.dailyRecords || []).filter(r => r.status !== 'rejected' && String(r.date || '').startsWith(month))
+            .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+        if (!records.length) { UI.toast('No records for this month.', 'error'); return; }
+        const days = records.map(r => String(r.date).slice(8, 10));
+        const people = {};
+        const hrs = (tin, tout) => {
+            if (!tin || !tout) return 0;
+            const [h1, m1] = String(tin).split(':').map(Number);
+            const [h2, m2] = String(tout).split(':').map(Number);
+            if (isNaN(h1) || isNaN(h2)) return 0;
+            let diff = (h2 * 60 + (m2 || 0)) - (h1 * 60 + (m1 || 0));
+            if (diff < 0) diff += 24 * 60;
+            return diff / 60;
+        };
+        records.forEach(r => {
+            const dd = String(r.date).slice(8, 10);
+            (r.manpower || []).forEach(m => {
+                if (!m.name && !m.personnelId) return;
+                const key = m.personnelId || m.name;
+                if (!people[key]) people[key] = { name: m.name || key, role: m.role || '', byDay: {}, ot: 0, days: 0 };
+                people[key].byDay[dd] = m;
+                people[key].days++;
+                people[key].ot += hrs(m.otIn, m.otOut);
+            });
+        });
+        const aoa = [
+            ['ATTENDANCE — ' + (p.name || this._currentProjectId)],
+            ['Month', month], [],
+            ['Personnel', 'Role', ...days.map(d => parseInt(d, 10)), 'Days Present', 'OT Hours']
+        ];
+        Object.values(people).sort((a, b) => a.name.localeCompare(b.name)).forEach(pp => {
+            aoa.push([pp.name, pp.role,
+                ...days.map(dd => {
+                    const m = pp.byDay[dd];
+                    if (!m) return '';
+                    const t = [m.amIn && (m.amIn + '-' + (m.amOut || '')), m.pmIn && (m.pmIn + '-' + (m.pmOut || '')), m.otIn && ('OT ' + m.otIn + '-' + (m.otOut || ''))].filter(Boolean).join(' ');
+                    return t || 'P';
+                }),
+                pp.days, Math.round(pp.ot * 10) / 10]);
+        });
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        ws['!cols'] = [{ wch: 24 }, { wch: 16 }, ...days.map(() => ({ wch: 13 })), { wch: 12 }, { wch: 9 }];
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, month);
+        XLSX.writeFile(wb, `Attendance-${(p.name || this._currentProjectId).replace(/[^\w-]+/g, '_')}-${month}.xlsx`);
+    },
+
     renderDailyRecords(p) {
         const container = document.getElementById('proj-tab-daily');
         const dailyRecords = p.dailyRecords || [];
@@ -290,6 +621,16 @@ Object.assign(ProjectPage, {
             <div class="add-record-form" id="dailyAddForm">
                 ${this._buildDailyFormHTML()}
             </div>
+            <div class="status-tabs" style="margin:10px 0 10px;">
+                <button class="${this._dailyView !== 'attendance' ? 'active' : ''}" onclick="ProjectPage.setDailyView('records')">📄 Records</button>
+                <button class="${this._dailyView === 'attendance' ? 'active' : ''}" onclick="ProjectPage.setDailyView('attendance')">🕐 Attendance Monitoring</button>
+            </div>`;
+        if (this._dailyView === 'attendance') {
+            html += this._renderAttendanceHTML(p);
+            container.innerHTML = html;
+            return;
+        }
+        html += `
             <div class="panel">
                 <div class="panel-head">
                     <h3>Site Daily Log</h3>
@@ -418,7 +759,13 @@ Object.assign(ProjectPage, {
             el.onchange = function(e) { ProjectPage.previewSmallImage(this, 'preview-' + Date
                 .now()); };
         });
-        if (section === 'manpower') this.updateManpowerTotal();
+        if (section === 'manpower') {
+            // v9: attendance defaults — count starts at 1, OT lock re-applied
+            const cnt = clone.querySelector('.mp-count');
+            if (cnt) cnt.value = '1';
+            this.updateManpowerTotal();
+            this.syncOTLock();
+        }
     },
 
     removeEntry(btn, section) {
@@ -633,6 +980,7 @@ Object.assign(ProjectPage, {
         if (form) form.classList.toggle('open');
         if (form && form.classList.contains('open')) {
             setTimeout(() => this.initDailySteps(), 30);   // v7.2
+            this.syncOTLock();                             // v9: OT lock state
         }
         // v6.4: leaving the form ends edit mode and restores the button label
         if (form && !form.classList.contains('open')) {
@@ -704,7 +1052,12 @@ Object.assign(ProjectPage, {
             });
         };
 
-        fill('manpower', r.manpower, { role: '.mp-role', count: '.mp-count' });
+        fill('manpower', r.manpower, {
+            personnelId: '.mp-person', role: '.mp-role', count: '.mp-count',
+            amIn: '.mp-am-in', amOut: '.mp-am-out', pmIn: '.mp-pm-in', pmOut: '.mp-pm-out',
+            otIn: '.mp-ot-in', otOut: '.mp-ot-out'
+        });
+        this.syncOTLock();   // v9: re-lock/unlock OT fields per the record's date
         fill('equipment', r.equipment, { name: '.eq-name', qty: '.eq-qty', status: '.eq-status', remarks: '.eq-remarks' });
         fill('work', r.workAccomplished, { location: '.wk-location', scope: '.wk-scope', description: '.wk-desc', percentComplete: '.wk-pct' },
             (row, data) => { row.dataset.existingImage = data.image || ''; });
@@ -732,13 +1085,17 @@ Object.assign(ProjectPage, {
         PrintModal.open(record, this._recordMeta(record));
     },
 
-    /** _recordMeta (v3/v8) - Header info shared by every record modal.
+    /** _recordMeta (v3/v8/v9) - Header info shared by every record modal.
      *  v8: preparedBy is the person's NAME (resolved by the backend
-     *  from the Users sheet), never the raw email. */
+     *  from the Users sheet), never the raw email.
+     *  v9: sowNames map so scope cells read "1.a — Excavation". */
     _recordMeta(record) {
+        const sowNames = {};
+        (this._sowItems || []).forEach(s => { sowNames[s.id] = s.description || ''; });
         return {
             projectName: (this._data && this._data.name) || this._currentProjectId || '',
-            preparedBy: record.createdByName || record.createdBy || ''
+            preparedBy: record.createdByName || record.createdBy || '',
+            sowNames: sowNames
         };
     },
 

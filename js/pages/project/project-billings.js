@@ -359,35 +359,88 @@ Object.assign(ProjectPage, {
 
 Object.assign(ProjectPage, {
 
-    /** exportBillingsExcel - the billing register as .xlsx. */
+    /**
+     * _swaData (v9) - The full SWA computation for one billing, shared
+     * by the SWA modal math and the detailed Excel export. Per SOW:
+     * contract-basis amount, weight, previous / this-billing / to-date
+     * % and amounts — same rules as openSWA.
+     */
+    _swaData(b) {
+        const p = this._data;
+        const thisCut = b.createdAt || null;
+        const prevBilling = (p.billings || [])
+            .filter(x => x.status !== 'Rejected' && x.id !== b.id && String(x.createdAt) < String(b.createdAt))
+            .sort((a, c) => String(c.createdAt).localeCompare(String(a.createdAt)))[0] || null;
+        const prevCut = prevBilling ? prevBilling.createdAt : null;
+        const items = (p.sowItems || []).filter(s => !s.isMilestone);
+        const amtOf = x => ((x.estimateTotal || 0) + (x.voAdjustment || 0)) || (x.estimateTotal !== undefined ? 0 : (x.budget || 0));
+        const totalAmt = items.reduce((s, x) => s + amtOf(x), 0) || 1;
+        const rows = items.map(sw => {
+            const amt = amtOf(sw);
+            const wt = amt / totalAmt * 100;
+            const prevPct = prevCut ? this._progressAsOf(sw.id, prevCut) : 0;
+            const curPct = this._progressAsOf(sw.id, thisCut);
+            const thisPct = Math.max(curPct - prevPct, 0);
+            const prevAmt = prevPct / 100 * amt;
+            const thisAmt = thisPct / 100 * amt;
+            return {
+                id: sw.id, description: sw.description || '',
+                amount: amt, weight: wt,
+                prevPct, prevAmt, thisPct, thisWt: thisPct * wt / 100, thisAmt,
+                toPct: curPct, toAmt: prevAmt + thisAmt
+            };
+        });
+        return { rows, totalAmt };
+    },
+
+    /**
+     * exportBillingsExcel (v9 — item 1) - DETAILED billing export: one
+     * worksheet PER BILLING containing its full SWA table (Item No,
+     * Description, Amount, Wt%, Previous, This Billing, To Date) plus
+     * the gross/retention/net summary — hindi na yung register summary.
+     */
     exportBillingsExcel() {
         if (typeof XLSX === 'undefined') { UI.toast('Excel library not loaded — refresh the page and try again.', 'error'); return; }
         const p = this._data || {};
-        const billings = p.billings || [];
+        const billings = (p.billings || []).filter(b => b.status !== 'Rejected');
         if (!billings.length) { UI.toast('No billings to export.', 'error'); return; }
-        const aoa = [
-            ['BILLING REGISTER'],
-            [p.name || this._currentProjectId, p.client || ''],
-            ['Generated', new Date().toLocaleDateString('en-PH')],
-            [],
-            ['Billing #', 'Period', 'Prev %', 'Current %', 'Gross Amount', 'Retention', 'Net Amount', 'Status', 'Date']
-        ];
-        billings.forEach(b => aoa.push([
-            b.billingNo, b.period || '', parseFloat(b.prevPct) || 0, parseFloat(b.currentPct) || 0,
-            Math.round((b.grossAmount || 0) * 100) / 100,
-            Math.round((b.retentionAmount || 0) * 100) / 100,
-            Math.round((b.netAmount || 0) * 100) / 100,
-            b.status || '', b.billingDate || b.createdAt || ''
-        ]));
-        aoa.push(['TOTAL', '', '', '',
-            Math.round(billings.reduce((s, b) => s + (b.grossAmount || 0), 0) * 100) / 100,
-            Math.round(billings.reduce((s, b) => s + (b.retentionAmount || 0), 0) * 100) / 100,
-            Math.round(billings.reduce((s, b) => s + (b.netAmount || 0), 0) * 100) / 100, '', '']);
-        const ws = XLSX.utils.aoa_to_sheet(aoa);
-        ws['!cols'] = [{ wch: 12 }, { wch: 18 }, { wch: 8 }, { wch: 10 }, { wch: 15 }, { wch: 13 }, { wch: 15 }, { wch: 11 }, { wch: 12 }];
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Billings');
-        XLSX.writeFile(wb, `Billing-Register-${(p.name || this._currentProjectId).replace(/[^\w-]+/g, '_')}.xlsx`);
+        const r2 = v => Math.round((v || 0) * 100) / 100;
+
+        billings.forEach(b => {
+            const d = this._swaData(b);
+            const aoa = [
+                ['STATEMENT OF WORK ACCOMPLISHMENT — ' + (b.billingNo || b.id)],
+                [p.name || this._currentProjectId, p.client || ''],
+                ['Period', b.period || '', 'Status', b.status || ''],
+                ['Billed %', (b.prevPct || 0) + '% → ' + (b.currentPct || 0) + '%'],
+                [],
+                ['Item No', 'Description', 'Qty', 'Unit', 'Contract Amount', 'Wt %',
+                 'Previous %', 'Previous Amount',
+                 'This Billing %', 'This Billing Wt %', 'This Billing Amount',
+                 'To Date %', 'To Date Amount']
+            ];
+            let tAmt = 0, tPrev = 0, tThis = 0, tTo = 0, tWt = 0, tThisWt = 0;
+            d.rows.forEach(r => {
+                tAmt += r.amount; tPrev += r.prevAmt; tThis += r.thisAmt; tTo += r.toAmt;
+                tWt += r.weight; tThisWt += r.thisWt;
+                aoa.push([r.id, r.description, 1, 'lot', r2(r.amount), r2(r.weight),
+                    r2(r.prevPct), r2(r.prevAmt),
+                    r2(r.thisPct), r2(r.thisWt), r2(r.thisAmt),
+                    r2(r.toPct), r2(r.toAmt)]);
+            });
+            aoa.push(['', 'TOTAL', '', '', r2(tAmt), r2(tWt), '', r2(tPrev), '', r2(tThisWt), r2(tThis), '', r2(tTo)]);
+            aoa.push([]);
+            aoa.push(['', 'Gross Amount', r2(b.grossAmount)]);
+            aoa.push(['', 'Less: Retention', r2(b.retentionAmount)]);
+            aoa.push(['', 'NET AMOUNT DUE', r2(b.netAmount)]);
+            const ws = XLSX.utils.aoa_to_sheet(aoa);
+            ws['!cols'] = [{ wch: 9 }, { wch: 40 }, { wch: 5 }, { wch: 6 }, { wch: 16 }, { wch: 8 },
+                { wch: 11 }, { wch: 16 }, { wch: 13 }, { wch: 14 }, { wch: 17 }, { wch: 10 }, { wch: 16 }];
+            const safe = String(b.billingNo || b.id).replace(/[\\\/\?\*\[\]:]/g, '-').slice(0, 28);
+            XLSX.utils.book_append_sheet(wb, ws, safe);
+        });
+        XLSX.writeFile(wb, `Billings-Detailed-${(p.name || this._currentProjectId).replace(/[^\w-]+/g, '_')}.xlsx`);
     },
 
     /** deleteBillingPrompt - Super Admin only, Pending only (server

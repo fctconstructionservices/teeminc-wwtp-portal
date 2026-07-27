@@ -47,6 +47,16 @@ function addDailyRecord(projectId, data) {
     throw new Error('A daily record for ' + data.date + ' already exists (' + (dup.status || 'draft') + '). Only one record per date is allowed unless the existing one was rejected.');
   }
 
+  // ─── v9 OT GUARD: OT time in/out requires an APPROVED OT request ───
+  // Attendance rows may carry otIn/otOut only when an approved
+  // OTRequest exists for this project + date. Without one, the fields
+  // are locked in the UI — and stripped/blocked here as the backstop.
+  var hasOT = (data.manpower || []).some(function (m) { return (m.otIn || m.otOut); });
+  if (hasOT && !approvedOTFor_(projectId, data.date)) {
+    throw new Error('OT time in/out requires an APPROVED OT request for ' + fmtDate_(data.date) + '. File one via "Request OT" and wait for the admins\' approval.');
+  }
+
+
   // ─── v3 PHOTO FIX ───
   // The frontend uploads photos through uploadImage() and sends Drive
   // URLs here, but this function used to base64-decode everything —
@@ -205,6 +215,12 @@ function updateDailyRecord(recordId, data) {
       fmtDate_(d.date) === wanted && d.status !== 'rejected';
   });
   if (dup) throw new Error('There is already a record for ' + wanted + '.');
+
+  // v9 OT GUARD (same as addDailyRecord): OT times need approved OT.
+  var hasOT = (data.manpower || []).some(function (m) { return (m.otIn || m.otOut); });
+  if (hasOT && !approvedOTFor_(projectId, data.date)) {
+    throw new Error('OT time in/out requires an APPROVED OT request for ' + wanted + '. File one via "Request OT" and wait for the admins\' approval.');
+  }
 
   // site-stock guard, with this record's own old rows excluded
   const usedRows = data.materialsUsed || [];

@@ -115,7 +115,18 @@ function getPendingApprovals() {
     return low_(m.status) === 'pending' && m.requestedBy && m.requestedBy.toLowerCase() !== userEmail;
   });
 
-  return {
+  // v9: pending OVERTIME requests (multi-sig like everything else)
+  const otRequests = readAll_('OTRequests').filter(function (o) {
+    return o.status === 'Pending' && o.requestedBy && o.requestedBy.toLowerCase() !== userEmail;
+  }).map(function (o) {
+    o.type = 'OTRequest';
+    o.sowIds = safeParse_(o.sowIdsJSON, []);
+    return o;
+  });
+
+  // v9 (item 7): sanitize EVERY outbound date so the dashboard never
+  // receives raw Date objects (UTC ISO strings / wrong-day bug).
+  return sanitizeDatesDeep_({
     cashAdvances: notMine_(cashAdvances),
     releases: notMine_(releases),
     incomingCash: notMine_(incomingCash),
@@ -124,8 +135,9 @@ function getPendingApprovals() {
     equipment: notMine_(equipment),
     manpower: notMine_(manpower),
     dailyRecords: notMine_(dailyRecords),
-    estimates: notMine_(estimates)
-  };
+    estimates: notMine_(estimates),
+    otRequests: notMine_(otRequests)
+  });
 }
 
 function getMyPendingRequests() {
@@ -166,7 +178,11 @@ function getMyPendingRequests() {
     return m.requestedBy && m.requestedBy.toLowerCase() === email && low_(m.status) === 'pending';
   }).map(function(m) { m.type = 'Manpower'; return m; });
 
-  return [].concat(cashAdvances, releases, incoming, liquidations, materials, equipment, manpower, dailyRecords, estimates);
+  const ot = readAll_('OTRequests').filter(function (o) {
+    return o.requestedBy && o.requestedBy.toLowerCase() === email && o.status === 'Pending';
+  }).map(function(o) { o.type = 'OTRequest'; return o; });
+
+  return sanitizeDatesDeep_([].concat(cashAdvances, releases, incoming, liquidations, materials, equipment, manpower, dailyRecords, estimates, ot));
 }
 
 function getMyApprovedRequests() {
@@ -199,7 +215,11 @@ function getMyApprovedRequests() {
     return m.requestedBy && m.requestedBy.toLowerCase() === email && m.status === 'approved';
   }).map(function(m) { m.type = 'Manpower'; return m; });
   
-  return [].concat(cashAdvances, incoming, liquidations, materials, equipment, manpower, dailyRecords);
+  const ot = readAll_('OTRequests').filter(function (o) {
+    return o.requestedBy && o.requestedBy.toLowerCase() === email && o.status === 'Approved';
+  }).map(function(o) { o.type = 'OTRequest'; return o; });
+
+  return sanitizeDatesDeep_([].concat(cashAdvances, incoming, liquidations, materials, equipment, manpower, dailyRecords, ot));
 }
 
 function getMyRejectedRequests() {
@@ -232,7 +252,11 @@ function getMyRejectedRequests() {
     return m.requestedBy && m.requestedBy.toLowerCase() === email && m.status === 'rejected';
   }).map(function(m) { m.type = 'Manpower'; return m; });
   
-  return [].concat(cashAdvances, incoming, liquidations, materials, equipment, manpower, dailyRecords);
+  const ot = readAll_('OTRequests').filter(function (o) {
+    return o.requestedBy && o.requestedBy.toLowerCase() === email && o.status === 'Rejected';
+  }).map(function(o) { o.type = 'OTRequest'; return o; });
+
+  return sanitizeDatesDeep_([].concat(cashAdvances, incoming, liquidations, materials, equipment, manpower, dailyRecords, ot));
 }
 
 function getRequestById(id) {
@@ -252,6 +276,8 @@ function getRequestById(id) {
   if (req) return req;
   req = readAll_('Manpower').find(function (m) { return m.id === id; });
   if (req) return req;
+  req = readAll_('OTRequests').find(function (o) { return o.id === id; });
+  if (req) return sanitizeDatesDeep_(req);
   return null;
 }
 
@@ -387,6 +413,11 @@ function resolveApprovalItem_(id, type) {
       r = readAll_('Billings').find(function (x) { return x.id === id; });
       return r ? { found: true, isPending: r.status === 'Pending', submitter: low_(r.submittedBy), obj: r }
                : { found: false, msg: 'Billing not found.' };
+    case 'OTRequest':
+      // v9: overtime authorization for a project/date (multi-sig)
+      r = readAll_('OTRequests').find(function (x) { return x.id === id; });
+      return r ? { found: true, isPending: r.status === 'Pending', submitter: low_(r.requestedBy), obj: r }
+               : { found: false, msg: 'OT request not found.' };
     default:
       return { found: false, msg: 'Invalid type for approval: ' + type };
   }
@@ -437,6 +468,13 @@ function finalizeDecision_(id, type, decision, meta) {
     case 'Billing':
       updateRow_('Billings', 'id', id, { status: approved ? 'Approved' : 'Rejected' });
       logActivity_('Billing ' + id + ' ' + (approved ? 'approved — ready to send/collect' : 'rejected'), approved ? 'g' : 'a', id);
+      return { success: true };
+
+    case 'OTRequest':
+      // v9: once approved, the OT window unlocks the OT time in/out
+      // fields on the Daily Site Record for that project + date.
+      updateRow_('OTRequests', 'id', id, { status: approved ? 'Approved' : 'Rejected' });
+      logActivity_('OT request ' + id + ' ' + (approved ? 'approved — OT fields unlocked for its date' : 'rejected'), approved ? 'g' : 'a', id);
       return { success: true };
 
     case 'Estimate':

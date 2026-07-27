@@ -465,6 +465,34 @@ const DataService = {
     async deleteBilling(id) {
         return await gasCall('deleteBilling', id);
     },
+    // ── v9: Site ops — OT / punchlist / safety / drawings ──
+    async requestOT(data) {
+        return await gasCall('requestOT', data);
+    },
+    async getOTRequests(projectId) {
+        return await gasCall('getOTRequests', projectId);
+    },
+    async addPunchlistItem(data) {
+        return await gasCall('addPunchlistItem', data);
+    },
+    async updatePunchlistItem(id, data) {
+        return await gasCall('updatePunchlistItem', id, data);
+    },
+    async deletePunchlistItem(id) {
+        return await gasCall('deletePunchlistItem', id);
+    },
+    async addSafetyRecord(data) {
+        return await gasCall('addSafetyRecord', data);
+    },
+    async updateSafetyRecord(id, data) {
+        return await gasCall('updateSafetyRecord', id, data);
+    },
+    async addDrawing(data) {
+        return await gasCall('addDrawing', data);
+    },
+    async deleteDrawing(id) {
+        return await gasCall('deleteDrawing', id);
+    },
     // Personnel directory (actual people)
     _personnel: [],
     async getAllPersonnel() {

@@ -45,6 +45,14 @@ const PrintModal = {
         document.getElementById('printModal').classList.remove('open');
         document.body.style.overflow = '';
     },
+    /** _sowLabel (v9 — item 3) - "1.a — Excavation" style label from
+     *  meta.sowNames (id → description map supplied by ProjectPage). */
+    _sowLabel(scope, meta) {
+        if (!scope) return '—';
+        const name = meta && meta.sowNames ? meta.sowNames[scope] : '';
+        return name ? scope + ' — ' + name : scope;
+    },
+
     renderPrintView(r, meta) {
         meta = meta || {};
         const totalManpower = r.manpower ? r.manpower.reduce((s, m) => s + (parseInt(m.count) || 0), 0) : 0;
@@ -65,16 +73,16 @@ const PrintModal = {
                     <div class="item"><span class="label">Status</span><span class="value">${r.status}</span></div>
                 </div></div>
                 <div class="print-section"><div class="ps-title">Manpower <span style="font-weight:400;font-size:10px;color:var(--ink-soft);">(Total: ${totalManpower})</span></div>
-                    ${r.manpower && r.manpower.length ? `<table class="ps-table"><thead><tr><th>Trade / Role</th><th>Number Present</th></tr></thead><tbody>${r.manpower.map(m => `<tr><td>${m.role}</td><td>${m.count}</td></tr>`).join('')}</tbody></table>` : `<p style="font-size:12px;color:var(--ink-soft);">No manpower recorded.</p>`}
+                    ${r.manpower && r.manpower.length ? (r.manpower.some(m => m.name || m.amIn || m.pmIn || m.otIn) ? `<table class="ps-table"><thead><tr><th>Name</th><th>Trade / Role</th><th>#</th><th>AM In</th><th>AM Out</th><th>PM In</th><th>PM Out</th><th>OT In</th><th>OT Out</th></tr></thead><tbody>${r.manpower.map(m => `<tr><td>${m.name || '—'}</td><td>${m.role || '—'}</td><td>${m.count || 1}</td><td>${m.amIn || '—'}</td><td>${m.amOut || '—'}</td><td>${m.pmIn || '—'}</td><td>${m.pmOut || '—'}</td><td>${m.otIn || '—'}</td><td>${m.otOut || '—'}</td></tr>`).join('')}</tbody></table>` : `<table class="ps-table"><thead><tr><th>Trade / Role</th><th>Number Present</th></tr></thead><tbody>${r.manpower.map(m => `<tr><td>${m.role}</td><td>${m.count}</td></tr>`).join('')}</tbody></table>`) : `<p style="font-size:12px;color:var(--ink-soft);">No manpower recorded.</p>`}
                 </div>
                 <div class="print-section"><div class="ps-title">Equipment on Site</div>
                     ${r.equipment && r.equipment.length ? `<table class="ps-table"><thead><tr><th>Equipment</th><th>Qty</th><th>Status</th><th>Remarks</th></tr></thead><tbody>${r.equipment.map(e => `<tr><td>${e.name}</td><td>${e.qty}</td><td>${e.status || '—'}</td><td>${e.remarks || '—'}</td></tr>`).join('')}</tbody></table>` : `<p style="font-size:12px;color:var(--ink-soft);">No equipment recorded.</p>`}
                 </div>
                 <div class="print-section"><div class="ps-title">Work Accomplished</div>
-                    ${r.workAccomplished && r.workAccomplished.length ? `<table class="ps-table"><thead><tr><th>Location/Area</th><th>Scope of Work</th><th>Description</th><th>% Complete</th></tr></thead><tbody>${r.workAccomplished.map(w => `<tr><td>${w.location || '—'}</td><td>${w.scope || '—'}</td><td>${w.description || '—'}</td><td>${w.percentComplete || 0}%</td></tr>`).join('')}</tbody></table>` : `<p style="font-size:12px;color:var(--ink-soft);">No work accomplished recorded.</p>`}
+                    ${r.workAccomplished && r.workAccomplished.length ? `<table class="ps-table"><thead><tr><th>Location/Area</th><th>Scope of Work</th><th>Description</th><th>% Complete</th></tr></thead><tbody>${r.workAccomplished.map(w => `<tr><td>${w.location || '—'}</td><td>${PrintModal._sowLabel(w.scope, meta)}</td><td>${w.description || '—'}</td><td>${w.percentComplete || 0}%</td></tr>`).join('')}</tbody></table>` : `<p style="font-size:12px;color:var(--ink-soft);">No work accomplished recorded.</p>`}
                     ${PrintModal._photoGrid((r.workAccomplished || []).filter(w => w.image).map(w => ({
                         url: w.image,
-                        caption: 'Work: ' + [w.scope, w.description || w.location].filter(Boolean).join(' — ')
+                        caption: 'Work: ' + [PrintModal._sowLabel(w.scope, meta), w.description || w.location].filter(Boolean).join(' — ')
                     })))}
                 </div>
                 <div class="print-section"><div class="ps-title">Materials Delivered</div>

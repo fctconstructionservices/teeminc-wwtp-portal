@@ -915,6 +915,14 @@ function getProjectData(projectId) {
     // v6
     siteMaterials: siteMaterials,
     transfers: getTransfersForProject(projectId),
+    // v9: site ops registers + attendance dependencies, in one payload
+    // so the Daily form, Punchlist/Safety/Drawings tabs, and the OT
+    // lock state all load without extra round-trips.
+    otRequests: getOTRequests(projectId),
+    punchlist: getPunchlist(projectId),
+    safetyRecords: getSafetyRecords(projectId),
+    drawings: getDrawings(projectId),
+    personnel: getAllPersonnel().filter(function (pp) { return pp.status === 'active'; }),
     equipmentOnSite: equipmentOnSite,
     equipmentSummary: equipmentSummary,
     downtimeLog: downtimeLog.slice(0, 40),

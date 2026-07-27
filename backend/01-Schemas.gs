@@ -34,6 +34,10 @@ const TABS = {
   CLIENT_LISTS: 'ClientLists',
   MANPOWER: 'Manpower',
   PERSONNEL: 'Personnel',
+  OT_REQUESTS: 'OTRequests',
+  PUNCHLIST: 'Punchlist',
+  SAFETY_RECORDS: 'SafetyRecords',
+  DRAWINGS: 'Drawings',
   BILLINGS: 'Billings',
   TRANSFERS: 'Transfers',
   SESSIONS: 'Sessions',
@@ -127,6 +131,31 @@ const SCHEMAS = {
   // status: 'active' | 'inactive' (operational data, no multi-sig needed).
   Personnel: ['id', 'name', 'role', 'classification', 'contactNumber', 'dailyRate',
     'notes', 'status', 'addedBy', 'createdAt', 'updatedAt'],
+
+  // v9 NEW: OVERTIME authorization. OT time in/out on a Daily Site
+  // Record stays LOCKED until an approved OTRequest exists for that
+  // project + date. Multi-sig via the standard approval engine
+  // (all admins approve, requester excluded, Super Admin force).
+  OTRequests: ['id', 'projectId', 'otDate', 'otStart', 'otEnd', 'sowIdsJSON',
+    'reason', 'status', 'requestedBy', 'createdAt', 'updatedAt'],
+
+  // v9 NEW: PUNCHLIST — defects/for-correction items per project.
+  // beforeImage = the finding; afterImage = proof of rectification.
+  Punchlist: ['id', 'projectId', 'item', 'location', 'sowId', 'priority',
+    'assignedTo', 'dueDate', 'status', 'beforeImage', 'afterImage',
+    'remarks', 'raisedBy', 'closedBy', 'closedAt', 'createdAt', 'updatedAt'],
+
+  // v9 NEW: SAFETY records — toolbox talks, inspections, incidents,
+  // near-misses, violations per project.
+  SafetyRecords: ['id', 'projectId', 'recordType', 'recordDate', 'description',
+    'severity', 'personsInvolved', 'actionTaken', 'image', 'status',
+    'reportedBy', 'createdAt', 'updatedAt'],
+
+  // v9 NEW: DRAWING PLANS register — drawing files (PDF/image) uploaded
+  // to Drive with revision control per project.
+  Drawings: ['id', 'projectId', 'drawingNo', 'title', 'discipline', 'revision',
+    'drawingDate', 'fileUrl', 'fileName', 'remarks', 'status',
+    'uploadedBy', 'createdAt', 'updatedAt'],
 
   // v6 NEW: progress billings. gross = (currentPct − prevPct) × revised
   // contract; retention withheld; Paid creates an Approved IncomingCash.

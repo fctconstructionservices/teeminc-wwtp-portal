@@ -143,6 +143,9 @@ const ProjectPage = {
                 <button data-tab="equipment" onclick="ProjectPage.switchTab('equipment')">Equipment</button>
                 <button data-tab="billings" onclick="ProjectPage.switchTab('billings')">Billings</button>
                 <button data-tab="variations" onclick="ProjectPage.switchTab('variations')">Variations</button>
+                <button data-tab="punchlist" onclick="ProjectPage.switchTab('punchlist')">📋 Punchlist</button>
+                <button data-tab="safety" onclick="ProjectPage.switchTab('safety')">🦺 Safety</button>
+                <button data-tab="drawings" onclick="ProjectPage.switchTab('drawings')">📐 Drawings</button>
             </div>
 
             <div id="proj-tab-overview" class="project-tab-content active"></div>
@@ -155,6 +158,9 @@ const ProjectPage = {
             <div id="proj-tab-equipment" class="project-tab-content"></div>
             <div id="proj-tab-billings" class="project-tab-content"></div>
             <div id="proj-tab-variations" class="project-tab-content"></div>
+            <div id="proj-tab-punchlist" class="project-tab-content"></div>
+            <div id="proj-tab-safety" class="project-tab-content"></div>
+            <div id="proj-tab-drawings" class="project-tab-content"></div>
 
             <div class="data-source-note">Estimates are grouped by SOW with draft / pending / approved states.</div>`;
 
@@ -169,6 +175,9 @@ const ProjectPage = {
             this.renderEquipment(p);
             this.renderBillings(p);
             this.renderVariations(p);
+            this.renderPunchlist(p);      // v9
+            this.renderSafety(p);         // v9
+            this.renderDrawings(p);       // v9
             // v6.5 (D): a quiet refresh returns you to the tab you were
             // on instead of bouncing back to Overview.
             this.switchTab(activeTab || 'overview');

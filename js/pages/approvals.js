@@ -156,6 +156,7 @@ const ApprovalsPage = {
             const manpower = pendingData.manpower || [];           // v3
             const estimates = pendingData.estimates || [];
             const dailyRecords = pendingData.dailyRecords || [];
+            const otRequests = pendingData.otRequests || [];          // v9
 
             const filteredCashAdvances = cashAdvances.filter(function(r) {
                 return r.requestorEmail && r.requestorEmail.toLowerCase() !== userEmail;
@@ -192,7 +193,7 @@ const ApprovalsPage = {
             const totalPending = filteredCashAdvances.length + filteredReleases.length + 
                                 filteredIncomingCash.length + filteredLiquidations.length +
                                 filteredMaterials.length + filteredEquipment.length +
-                                filteredManpower.length + estimates.length + filteredDailyRecords.length;
+                                filteredManpower.length + estimates.length + filteredDailyRecords.length + otRequests.length;
 
             let html = `
             <div class="section-head"><h2>Approval Dashboard</h2><div class="rule"></div>
@@ -200,14 +201,14 @@ const ApprovalsPage = {
             </div>
 
             <div class="approval-tab-bar">
-                ${(isAdmin || isSuperAdmin) ? `<button class="active" data-tab="pending" onclick="ApprovalsPage.switchTab('pending')">${Icon.clipboardList({size:14})} Pending Approvals (${filteredCashAdvances.length + filteredIncomingCash.length + filteredLiquidations.length + filteredMaterials.length + filteredEquipment.length + filteredManpower.length + estimates.length + filteredDailyRecords.length})</button>` : ''}
+                ${(isAdmin || isSuperAdmin) ? `<button class="active" data-tab="pending" onclick="ApprovalsPage.switchTab('pending')">${Icon.clipboardList({size:14})} Pending Approvals (${filteredCashAdvances.length + filteredIncomingCash.length + filteredLiquidations.length + filteredMaterials.length + filteredEquipment.length + filteredManpower.length + estimates.length + filteredDailyRecords.length + otRequests.length})</button>` : ''}
                 ${(isAdmin && !isSuperAdmin) ? `<button data-tab="reviewing" onclick="ApprovalsPage.switchTab('reviewing')">${Icon.clipboardList({size:14})} For Review (${filteredReleases.length})</button>` : ''}
                 <button ${!(isAdmin || isSuperAdmin) ? 'class="active"' : ''} data-tab="myrequests" onclick="ApprovalsPage.switchTab('myrequests')">${Icon.user({size:14})} My Requests (${myRequests.length})</button>
                 <button data-tab="approved" onclick="ApprovalsPage.switchTab('approved')">${Icon.checkCircle({size:14})} Approved (${myApproved.length})</button>
                 <button data-tab="rejected" onclick="ApprovalsPage.switchTab('rejected')">${Icon.xCircle({size:14})} Rejected (${myRejected.length})</button>
             </div>
 
-            ${(isAdmin || isSuperAdmin) ? `<div id="approval-tab-pending" class="approval-tab-content active">${this._renderPendingTab({cashAdvances: filteredCashAdvances, incomingCash: filteredIncomingCash, liquidations: filteredLiquidations, materials: filteredMaterials, equipment: filteredEquipment, manpower: filteredManpower, estimates: estimates, dailyRecords: filteredDailyRecords})}</div>` : ''}
+            ${(isAdmin || isSuperAdmin) ? `<div id="approval-tab-pending" class="approval-tab-content active">${this._renderPendingTab({cashAdvances: filteredCashAdvances, incomingCash: filteredIncomingCash, liquidations: filteredLiquidations, materials: filteredMaterials, equipment: filteredEquipment, manpower: filteredManpower, estimates: estimates, dailyRecords: filteredDailyRecords, otRequests: otRequests})}</div>` : ''}
             ${(isAdmin && !isSuperAdmin) ? `<div id="approval-tab-reviewing" class="approval-tab-content">${this._renderReviewingTab(filteredReleases)}</div>` : ''}
             <div id="approval-tab-myrequests" class="approval-tab-content ${!(isAdmin || isSuperAdmin) ? 'active' : ''}">${this._renderMyRequestsTab(myRequests, 'pending')}</div>
             <div id="approval-tab-approved" class="approval-tab-content">${this._renderMyRequestsTab(myApproved, 'approved')}</div>
@@ -423,6 +424,44 @@ const ApprovalsPage = {
             html += `</div></div>`;
         }
 
+        // ─── v9: Overtime Requests Pending Approval ────────────
+        html += `<div class="section-head"><h3>Overtime Requests Pending Approval</h3><div class="rule"></div></div>`;
+        if (!data.otRequests || data.otRequests.length === 0) {
+            html += `<div class="empty"><p>No pending OT requests.</p></div>`;
+        } else {
+            html += `<div class="panel"><div style="padding:4px 0;">`;
+            data.otRequests.forEach(o => {
+                let actionsHtml = '';
+                if (isSuperAdmin) {
+                    actionsHtml = `
+                        <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${o.id}','OTRequest')">Force Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${o.id}','OTRequest')">Force Reject</button>
+                    `;
+                } else if (isApprover) {
+                    actionsHtml = `
+                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${o.id}','OTRequest')">Approve</button>
+                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${o.id}','OTRequest')">Reject</button>
+                    `;
+                }
+                html += `
+                <div class="approval-request-item">
+                    <div class="ar-icon">⏱</div>
+                    <div class="ar-body">
+                        <div class="ar-title">OT ${o.otDate || ''} · ${o.otStart || '?'}–${o.otEnd || '?'} (${o.projectId || '—'})</div>
+                        <div class="ar-meta">
+                            <span class="ar-id">${o.id}</span>
+                            <span>SOW: ${(o.sowIds || []).join(', ') || '—'}</span>
+                            <span>${o.reason || ''}</span>
+                            <span>Requested by ${o.requestedBy || '—'}</span>
+                            <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${o.status}</span>
+                        </div>
+                    </div>
+                    <div class="ar-actions">${actionsHtml}</div>
+                </div>`;
+            });
+            html += `</div></div>`;
+        }
+
         // ─── Manpower Roles Pending Approval (v3) ───────────────
         html += `<div class="section-head"><h3>Manpower Roles Pending Approval</h3><div class="rule"></div></div>`;
         if (!data.manpower || data.manpower.length === 0) {
@@ -608,6 +647,7 @@ const ApprovalsPage = {
                             <span class="mr-id">${r.id}</span>
                             ${r.amount ? `<span>₱${fmtMoney((r.amount || 0))}</span>` : ''}
                             ${r.description ? `<span>${r.description}</span>` : ''}
+                            ${r.type === 'OTRequest' ? `<span>OT ${r.otDate || ''} ${r.otStart || ''}–${r.otEnd || ''} · ${r.reason || ''}</span>` : ''}
                             <span>${r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ''}</span>
                             <span class="stamp ${statusCls}" style="transform:none;padding:1px 8px;font-size:9px;">${r.status}</span>
                         </div>
