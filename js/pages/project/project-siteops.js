@@ -36,12 +36,12 @@ Object.assign(ProjectPage, {
                 ${this._canEdit !== false ? `<button class="btn-primary" style="padding:6px 14px;font-size:11px;" onclick="ProjectPage.openPunchModal()">+ Raise Item</button>` : ''}
             </div>
             <div class="status-tabs">
-                <button class="${this._plFilter === 'Open' ? 'active' : ''}" onclick="ProjectPage._plFilter='Open';ProjectPage.renderPunchlist(ProjectPage._data)">⚠ Open (${open.length})</button>
+                <button class="${this._plFilter === 'Open' ? 'active' : ''}" onclick="ProjectPage._plFilter='Open';ProjectPage.renderPunchlist(ProjectPage._data)">${Icon.warning({size:13})} Open (${open.length})</button>
                 <button class="${this._plFilter === 'Closed' ? 'active' : ''}" onclick="ProjectPage._plFilter='Closed';ProjectPage.renderPunchlist(ProjectPage._data)">${Icon.checkCircle({size:13})} Closed (${closed.length})</button>
             </div>`;
 
         if (!list.length) {
-            html += `<div class="empty"><p>${this._plFilter === 'Open' ? 'Walang open punchlist items — malinis ang site! Use "+ Raise Item" para mag-log ng defect o for-correction.' : 'No closed items yet.'}</p></div>`;
+            html += `<div class="empty"><p>${this._plFilter === 'Open' ? 'No open punchlist items. Use "Raise item" to log a defect or a correction.' : 'No closed items yet.'}</p></div>`;
         } else {
             list.forEach(it => {
                 html += `
@@ -55,25 +55,25 @@ Object.assign(ProjectPage, {
                                 ${it.sowId ? `<span class="mono" style="font-size:10.5px;color:var(--ink-soft);">${it.sowId}</span>` : ''}
                             </div>
                             <div style="font-size:11.5px;color:var(--ink-soft);">
-                                ${it.location ? `📍 ${it.location} · ` : ''}${it.assignedTo ? `👤 ${it.assignedTo} · ` : ''}${it.dueDate ? `📅 Due ${it.dueDate} · ` : ''}Raised by ${it.raisedBy || '—'}
+                                ${it.location ? `${Icon.pin({size:11})} ${it.location} &middot; ` : ''}${it.assignedTo ? `${Icon.user({size:11})} ${it.assignedTo} &middot; ` : ''}${it.dueDate ? `${Icon.calendar({size:11})} Due ${it.dueDate} &middot; ` : ''}Raised by ${it.raisedBy || '—'}
                                 ${it.status === 'Closed' ? ` · <span style="color:var(--green,#2F7A46);">Closed ${it.closedAt || ''} by ${it.closedBy || ''}</span>` : ''}
                             </div>
                             ${it.remarks ? `<div style="font-size:11.5px;margin-top:4px;">${it.remarks}</div>` : ''}
-                            <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;">
-                                ${it.beforeImage ? `<figure style="margin:0;"><img src="${driveImgSrc(it.beforeImage)}" style="width:130px;height:90px;object-fit:cover;border-radius:6px;border:1px solid var(--line);" onerror="this.parentElement.style.display='none'" /><figcaption style="font-size:9.5px;color:var(--ink-soft);text-align:center;">BEFORE (finding)</figcaption></figure>` : ''}
-                                ${it.afterImage ? `<figure style="margin:0;"><img src="${driveImgSrc(it.afterImage)}" style="width:130px;height:90px;object-fit:cover;border-radius:6px;border:1px solid var(--green,#2F7A46);" onerror="this.parentElement.style.display='none'" /><figcaption style="font-size:9.5px;color:var(--green,#2F7A46);text-align:center;">AFTER (rectified)</figcaption></figure>` : ''}
-                            </div>
+${AttachmentGallery.render([
+                                it.beforeImage ? { url: it.beforeImage, name: 'Before (finding)' } : null,
+                                it.afterImage ? { url: it.afterImage, name: 'After (rectified)' } : null
+                              ].filter(Boolean), 'Photos')}
                         </div>
                         <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
-                            ${it.status === 'Open' && this._canEdit !== false ? `<button class="btn-sm success" onclick="ProjectPage.openPunchCloseModal('${it.id}')">✓ Close</button>` : ''}
-                            ${it.status === 'Closed' && isSuper ? `<button class="btn-sm" onclick="ProjectPage.reopenPunchItem('${it.id}')">↩ Re-open</button>` : ''}
-                            ${isSuper ? `<button class="btn-sm danger" onclick="ProjectPage.deletePunchItem('${it.id}')">🗑</button>` : ''}
+                            ${it.status === 'Open' && this._canEdit !== false ? `<button class="btn-sm success" onclick="ProjectPage.openPunchCloseModal('${it.id}')">${Icon.check({size:12})} Close</button>` : ''}
+                            ${it.status === 'Closed' && isSuper ? `<button class="btn-sm" onclick="ProjectPage.reopenPunchItem('${it.id}')">${Icon.restore({size:12})} Re-open</button>` : ''}
+                            ${isSuper ? `<button class="btn-sm danger" onclick="ProjectPage.deletePunchItem('${it.id}')">${Icon.trash({size:12})}</button>` : ''}
                         </div>
                     </div>
                 </div>`;
             });
         }
-        html += `<div class="data-source-note">Ang pag-close ng item ay nangangailangan ng <b>AFTER photo</b> bilang proof of rectification (Super Admin can override). Open items na lampas sa due date ay dapat i-follow up sa taong naka-assign.</div>`;
+        html += `<div class="data-source-note">Closing an item requires an <b>AFTER photo</b> as proof of rectification; the Super Admin can override this. Follow up open items past their due date with the person assigned.</div>`;
         container.innerHTML = html;
     },
 
@@ -88,8 +88,8 @@ Object.assign(ProjectPage, {
         overlay.innerHTML = `
             <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;max-width:520px;width:100%;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;">
                 <div style="padding:13px 18px;border-bottom:1px solid var(--line);background:var(--blueprint-tint);display:flex;justify-content:space-between;align-items:center;">
-                    <h3 style="font-family:'Oswald';font-size:13px;text-transform:uppercase;color:var(--blueprint);margin:0;">📋 Raise Punchlist Item</h3>
-                    <span style="cursor:pointer;color:var(--ink-soft);" onclick="document.getElementById('punchModal').remove()">✕</span>
+                    <h3 style="font-family:'Oswald';font-size:13px;text-transform:uppercase;color:var(--blueprint);margin:0;">${Icon.punchlist({size:13})} Raise Punchlist Item</h3>
+                    <span style="cursor:pointer;color:var(--ink-soft);" onclick="document.getElementById('punchModal').remove()">${Icon.close({size:12})}</span>
                 </div>
                 <div style="padding:14px 18px;overflow:auto;">
                     <div class="field"><label>Item / Defect *</label><input type="text" id="pl-item" placeholder="e.g. Honeycomb sa retaining wall footing" /></div>
@@ -100,7 +100,7 @@ Object.assign(ProjectPage, {
                         <div class="field"><label>Due Date</label><input type="date" id="pl-due" /></div>
                     </div>
                     <div class="field" style="margin-top:6px;"><label>Assigned To</label>
-                        <input type="text" id="pl-assigned" list="pl-people" placeholder="Pangalan o kumpanya (subcon)" />
+                        <input type="text" id="pl-assigned" list="pl-people" placeholder="Name or subcontractor" />
                         <datalist id="pl-people">${people.map(pp => `<option value="${pp.name}"></option>`).join('')}</datalist>
                     </div>
                     <div class="field" style="margin-top:6px;"><label>Remarks</label><input type="text" id="pl-remarks" /></div>
@@ -153,12 +153,12 @@ Object.assign(ProjectPage, {
         overlay.innerHTML = `
             <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;max-width:440px;width:100%;">
                 <div style="padding:13px 18px;border-bottom:1px solid var(--line);background:var(--blueprint-tint);">
-                    <h3 style="font-family:'Oswald';font-size:13px;text-transform:uppercase;color:var(--blueprint);margin:0;">✓ Close ${id}</h3>
+                    <h3 style="font-family:'Oswald';font-size:13px;text-transform:uppercase;color:var(--blueprint);margin:0;">${Icon.check({size:12})} Close ${id}</h3>
                 </div>
                 <div style="padding:14px 18px;">
                     <div class="field"><label>AFTER Photo (proof of rectification) ${isSuper ? '' : '*'}</label><input type="file" accept="image/*" id="plc-after" /></div>
                     <div class="field" style="margin-top:6px;"><label>Closing Remarks</label><input type="text" id="plc-remarks" placeholder="e.g. Chipped and re-grouted, inspected OK" /></div>
-                    ${isSuper ? '<div style="font-size:10.5px;color:var(--ink-soft);margin-top:6px;">Super Admin: pwedeng mag-close kahit walang after photo (override).</div>' : '<div style="font-size:10.5px;color:var(--ink-soft);margin-top:6px;">Required ang AFTER photo bilang proof bago ma-close.</div>'}
+                    ${isSuper ? '<div style="font-size:10.5px;color:var(--ink-soft);margin-top:6px;">Super Admin: you may close this without an after photo.</div>' : '<div style="font-size:10.5px;color:var(--ink-soft);margin-top:6px;">An AFTER photo is required as proof before this can be closed.</div>'}
                 </div>
                 <div style="padding:12px 18px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px;">
                     <button class="btn-ghost" onclick="document.getElementById('punchCloseModal').remove()">Cancel</button>
@@ -172,7 +172,7 @@ Object.assign(ProjectPage, {
     async submitPunchClose(id) {
         const isSuper = (App.getUser() || {}).role === 'superadmin';
         const f = document.getElementById('plc-after')?.files?.[0];
-        if (!f && !isSuper) { UI.toast('Attach the AFTER photo bilang proof of rectification.', 'error'); return; }
+        if (!f && !isSuper) { UI.toast('Attach the AFTER photo as proof of rectification.', 'error'); return; }
         try {
             let afterImage;
             if (f) {
@@ -227,7 +227,7 @@ Object.assign(ProjectPage, {
         const nearMiss = records.filter(r => r.recordType === 'Near Miss').length;
         const talks = records.filter(r => r.recordType === 'Toolbox Talk').length;
         const sevCls = sv => sv === 'Major' || sv === 'Fatal' ? 'rejected' : sv === 'Minor' ? 'pending' : 'approved';
-        const typeIcon = t => t === 'Toolbox Talk' ? '🗣' : t === 'Inspection' ? '🔍' : t === 'Incident' ? '🚨' : t === 'Near Miss' ? '⚠' : '⛔';
+        const typeIcon = t => t === 'Toolbox Talk' ? Icon.megaphone({size:12}) : t === 'Inspection' ? Icon.search({size:12}) : t === 'Incident' ? Icon.siren({size:12}) : t === 'Near Miss' ? Icon.warning({size:12}) : Icon.ban({size:12});
 
         let html = `
             <div class="section-head"><h2>Safety</h2><div class="rule"></div>
@@ -244,24 +244,24 @@ Object.assign(ProjectPage, {
             </div>`;
 
         if (!list.length) {
-            html += `<div class="empty"><p>Walang safety records${this._sfFilter ? ' ng ganitong type' : ''} pa. I-log ang toolbox talks, inspections, at kahit near misses — importante sa safety culture at sa client audits.</p></div>`;
+            html += `<div class="empty"><p>No safety records${this._sfFilter ? ' of this type' : ''} yet. Log toolbox talks, inspections, and near misses; they matter for safety culture and client audits.</p></div>`;
         } else {
             html += `<div class="panel"><table><thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Severity</th><th>Persons Involved</th><th>Action Taken</th><th>By</th><th></th></tr></thead><tbody>`;
             list.forEach(r => {
                 html += `<tr>
                     <td class="mono" style="font-size:11px;white-space:nowrap;">${r.recordDate || '—'}</td>
                     <td style="white-space:nowrap;">${typeIcon(r.recordType)} ${r.recordType}</td>
-                    <td>${r.description || '—'}${r.image ? ` <a href="${r.image}" target="_blank" title="View photo">📷</a>` : ''}</td>
+                    <td>${r.description || '—'}${r.image ? `<div style="margin-top:5px">${AttachmentGallery.render([{ url: r.image, name: 'Safety photo' }], '')}</div>` : ''}</td>
                     <td>${r.severity ? `<span class="stamp ${sevCls(r.severity)}" style="transform:none;padding:1px 8px;font-size:9px;">${r.severity}</span>` : '—'}</td>
                     <td style="font-size:11.5px;">${r.personsInvolved || '—'}</td>
                     <td style="font-size:11.5px;">${r.actionTaken || '—'}</td>
                     <td style="font-size:11px;">${r.reportedBy || '—'}</td>
-                    <td>${r.status === 'Open' && this._canEdit !== false ? `<button class="btn-sm success" title="Mark closed/resolved" onclick="ProjectPage.closeSafetyRecord('${r.id}')">✓</button>` : (r.status === 'Closed' ? '<span class="stamp approved" style="transform:none;padding:1px 8px;font-size:9px;">Closed</span>' : '')}</td>
+                    <td>${r.status === 'Open' && this._canEdit !== false ? `<button class="btn-sm success" title="Mark closed or resolved" onclick="ProjectPage.closeSafetyRecord('${r.id}')">${Icon.check({size:12})}</button>` : (r.status === 'Closed' ? '<span class="stamp approved" style="transform:none;padding:1px 8px;font-size:9px;">Closed</span>' : '')}</td>
                 </tr>`;
             });
             html += `</tbody></table></div>`;
         }
-        html += `<div class="data-source-note">Types: <b>Toolbox Talk</b> (daily safety briefing), <b>Inspection</b>, <b>Incident</b> (may nangyaring aksidente/pinsala), <b>Near Miss</b> (muntik na — dapat i-report para maiwasan), <b>Violation</b> (hindi pagsunod sa safety rules).</div>`;
+        html += `<div class="data-source-note">Types: <b>Toolbox Talk</b> (daily safety briefing), <b>Inspection</b>, <b>Incident</b> (an accident or injury occurred), <b>Near Miss</b> (nothing happened but it nearly did &mdash; report it so it can be prevented), <b>Violation</b> (safety rules were not followed).</div>`;
         container.innerHTML = html;
     },
 
@@ -274,15 +274,15 @@ Object.assign(ProjectPage, {
         overlay.innerHTML = `
             <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;max-width:520px;width:100%;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;">
                 <div style="padding:13px 18px;border-bottom:1px solid var(--line);background:var(--blueprint-tint);display:flex;justify-content:space-between;align-items:center;">
-                    <h3 style="font-family:'Oswald';font-size:13px;text-transform:uppercase;color:var(--blueprint);margin:0;">🦺 Log Safety Record</h3>
-                    <span style="cursor:pointer;color:var(--ink-soft);" onclick="document.getElementById('safetyModal').remove()">✕</span>
+                    <h3 style="font-family:'Oswald';font-size:13px;text-transform:uppercase;color:var(--blueprint);margin:0;">${Icon.safety({size:13})} Log Safety Record</h3>
+                    <span style="cursor:pointer;color:var(--ink-soft);" onclick="document.getElementById('safetyModal').remove()">${Icon.close({size:12})}</span>
                 </div>
                 <div style="padding:14px 18px;overflow:auto;">
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
                         <div class="field"><label>Type *</label><select id="sf-type"><option>Toolbox Talk</option><option>Inspection</option><option>Incident</option><option>Near Miss</option><option>Violation</option></select></div>
                         <div class="field"><label>Date *</label><input type="date" id="sf-date" value="${new Date().toISOString().slice(0, 10)}" /></div>
                     </div>
-                    <div class="field" style="margin-top:6px;"><label>Description *</label><textarea id="sf-desc" rows="2" placeholder="Ano ang nangyari / ano ang topic / ano ang nakita"></textarea></div>
+                    <div class="field" style="margin-top:6px;"><label>Description *</label><textarea id="sf-desc" rows="2" placeholder="What happened, what was discussed, or what was observed"></textarea></div>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px;">
                         <div class="field"><label>Severity (kung incident)</label><select id="sf-severity"><option value="">—</option><option>First Aid</option><option>Minor</option><option>Major</option><option>Fatal</option></select></div>
                         <div class="field"><label>Persons Involved</label><input type="text" id="sf-persons" placeholder="Names / crew" /></div>
@@ -360,11 +360,11 @@ Object.assign(ProjectPage, {
             </div>
             <div class="status-tabs">
                 <button class="${this._dwgFilter === 'Current' ? 'active' : ''}" onclick="ProjectPage._dwgFilter='Current';ProjectPage.renderDrawings(ProjectPage._data)">${Icon.checkCircle({size:13})} Current (${current.length})</button>
-                <button class="${this._dwgFilter === 'Superseded' ? 'active' : ''}" onclick="ProjectPage._dwgFilter='Superseded';ProjectPage.renderDrawings(ProjectPage._data)">🗂 Superseded (${superseded.length})</button>
+                <button class="${this._dwgFilter === 'Superseded' ? 'active' : ''}" onclick="ProjectPage._dwgFilter='Superseded';ProjectPage.renderDrawings(ProjectPage._data)">${Icon.folder({size:13})} Superseded (${superseded.length})</button>
             </div>`;
 
         if (!list.length) {
-            html += `<div class="empty"><p>${this._dwgFilter === 'Current' ? 'Wala pang drawings. I-upload ang plans (PDF o image) para laging updated ang site sa latest revision.' : 'No superseded drawings.'}</p></div>`;
+            html += `<div class="empty"><p>${this._dwgFilter === 'Current' ? 'No drawings yet. Upload the plans as PDF or image so the site always has the latest revision.' : 'No superseded drawings.'}</p></div>`;
         } else {
             html += `<div class="panel"><table><thead><tr><th>Drawing No.</th><th>Title</th><th>Discipline</th><th>Rev</th><th>Date</th><th>File</th><th>Uploaded By</th>${isSuper ? '<th></th>' : ''}</tr></thead><tbody>`;
             list.forEach(d => {
@@ -374,14 +374,14 @@ Object.assign(ProjectPage, {
                     <td style="font-size:11.5px;">${d.discipline || '—'}</td>
                     <td class="mono" style="font-size:11px;">${d.revision || '0'}</td>
                     <td class="mono" style="font-size:11px;white-space:nowrap;">${d.drawingDate || '—'}</td>
-                    <td>${d.fileUrl ? `<a href="${d.fileUrl}" target="_blank" class="btn-sm">📄 Open${d.fileName ? '' : ''}</a>` : '—'}</td>
+                    <td>${d.fileUrl ? `<a href="${d.fileUrl}" target="_blank" class="btn-sm">${Icon.fileText({size:12})} Open${d.fileName ? '' : ''}</a>` : '—'}</td>
                     <td style="font-size:11px;">${d.uploadedBy || '—'}</td>
-                    ${isSuper ? `<td><button class="btn-sm danger" onclick="ProjectPage.deleteDrawingItem('${d.id}')">🗑</button></td>` : ''}
+                    ${isSuper ? `<td><button class="btn-sm danger" onclick="ProjectPage.deleteDrawingItem('${d.id}')">${Icon.trash({size:12})}</button></td>` : ''}
                 </tr>`;
             });
             html += `</tbody></table></div>`;
         }
-        html += `<div class="data-source-note">Revision control: kapag nag-upload ng drawing na PAREHO ang Drawing No., automatic na magiging <b>Superseded</b> ang lumang revision — ang "Current" tab lang ang basehan ng site. Files are stored in the shared Drive folder.</div>`;
+        html += `<div class="data-source-note">Revision control: uploading the same drawing number automatically marks the older revision <b>Superseded</b>. Only the "Current" tab is authoritative for the site. Files are stored in the shared Drive folder.</div>`;
         container.innerHTML = html;
     },
 
@@ -394,8 +394,8 @@ Object.assign(ProjectPage, {
         overlay.innerHTML = `
             <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;max-width:520px;width:100%;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;">
                 <div style="padding:13px 18px;border-bottom:1px solid var(--line);background:var(--blueprint-tint);display:flex;justify-content:space-between;align-items:center;">
-                    <h3 style="font-family:'Oswald';font-size:13px;text-transform:uppercase;color:var(--blueprint);margin:0;">📐 Upload Drawing</h3>
-                    <span style="cursor:pointer;color:var(--ink-soft);" onclick="document.getElementById('drawingModal').remove()">✕</span>
+                    <h3 style="font-family:'Oswald';font-size:13px;text-transform:uppercase;color:var(--blueprint);margin:0;">${Icon.drawing({size:13})} Upload Drawing</h3>
+                    <span style="cursor:pointer;color:var(--ink-soft);" onclick="document.getElementById('drawingModal').remove()">${Icon.close({size:12})}</span>
                 </div>
                 <div style="padding:14px 18px;overflow:auto;">
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
@@ -409,7 +409,7 @@ Object.assign(ProjectPage, {
                     </div>
                     <div class="field" style="margin-top:6px;"><label>File (PDF or image) *</label><input type="file" accept=".pdf,image/*" id="dwg-file" /></div>
                     <div class="field" style="margin-top:6px;"><label>Remarks</label><input type="text" id="dwg-remarks" placeholder="e.g. For construction, issued by designer" /></div>
-                    <div style="font-size:10.5px;color:var(--ink-soft);margin-top:6px;">Kapag existing na ang Drawing No., ang lumang revision ay awtomatikong mamamarkahan na Superseded.</div>
+                    <div style="font-size:10.5px;color:var(--ink-soft);margin-top:6px;">If the drawing number already exists, the previous revision is marked Superseded automatically.</div>
                 </div>
                 <div style="padding:12px 18px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px;">
                     <button class="btn-ghost" onclick="document.getElementById('drawingModal').remove()">Cancel</button>
@@ -426,7 +426,7 @@ Object.assign(ProjectPage, {
         const f = document.getElementById('dwg-file')?.files?.[0];
         if (!no || !title) { UI.toast('Drawing No. and Title are required.', 'error'); return; }
         if (!f) { UI.toast('Attach the drawing file (PDF or image).', 'error'); return; }
-        if (f.size > 8 * 1024 * 1024) { UI.toast('File too large — keep drawings under 8 MB (i-compress muna ang PDF).', 'error'); return; }
+        if (f.size > 8 * 1024 * 1024) { UI.toast('File too large. Keep drawings under 8 MB; compress the PDF first.', 'error'); return; }
         const btn = document.getElementById('dwgSubmitBtn');
         if (btn) { btn.disabled = true; btn.textContent = 'Uploading…'; }
         try {

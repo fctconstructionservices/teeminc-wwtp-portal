@@ -217,10 +217,15 @@ function submitIncomingCash(payload) {
     transactionDate: payload.date || '',
     attachmentsJSON: JSON.stringify(fileUrl ? [{ url: fileUrl, name: fileName }] : []),
     status: 'Pending',
-    createdAt: new Date()
+    createdAt: new Date(),
+    // v10: manually recorded incoming cash is FUNDING (owner capital,
+    // partner injection, loan). Client collections are only ever created
+    // by marking a billing paid, which tags them 'Client Collection'.
+    // This is what keeps portfolio "Collected" honest.
+    sourceType: 'Funding'
   });
 
-  logActivity_('Incoming cash ₱' + payload.amount + ' recorded by ' + currentUserName_() + projectName + ' (pending approval)', 'blue', id);
+  logActivity_('Incoming cash (funding) ₱' + payload.amount + ' recorded by ' + currentUserName_() + projectName + ' (pending approval)', 'blue', id);
   return { success: true, requestId: id, fileUrl: fileUrl, fileName: fileName };
 }
 

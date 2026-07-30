@@ -120,9 +120,27 @@ function createBilling(projectId, currentPct, period) {
 
   var gross = (pct - prevPct) / 100 * revised;
   var retention = gross * rp;
-  var net = gross - retention;
 
-  var billingNo = 'PB-' + ('0000' + (existing.length + 1)).slice(-4);
+  // ── v10 DOWNPAYMENT RECOUPMENT ──
+  // A downpayment is an ADVANCE against the contract, not extra income.
+  // If it were not deducted here the client would pay for the same work
+  // twice: once through the advance and again in full in this billing.
+  // Each progress billing therefore recoups dpPct x its own gross, and
+  // never more than the advance still outstanding.
+  var dp = dpLedger_(projectId, proj);
+  var recoup = 0;
+  if (dp.outstanding > 0) {
+    recoup = Math.min(gross * dp.pct, dp.outstanding);
+  }
+
+  var net = gross - retention - recoup;
+
+  // count only PROGRESS billings when numbering, so the DP does not
+  // consume PB-0001
+  var progressCount = existing.filter(function (b) {
+    return String(b.billingType || 'Progress') !== 'Downpayment';
+  }).length;
+  var billingNo = 'PB-' + ('0000' + (progressCount + 1)).slice(-4);
   var id = nextId_('BIL');
   appendRow_('Billings', {
     id: id,
@@ -137,10 +155,102 @@ function createBilling(projectId, currentPct, period) {
     status: 'Pending',
     submittedBy: currentUserEmail_(),
     createdAt: new Date(),
-    paidAt: ''
+    paidAt: '',
+    billingType: 'Progress',
+    dpRecoupment: Math.round(recoup * 100) / 100
   });
-  logActivity_('Progress billing ' + billingNo + ' (₱' + fmtMoney_(net) + ' net) generated for ' + projectId + ' — for approval', 'blue', id);
-  return { success: true, id: id, billingNo: billingNo, net: net };
+  logActivity_('Progress billing ' + billingNo + ' (₱' + fmtMoney_(net) + ' net' +
+    (recoup > 0 ? ', less ₱' + fmtMoney_(recoup) + ' DP recoupment' : '') +
+    ') generated for ' + projectId + ' — for approval', 'blue', id);
+  return { success: true, id: id, billingNo: billingNo, net: net, dpRecoupment: recoup };
+}
+
+/**
+ * dpLedger_ (v10) - The downpayment position of a project:
+ *   { pct, advance, recouped, outstanding }
+ * advance   = the approved/paid Downpayment billing's gross
+ * recouped  = sum of dpRecoupment across non-rejected progress billings
+ * The ledger is derived, never stored, so it cannot drift.
+ */
+function dpLedger_(projectId, proj) {
+  proj = proj || readAll_('Projects').find(function (p) { return p.id === projectId; }) || {};
+  var pct = parseFloat(proj.downpaymentPct);
+  if (isNaN(pct) || pct < 0 || pct > 0.6) pct = 0;
+  var bills = readAll_('Billings').filter(function (b) {
+    return b.projectId === projectId && b.status !== 'Rejected';
+  });
+  var advance = bills.filter(function (b) { return b.billingType === 'Downpayment'; })
+    .reduce(function (s, b) { return s + (parseFloat(b.grossAmount) || 0); }, 0);
+  var recouped = bills.reduce(function (s, b) { return s + (parseFloat(b.dpRecoupment) || 0); }, 0);
+  return {
+    pct: pct,
+    advance: Math.round(advance * 100) / 100,
+    recouped: Math.round(recouped * 100) / 100,
+    outstanding: Math.round(Math.max(0, advance - recouped) * 100) / 100
+  };
+}
+
+/** getDPLedger - exposed to the UI for the Billings tab panel. */
+function getDPLedger(projectId) {
+  requireLogin_();
+  return dpLedger_(projectId);
+}
+
+/**
+ * setDownpaymentPct - Super Admin sets the contract's downpayment %.
+ * Stored as a fraction (0.15 = 15%).
+ */
+function setDownpaymentPct(projectId, pct) {
+  requireSuperAdmin_('setting the downpayment percentage');
+  var v = parseFloat(pct);
+  if (isNaN(v) || v < 0 || v > 0.6) throw new Error('Downpayment must be between 0% and 60%.');
+  updateRow_('Projects', 'id', projectId, { downpaymentPct: v });
+  logActivity_('Downpayment set to ' + (v * 100).toFixed(1) + '% for ' + projectId, 'blue', projectId);
+  return { success: true, downpaymentPct: v };
+}
+
+/**
+ * createDownpaymentBilling (v10) - The client's advance at project
+ * start, recorded as the FIRST billing so it flows through the same
+ * approval and collection path as everything else. It sits at 0%
+ * accomplishment: it bills no work, it only draws the advance.
+ * Retention does NOT apply to a downpayment.
+ */
+function createDownpaymentBilling(projectId, period) {
+  var proj = readAll_('Projects').find(function (p) { return p.id === projectId; });
+  if (!proj) throw new Error('Project not found.');
+  assertProjectEditor_(projectId);
+  assertContractReady_(projectId, 'record a downpayment');
+
+  var dp = dpLedger_(projectId, proj);
+  if (dp.pct <= 0) throw new Error('Set the Downpayment % for this contract first.');
+  if (dp.advance > 0) throw new Error('A downpayment has already been recorded for this project.');
+
+  var revised = revisedContractValue_(projectId, proj, null);
+  if (revised <= 0) throw new Error('Set the project Contract Value first (Billings tab).');
+
+  var gross = revised * dp.pct;
+  var id = nextId_('BIL');
+  appendRow_('Billings', {
+    id: id,
+    projectId: projectId,
+    billingNo: 'DP-0001',
+    period: period || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MMM yyyy'),
+    prevPct: 0,
+    currentPct: 0,           // an advance bills no accomplishment
+    grossAmount: Math.round(gross * 100) / 100,
+    retentionAmount: 0,      // retention applies to progress work only
+    netAmount: Math.round(gross * 100) / 100,
+    status: 'Pending',
+    submittedBy: currentUserEmail_(),
+    createdAt: new Date(),
+    paidAt: '',
+    billingType: 'Downpayment',
+    dpRecoupment: 0
+  });
+  logActivity_('Downpayment DP-0001 (' + (dp.pct * 100).toFixed(1) + '% = ₱' +
+    fmtMoney_(gross) + ') recorded for ' + projectId + ' — for approval', 'blue', id);
+  return { success: true, id: id, billingNo: 'DP-0001', net: gross };
 }
 
 /**
@@ -169,8 +279,13 @@ function markBillingPaid(id) {
     requestor: currentUserName_(),
     requestorEmail: currentUserEmail_(),
     amount: parseFloat(b.netAmount) || 0,
-    description: 'Collection — ' + b.billingNo + ' (' + b.period + ', ' + b.currentPct + '% accomplishment)',
-    paymentMethod: 'Billing Collection',
+    description: (b.billingType === 'Downpayment'
+      ? 'Downpayment — ' + b.billingNo + ' (' + b.period + ')'
+      : 'Collection — ' + b.billingNo + ' (' + b.period + ', ' + b.currentPct + '% accomplishment)'),
+    paymentMethod: b.billingType === 'Downpayment' ? 'Downpayment' : 'Billing Collection',
+    // v10: explicit source so portfolio "Collected" counts client money
+    // only — owner capital stays classified as Funding.
+    sourceType: 'Client Collection',
     reference: b.billingNo,
     transactionDate: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd'),
     attachmentsJSON: '[]',

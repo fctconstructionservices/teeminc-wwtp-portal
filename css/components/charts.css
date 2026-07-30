@@ -42,6 +42,12 @@
     height: 230px;
     margin-top: 10px;
 }
+/* v10: horizontal bar charts (billed vs collected, budget variance) need
+   vertical room — one row per project/SOW instead of one column. */
+.chart-card .canvas-wrap.tall {
+    height: 340px;
+}
+
 .chart-card .canvas-wrap.short {
     height: 190px;
 }

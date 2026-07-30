@@ -49,10 +49,10 @@ Object.assign(ProjectPage, {
                 <div id="manpowerEntries">${this._manpowerRowHTML()}</div>
                 <div class="add-btn-row" style="display:flex;gap:8px;flex-wrap:wrap;">
                     <button class="btn-sm primary" onclick="ProjectPage.addEntry('manpower')">+ Add Person</button>
-                    <button class="btn-sm amber" id="btnRequestOT" onclick="ProjectPage.openOTModal()">⏱ Request OT</button>
+                    <button class="btn-sm amber" id="btnRequestOT" onclick="ProjectPage.openOTModal()">${Icon.timer({size:13})} Request OT</button>
                 </div>
                 <div class="manpower-total" id="manpowerTotalDisplay">Total: 0</div>
-                <div class="muted" style="font-size:10.5px;color:var(--ink-soft);margin-top:4px;">Pumili ng tao mula sa Personnel database — automatic ang trade/role. Ang OT In/Out ay naka-lock hangga't walang APPROVED na OT request para sa petsa na ito.</div>
+                <div class="muted" style="font-size:10.5px;color:var(--ink-soft);margin-top:4px;">Select a person from the Personnel database and the trade fills in automatically. OT in and out stay locked until an approved OT request exists for this date.</div>
             </div>
             <div class="daily-form-section" id="equipmentSection">
                 <div class="section-label">Equipment on Site <span class="rule"></span></div>
@@ -65,7 +65,7 @@ Object.assign(ProjectPage, {
                     <div style="display:grid;grid-template-columns:2fr 90px 30px;gap:8px;align-items:end;">
                         <div class="field"><label>1 · Anong SOW ang ginawa? *</label><select class="wk-scope">${this._sowOptions()}</select></div>
                         <div class="field"><label>2 · % Complete</label><input type="number" class="wk-pct" min="0" max="100" placeholder="0-100" /></div>
-                        <button class="btn-sm danger" style="margin-bottom:6px;" onclick="ProjectPage.removeEntry(this,'work')">✕</button>
+                        <button class="btn-sm danger" style="margin-bottom:6px;" onclick="ProjectPage.removeEntry(this,'work')">${Icon.close({size:12})}</button>
                     </div>
                     <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px;margin-top:6px;">
                         <div class="field"><label>3 · Saan? (Location)</label><input type="text" class="wk-location" placeholder="e.g. NF2 Cell 2" /></div>
@@ -76,7 +76,7 @@ Object.assign(ProjectPage, {
                     </div>
                 </div></div>
                 <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('work')">+ Add Work Item</button></div>
-                <div class="muted" style="font-size:10.5px;color:var(--ink-soft);margin-top:4px;">Sunod-sunurin lang: SOW → % → saan → ano → picture. Ang % Complete dito ang nagpapagalaw ng project progress at billings.</div>
+                <div class="muted" style="font-size:10.5px;color:var(--ink-soft);margin-top:4px;">Work through the steps in order: SOW, then percent, location, what was done, and a photo. The percent complete entered here drives project progress and billings.</div>
             </div>
             <div class="daily-form-section" id="materialsSection">
                 <div class="section-label">Materials Delivered <span class="rule"></span></div>
@@ -101,7 +101,7 @@ Object.assign(ProjectPage, {
             </div>
             <div class="daily-form-section" id="photosSection">
                 <div class="section-label">Additional Photos <span class="rule"></span></div>
-                <div id="photosEntries"><div class="entry-row"><div class="field"><label>Photo</label><input type="file" accept="image/*" class="photo-input" data-photo onchange="ProjectPage.previewSmallImage(this,'photo-preview-${Date.now()}')" /></div><div class="field"><label>Caption (anong picture ito?)</label><input type="text" class="photo-caption" placeholder="e.g. Liner welding sa NF2 cell 2" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'photos')">${Icon.close({size:13})}</button></div></div></div>
+                <div id="photosEntries"><div class="entry-row"><div class="field"><label>Photo</label><input type="file" accept="image/*" class="photo-input" data-photo onchange="ProjectPage.previewSmallImage(this,'photo-preview-${Date.now()}')" /></div><div class="field"><label>Caption</label><input type="text" class="photo-caption" placeholder="e.g. Liner welding at NF2 cell 2" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'photos')">${Icon.close({size:13})}</button></div></div></div>
                 <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('photos')">+ Add Photo</button></div>
             </div>
             <div class="submit-row" id="dailyStepNav" hidden>
@@ -143,15 +143,15 @@ Object.assign(ProjectPage, {
                 <div class="field"><label>Personnel *</label><select class="mp-person" onchange="ProjectPage.syncPersonnelRole(this)">${this._personnelOptions()}</select></div>
                 <div class="field"><label>Trade / Role</label><input type="text" class="mp-role" readonly placeholder="auto" /></div>
                 <div class="field"><label># Present</label><input type="number" class="mp-count" value="1" min="0" /></div>
-                <button class="btn-sm danger" style="margin-bottom:6px;" onclick="ProjectPage.removeEntry(this,'manpower')">✕</button>
+                <button class="btn-sm danger" style="margin-bottom:6px;" onclick="ProjectPage.removeEntry(this,'manpower')">${Icon.close({size:12})}</button>
             </div>
             <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-top:6px;">
                 <div class="field"><label style="font-size:9px;">AM In</label><input type="time" class="mp-am-in" /></div>
                 <div class="field"><label style="font-size:9px;">AM Out</label><input type="time" class="mp-am-out" /></div>
                 <div class="field"><label style="font-size:9px;">PM In</label><input type="time" class="mp-pm-in" /></div>
                 <div class="field"><label style="font-size:9px;">PM Out</label><input type="time" class="mp-pm-out" /></div>
-                <div class="field"><label style="font-size:9px;color:var(--amber,#C2860F);">OT In 🔒</label><input type="time" class="mp-ot-in" disabled title="Needs an approved OT request for this date" /></div>
-                <div class="field"><label style="font-size:9px;color:var(--amber,#C2860F);">OT Out 🔒</label><input type="time" class="mp-ot-out" disabled title="Needs an approved OT request for this date" /></div>
+                <div class="field"><label style="font-size:9px;color:var(--amber,#C2860F);">OT In ${Icon.lock({size:11})}</label><input type="time" class="mp-ot-in" disabled title="Needs an approved OT request for this date" /></div>
+                <div class="field"><label style="font-size:9px;color:var(--amber,#C2860F);">OT Out ${Icon.lock({size:11})}</label><input type="time" class="mp-ot-out" disabled title="Needs an approved OT request for this date" /></div>
             </div>
         </div>`;
     },
@@ -186,17 +186,19 @@ Object.assign(ProjectPage, {
             inp.disabled = !ot;
             if (!ot) inp.value = '';
         });
+        // v10: labels are plain text (textContent cannot hold an SVG), so
+        // the state is spelled out in words instead of an emoji.
         document.querySelectorAll('#manpowerEntries .field label').forEach(l => {
-            if (l.textContent.indexOf('OT In') === 0) l.textContent = ot ? 'OT In ✓' : 'OT In 🔒';
-            if (l.textContent.indexOf('OT Out') === 0) l.textContent = ot ? 'OT Out ✓' : 'OT Out 🔒';
+            if (l.textContent.indexOf('OT In') === 0) l.textContent = ot ? 'OT In' : 'OT In (locked)';
+            if (l.textContent.indexOf('OT Out') === 0) l.textContent = ot ? 'OT Out' : 'OT Out (locked)';
         });
         if (bar) {
             const pend = date ? ((this._data && this._data.otRequests) || []).find(o => o.status === 'Pending' && String(o.otDate) === String(date)) : null;
             bar.innerHTML = ot
                 ? `<span class="stamp approved" style="transform:none;">OT Approved ${ot.otStart}–${ot.otEnd}</span> <span style="color:var(--ink-soft);">${ot.reason || ''} (${ot.id}) — OT In/Out fields unlocked.</span>`
                 : pend
-                ? `<span class="stamp pending" style="transform:none;">OT Pending (${pend.id})</span> <span style="color:var(--ink-soft);">Awaiting admin approval — OT fields stay locked.</span>`
-                : `<span style="color:var(--ink-soft);">No approved OT for this date — OT In/Out are locked. Use <b>Request OT</b> kung may overtime.</span>`;
+                ? `<span class="stamp pending" style="transform:none;">OT Pending (${pend.id})</span> <span style="color:var(--ink-soft);">Awaiting admin approval. OT fields stay locked.</span>`
+                : `<span style="color:var(--ink-soft);">No approved OT for this date, so OT in and out are locked. Use <b>Request OT</b> if overtime is needed.</span>`;
         }
     },
 
@@ -216,8 +218,8 @@ Object.assign(ProjectPage, {
         overlay.innerHTML = `
             <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;max-width:480px;width:100%;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;">
                 <div style="padding:13px 18px;border-bottom:1px solid var(--line);background:var(--blueprint-tint);display:flex;justify-content:space-between;align-items:center;">
-                    <h3 style="font-family:'Oswald';font-size:13px;text-transform:uppercase;color:var(--blueprint);margin:0;">⏱ Request Overtime</h3>
-                    <span style="cursor:pointer;color:var(--ink-soft);" onclick="document.getElementById('otModal').remove()">✕</span>
+                    <h3 style="font-family:'Oswald';font-size:13px;text-transform:uppercase;color:var(--blueprint);margin:0;">${Icon.timer({size:13})} Request Overtime</h3>
+                    <span style="cursor:pointer;color:var(--ink-soft);" onclick="document.getElementById('otModal').remove()">${Icon.close({size:12})}</span>
                 </div>
                 <div style="padding:14px 18px;overflow:auto;">
                     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
@@ -225,13 +227,13 @@ Object.assign(ProjectPage, {
                         <div class="field"><label>OT Start *</label><input type="time" id="ot-start" value="17:00" /></div>
                         <div class="field"><label>OT End *</label><input type="time" id="ot-end" value="20:00" /></div>
                     </div>
-                    <div class="field" style="margin-top:6px;"><label>Affected SOW (pwedeng multiple) *</label>
+                    <div class="field" style="margin-top:6px;"><label>Affected SOW (select one or more) *</label>
                         <div id="ot-sows" style="border:1px solid var(--line);border-radius:7px;padding:8px 10px;max-height:150px;overflow:auto;background:var(--bg);">
                             ${sows.length ? sows.map(sw => `<label style="display:flex;gap:7px;align-items:center;font-size:12px;margin:3px 0;cursor:pointer;text-transform:none;letter-spacing:0;"><input type="checkbox" class="ot-sow" value="${sw.id}" style="width:auto;" /> <b>${sw.id}</b> — ${sw.description || ''}</label>`).join('') : '<span style="font-size:11px;color:var(--ink-soft);">No SOW items yet.</span>'}
                         </div>
                     </div>
-                    <div class="field" style="margin-top:6px;"><label>Reason for OT *</label><textarea id="ot-reason" rows="2" placeholder="e.g. Concrete pouring must finish today para tuloy-tuloy ang curing"></textarea></div>
-                    <div style="font-size:10.5px;color:var(--ink-soft);margin-top:6px;">Kailangan ng approval ng LAHAT ng admins (Super Admin can force-approve). Kapag approved, bubukas ang OT In/Out sa Daily Site Record ng petsang ito.</div>
+                    <div class="field" style="margin-top:6px;"><label>Reason for OT *</label><textarea id="ot-reason" rows="2" placeholder="e.g. Concrete pouring must finish today so curing is continuous"></textarea></div>
+                    <div style="font-size:10.5px;color:var(--ink-soft);margin-top:6px;">All admins must approve this request; the Super Admin can force-approve. Once approved, the OT in and out fields open on the Daily Site Record for this date.</div>
                 </div>
                 <div style="padding:12px 18px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px;">
                     <button class="btn-ghost" onclick="document.getElementById('otModal').remove()">Cancel</button>
@@ -477,7 +479,7 @@ Object.assign(ProjectPage, {
         // months that actually have records (yyyy-MM), newest first
         const months = [...new Set(records.map(r => String(r.date || '').slice(0, 7)).filter(m => /^\d{4}-\d{2}$/.test(m)))].sort().reverse();
         if (!months.length) {
-            return `<div class="empty"><p>Walang daily records pa — attendance is derived from the Manpower section of each Daily Site Record.</p></div>`;
+            return `<div class="empty"><p>No daily records yet. Attendance is derived from the Manpower section of each Daily Site Record.</p></div>`;
         }
         if (!this._attMonth || !months.includes(this._attMonth)) this._attMonth = months[0];
         const month = this._attMonth;
@@ -522,7 +524,7 @@ Object.assign(ProjectPage, {
                 ot ? `OT ${m.otIn || '?'}-${m.otOut || '?'}` : ''
             ].filter(Boolean).join(' · ') || 'Present';
             return `<td style="text-align:center;" title="${tip}">
-                <span style="color:var(--green,#2F7A46);font-weight:700;">✓</span>${ot ? '<sup style="color:var(--amber,#C2860F);font-size:8px;font-weight:700;">OT</sup>' : ''}
+                <span style="color:var(--green,#2F7A46);font-weight:700;">${Icon.check({size:12})}</span>${ot ? '<sup style="color:var(--amber,#C2860F);font-size:8px;font-weight:700;">OT</sup>' : ''}
             </td>`;
         };
 
@@ -531,11 +533,11 @@ Object.assign(ProjectPage, {
                 <select onchange="ProjectPage._attMonth=this.value;ProjectPage.renderDailyRecords(ProjectPage._data);" style="padding:5px 9px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--surface);color:var(--ink);">
                     ${months.map(m => `<option value="${m}" ${m === month ? 'selected' : ''}>${new Date(m + '-02').toLocaleDateString('en-PH', { year: 'numeric', month: 'long' })}</option>`).join('')}
                 </select>
-                <button class="btn-sm" onclick="ProjectPage.exportAttendanceExcel()">📊 Export Excel</button>
+                <button class="btn-sm" onclick="ProjectPage.exportAttendanceExcel()">${Icon.spreadsheet({size:12})} Export Excel</button>
             </div>`;
 
         if (!list.length) {
-            html += `<div class="empty"><p>Walang attendance rows na naka-link sa Personnel para sa buwang ito.${legacyRows ? ' (' + legacyRows + ' legacy role-only rows ang hindi maiugnay sa tao — simula ngayon, piliin ang tao sa Personnel dropdown ng Daily Record.)' : ''}</p></div>`;
+            html += `<div class="empty"><p>No attendance rows are linked to Personnel for this month.${legacyRows ? ' (' + legacyRows + ' legacy rows record a role but no name, so they cannot be attributed. Select the person from the Personnel dropdown going forward.)' : ''}</p></div>`;
             return html;
         }
 
@@ -554,7 +556,7 @@ Object.assign(ProjectPage, {
             </tr>`;
         });
         html += `</tbody></table></div>
-            <div class="data-source-note">Hover a ✓ to see the AM/PM/OT times. Ang attendance ay derived sa <b>Manpower — Attendance</b> section ng bawat Daily Site Record (kaya walang dobleng encoding); ang <sup>OT</sup> ay lalabas lang kapag may approved OT request ang araw na iyon.${legacyRows ? ' <b>' + legacyRows + '</b> legacy role-only rows are excluded (walang pangalan).' : ''}</div>`;
+            <div class="data-source-note">Hover a check mark to see the AM, PM, and OT times. Attendance is derived from the <b>Manpower &mdash; Attendance</b> section of each Daily Site Record, so nothing is encoded twice. The OT marker appears only on days with an approved OT request.${legacyRows ? ' <b>' + legacyRows + '</b> legacy rows record a role but no name and are excluded.' : ''}</div>`;
         return html;
     },
 
@@ -616,14 +618,14 @@ Object.assign(ProjectPage, {
         let html = `
             <div class="add-record-toggle">
                 ${this._canEdit !== false ? `<button class="btn-ghost" onclick="ProjectPage.toggleAddRecord()">+ Add Daily Site Record</button>` : ''}
-                ${(App.getUser() || {}).role === 'superadmin' ? `<button class="btn-sm" style="margin-left:8px;" onclick="ProjectPage.openDeletedRecords()">🗑 Recently Deleted</button>` : ''}
+                ${(App.getUser() || {}).role === 'superadmin' ? `<button class="btn-sm" style="margin-left:8px;" onclick="ProjectPage.openDeletedRecords()">${Icon.trash({size:12})} Recently Deleted</button>` : ''}
             </div>
             <div class="add-record-form" id="dailyAddForm">
                 ${this._buildDailyFormHTML()}
             </div>
             <div class="status-tabs" style="margin:10px 0 10px;">
-                <button class="${this._dailyView !== 'attendance' ? 'active' : ''}" onclick="ProjectPage.setDailyView('records')">📄 Records</button>
-                <button class="${this._dailyView === 'attendance' ? 'active' : ''}" onclick="ProjectPage.setDailyView('attendance')">🕐 Attendance Monitoring</button>
+                <button class="${this._dailyView !== 'attendance' ? 'active' : ''}" onclick="ProjectPage.setDailyView('records')">${Icon.fileText({size:12})} Records</button>
+                <button class="${this._dailyView === 'attendance' ? 'active' : ''}" onclick="ProjectPage.setDailyView('attendance')">${Icon.clock({size:13})} Attendance Monitoring</button>
             </div>`;
         if (this._dailyView === 'attendance') {
             html += this._renderAttendanceHTML(p);
@@ -938,7 +940,7 @@ Object.assign(ProjectPage, {
             <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;max-width:640px;width:100%;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;">
                 <div style="padding:13px 18px;border-bottom:1px solid var(--line);background:var(--blueprint-tint);display:flex;justify-content:space-between;align-items:center;">
                     <h3 style="font-family:'Oswald';font-size:13px;text-transform:uppercase;color:var(--blueprint);margin:0;">Recently Deleted</h3>
-                    <span style="cursor:pointer;color:var(--ink-soft);" onclick="document.getElementById('deletedRecordsModal').remove()">✕</span>
+                    <span style="cursor:pointer;color:var(--ink-soft);" onclick="document.getElementById('deletedRecordsModal').remove()">${Icon.close({size:12})}</span>
                 </div>
                 <div style="padding:14px 18px;overflow:auto;">
                     ${rows.length ? `
@@ -955,7 +957,7 @@ Object.assign(ProjectPage, {
                     </tr>`).join('')}
                     </tbody></table>` : `
                     <div class="empty">
-                        <div class="empty-ico">🗑</div>
+                        <div class="empty-ico">${Icon.trash({size:22})}</div>
                         <h4>Nothing deleted</h4>
                         <p>Deleted drafts appear here for 30 days before being permanently removed.</p>
                     </div>`}
@@ -1012,7 +1014,7 @@ Object.assign(ProjectPage, {
             const banner = document.createElement('div');
             banner.id = 'dailyEditBanner';
             banner.style.cssText = 'background:var(--blueprint-tint);border:1px solid var(--line);border-left:3px solid var(--blueprint);border-radius:8px;padding:9px 13px;font-size:12px;margin-bottom:12px;';
-            banner.innerHTML = `✏️ Editing draft <b>${id}</b> (${r.date}). Existing photos are kept; new uploads will be added.`;
+            banner.innerHTML = `${Icon.pencil({size:12})} Editing draft <b>${id}</b> (${r.date}). Existing photos are kept; new uploads will be added.`;
             form.prepend(banner);
         }
         form && form.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1245,7 +1247,7 @@ Object.assign(ProjectPage, {
 
         if (!photos.length) {
             html += `<div class="panel"><div class="empty">
-                <div class="empty-ico">📷</div>
+                <div class="empty-ico">${Icon.camera({size:12})}</div>
                 <h4>No photos yet</h4>
                 <p>Photos attached to Daily Site Records appear here automatically -
                    from the Photos section, work-accomplished rows, and issue reports.</p>

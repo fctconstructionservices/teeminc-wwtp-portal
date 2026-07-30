@@ -537,6 +537,16 @@ const DataService = {
         return await gasCall('deleteBilling', id);
     },
     // ── v9: Site ops — OT / punchlist / safety / drawings ──
+    // ── v10: downpayment workflow ──
+    async setDownpaymentPct(projectId, pct) {
+        return await gasCall('setDownpaymentPct', projectId, pct);
+    },
+    async createDownpaymentBilling(projectId, period) {
+        return await gasCall('createDownpaymentBilling', projectId, period);
+    },
+    async getDPLedger(projectId) {
+        return await gasCall('getDPLedger', projectId);
+    },
     async requestOT(data) {
         return await gasCall('requestOT', data);
     },

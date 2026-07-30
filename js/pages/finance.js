@@ -33,7 +33,7 @@ const FinancePage = {
             </div>
             <div class="chart-grid full"><div class="chart-card"><div class="cc-head"><h3>Inflow / Outflow / Net</h3><span class="cc-note">actual + Gantt forecast</span></div><div class="canvas-wrap"><canvas id="cfChart"></canvas></div></div></div>
             <div class="section-head"><h2>Cost Control</h2><div class="rule"></div></div>
-            <div class="chart-grid"><div class="chart-card"><div class="cc-head"><h3>Budget vs Actual</h3></div><div class="canvas-wrap"><canvas id="budgetChart"></canvas></div></div><div class="chart-card"><div class="cc-head"><h3>Cost Breakdown</h3></div><div class="canvas-wrap"><canvas id="breakdownChart"></canvas></div></div></div>
+            <div class="chart-grid"><div class="chart-card"><div class="cc-head"><h3>Budget vs Actual</h3><span class="cc-note">variance per SOW &middot; worst first</span></div><div class="canvas-wrap tall"><canvas id="budgetChart"></canvas></div></div><div class="chart-card"><div class="cc-head"><h3>Cost Breakdown</h3></div><div class="canvas-wrap"><canvas id="breakdownChart"></canvas></div></div></div>
             <div class="chart-grid" style="margin-top:16px"><div class="chart-card"><div class="cc-head"><h3>Cash Advance Liquidation Aging</h3><span class="cc-note">unliquidated advances</span></div><div class="canvas-wrap short"><canvas id="agingChart"></canvas></div></div><div class="chart-card"><div class="cc-head"><h3>Project Cost Status</h3></div><table><thead><tr><th>Project</th><th style="text-align:right">Budget</th><th style="text-align:right">Actual</th><th>Status</th></tr></thead><tbody>`;
             data.costStatus.forEach(c => {
                 html +=
@@ -120,24 +120,64 @@ const FinancePage = {
             this._cashflowData = data.cashflow;
             if (!this._cfView) this._cfView = 'month';
             this._buildCashflowChart();
+            // ── v10 CHART REWRITE: Budget vs Actual as VARIANCE ──
+            // Two vertical bars per SOW meant reading heights and doing the
+            // subtraction yourself, with the SOW name rotated 45° and
+            // clipped. What actually matters is the GAP: over or under, and
+            // by how much. So this plots variance (actual − budget) against
+            // a centre line — over-runs extend right in red, savings left in
+            // green — sorted worst-first so exceptions surface themselves.
             const bv = data.budgetVsActual;
+            const vRows = (bv.labels || []).map((lb, i) => ({
+                label: lb,
+                budget: (bv.budget || [])[i] || 0,
+                actual: (bv.actual || [])[i] || 0,
+                variance: ((bv.actual || [])[i] || 0) - ((bv.budget || [])[i] || 0)
+            })).sort((a, b) => b.variance - a.variance);
+
             this._charts.budget = new Chart(document.getElementById('budgetChart'), {
                 type: 'bar',
                 data: {
-                    labels: bv.labels,
-                    datasets: [{ label: 'Budget', data: bv.budget, backgroundColor: '#C9D9E0',
-                            borderRadius: 4 }, { label: 'Actual', data: bv.actual,
-                            backgroundColor: '#24455A', borderRadius: 4 }]
+                    labels: vRows.map(r => r.label),
+                    datasets: [{
+                        label: 'Variance vs budget',
+                        data: vRows.map(r => r.variance),
+                        backgroundColor: vRows.map(r => r.variance > 0 ? '#B23A2E' : '#2F7A46'),
+                        borderRadius: 4,
+                        barPercentage: 0.74
+                    }]
                 },
                 options: {
+                    indexAxis: 'y',
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8 } },
-                        tooltip: { callbacks: { label: c => `${c.dataset.label}: ₱${fmtMoney(c.parsed.y)}` } }
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                title: c => vRows[c[0].dataIndex].label,
+                                label: c => {
+                                    const r = vRows[c.dataIndex];
+                                    const pct = r.budget ? Math.round(r.variance / r.budget * 100) : 0;
+                                    return (r.variance > 0 ? 'Over budget by ₱' : 'Under budget by ₱')
+                                        + fmtMoney(Math.abs(r.variance)) + (r.budget ? ` (${Math.abs(pct)}%)` : '');
+                                },
+                                afterBody: c => {
+                                    const r = vRows[c[0].dataIndex];
+                                    return [`Budget: ₱${fmtMoney(r.budget)}`, `Actual: ₱${fmtMoney(r.actual)}`];
+                                }
+                            }
+                        }
                     },
-                    scales: { y: { ticks: { callback: fmtAxisMoney },
-                            grid: { color: '#EEEBE0' } }, x: { grid: { display: false } } }
+                    scales: {
+                        x: {
+                            ticks: { callback: fmtAxisMoney },
+                            grid: { color: '#EEEBE0' },
+                            title: { display: true, text: 'over budget →  |  ←  under budget',
+                                     color: '#5B6360', font: { size: 10 } }
+                        },
+                        y: { grid: { display: false }, ticks: { font: { size: 11 }, autoSkip: false } }
+                    }
                 }
             });
             const bd = data.breakdown;

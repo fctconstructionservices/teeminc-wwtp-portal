@@ -35,7 +35,7 @@ Object.assign(ProjectPage, {
         ].filter(Boolean).join(' · ');
 
         let html = `
-            ${!cr.ready ? `<div style="background:#FBF1DE;border:1px solid var(--amber);border-left:3px solid var(--amber);border-radius:8px;padding:11px 14px;font-size:12.5px;color:var(--ink);margin-bottom:14px;"><b>⚠ Variation orders locked — contract basis incomplete.</b> ${crMsg}. Approve all estimates and set every SOW budget first.</div>` : ''}
+            ${!cr.ready ? `<div style="background:#FBF1DE;border:1px solid var(--amber);border-left:3px solid var(--amber);border-radius:8px;padding:11px 14px;font-size:12.5px;color:var(--ink);margin-bottom:14px;"><b>${Icon.warning({size:12})} Variation orders locked — contract basis incomplete.</b> ${crMsg}. Approve all estimates and set every SOW budget first.</div>` : ''}
             <div class="kpi-strip" style="margin-bottom:14px;">
                 <div class="kpi-card"><div class="k-label">Original Contract</div><div class="k-val mono">₱${fmtMoney(p.contractValue || 0)}</div><div class="k-sub">set in the Billings tab</div></div>
                 <div class="kpi-card warn"><div class="k-label">Approved VOs</div><div class="k-val mono">${approvedSum >= 0 ? '+' : ''}₱${fmtMoney(approvedSum)}</div><div class="k-sub">${approved.length} client-approved</div></div>
@@ -73,7 +73,7 @@ Object.assign(ProjectPage, {
                                <button class="btn-sm danger" onclick="ProjectPage.decideVO('${v.id}', false)">Rejected</button>`;
                 }
                 const effect = v.status === 'Client-Approved'
-                    ? `SOW ${amt >= 0 ? '+' : ''}₱${fmtMoney(amt)} · contract ${amt >= 0 ? '↑' : '↓'}`
+                    ? `SOW ${amt >= 0 ? '+' : ''}₱${fmtMoney(amt)} · contract ${amt >= 0 ? '${Icon.arrowUp({size:12})}' : '${Icon.arrowDown({size:12})}'}`
                     : '—';
                 html += `<tr>
                     <td><span class="req-id">${v.id}</span></td>

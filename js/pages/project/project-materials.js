@@ -29,7 +29,7 @@ Object.assign(ProjectPage, {
             <div class="section-head"><h2>Material Balance</h2><div class="rule"></div>
                 <input id="siteMatSearch" placeholder="Search material..." oninput="ProjectPage.filterSiteMaterials(this.value)"
                     style="border:1px solid var(--line);border-radius:6px;padding:5px 10px;font-size:11px;background:var(--surface);color:var(--ink);" />
-                ${this._canEdit !== false ? `<button class="btn-sm primary" onclick="ProjectPage.openTransferModal('Material')">⇄ New Transfer</button>` : ''}
+                ${this._canEdit !== false ? `<button class="btn-sm primary" onclick="ProjectPage.openTransferModal('Material')">${Icon.transfer({size:12})} New Transfer</button>` : ''}
             </div>
             <div class="panel"><table><thead><tr>
                 <th>Material</th><th>Unit</th>
@@ -126,7 +126,7 @@ Object.assign(ProjectPage, {
             <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;max-width:540px;width:100%;max-height:86vh;display:flex;flex-direction:column;overflow:hidden;">
                 <div style="padding:13px 18px;border-bottom:1px solid var(--line);background:var(--blueprint-tint);display:flex;justify-content:space-between;align-items:center;">
                     <h3 style="font-family:'Oswald';font-size:13px;text-transform:uppercase;color:var(--blueprint);margin:0;">New ${this._trfType} Transfer</h3>
-                    <span style="cursor:pointer;color:var(--ink-soft);" onclick="document.getElementById('transferModal').remove()">✕</span>
+                    <span style="cursor:pointer;color:var(--ink-soft);" onclick="document.getElementById('transferModal').remove()">${Icon.close({size:12})}</span>
                 </div>
                 <div style="padding:14px 18px;overflow:auto;" id="trfBody">
                     <div style="color:var(--ink-soft);font-size:12px;">Loading locations…</div>
@@ -146,7 +146,7 @@ Object.assign(ProjectPage, {
             const body = document.getElementById('trfBody');
             if (!body) return;
             const locOpts = (sel) => this._trfLocations.map(l =>
-                `<option value="${l.id}" ${l.id === sel ? 'selected' : ''}>${l.isWarehouse ? '🏭 ' : '🏗 '}${l.label}</option>`).join('');
+                `<option value="${l.id}" ${l.id === sel ? 'selected' : ''}>${l.isWarehouse ? '${Icon.warehouse({size:13})} ' : '&#9970; '}${l.label}</option>`).join('');
             body.innerHTML = `
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
                     <div style="margin-bottom:11px;"><label style="display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:3px;">From</label>
@@ -192,7 +192,7 @@ Object.assign(ProjectPage, {
                 <input type="number" class="trf-qty" min="0" step="any" placeholder="Qty" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--surface);color:var(--ink);" />
                 <div class="trf-max" style="font-size:9.5px;color:var(--ink-soft);margin-top:2px;"></div>
             </div>
-            <button class="btn-sm danger" title="Remove line" style="margin-top:5px;" onclick="ProjectPage.removeTransferLine(this)">✕</button>`;
+            <button class="btn-sm danger" title="Remove line" style="margin-top:5px;" onclick="ProjectPage.removeTransferLine(this)">${Icon.close({size:12})}</button>`;
         wrap.appendChild(row);
     },
 

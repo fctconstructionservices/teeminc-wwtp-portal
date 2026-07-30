@@ -448,22 +448,61 @@ function getProjectData(projectId) {
     .map(function (k) { return { type: k, amount: costByTypeMap[k] }; })
     .sort(function (a, b) { return b.amount - a.amount; });
 
-  // ── Month window: project/SOW date span (≤ 24 months, includes today) ──
-  const spanDates = [];
-  [proj.startDate, proj.endDate].forEach(function (x) { const d = new Date(fmtDate_(x)); if (!isNaN(d)) spanDates.push(d); });
-  sowItems.forEach(function (s) {
-    [s.startDate, s.endDate].forEach(function (x) { const d = new Date(x); if (!isNaN(d)) spanDates.push(d); });
-  });
+  // ── Month window (v10 REWRITE — fixes two real bugs) ─────────────
+  //
+  // BUG 1 "editing the start date changed nothing": the window used to be
+  // min/max over the project dates, EVERY SOW date, and today. SOW bars
+  // usually begin before the project date, so those dates won the min()
+  // and moving the project start had no visible effect on the chart.
+  //
+  // BUG 2 "the dates went backwards": prependZero_ pushed a point
+  // labelled with the project start onto the FRONT of the series even
+  // when the first bucket was an earlier month, producing an axis like
+  // "Sep 1 (start), Jul 26, Aug 26 ...".
+  //
+  // The window is now ANCHORED to the project start date, which is the
+  // field the user actually edits. SOW dates no longer redefine it; they
+  // are clamped into it. Every date goes through fmtDate_() first, so a
+  // Date cell and a 'yyyy-MM-dd' string can never disagree by a day.
+  const dOf_ = function (x) {
+    const t = fmtDate_(x);
+    if (!t) return null;
+    const p = String(t).slice(0, 10).split('-');
+    if (p.length !== 3) return null;
+    const d = new Date(+p[0], +p[1] - 1, +p[2]);
+    return isNaN(d.getTime()) ? null : d;
+  };
   const today = new Date(); today.setHours(0, 0, 0, 0);
-  spanDates.push(today);
-  let mStart = new Date(Math.min.apply(null, spanDates.map(function (d) { return d.getTime(); })));
-  let mEnd = new Date(Math.max.apply(null, spanDates.map(function (d) { return d.getTime(); })));
-  mStart = new Date(mStart.getFullYear(), mStart.getMonth(), 1);
-  mEnd = new Date(mEnd.getFullYear(), mEnd.getMonth(), 1);
+
+  const projStart = dOf_(proj.startDate);
+  const projEnd = dOf_(proj.endDate);
+
+  // fall back to the SOW span only when the project has no dates set
+  const sowDates = [];
+  sowItems.forEach(function (s) {
+    const a = dOf_(s.startDate), b = dOf_(s.endDate);
+    if (a) sowDates.push(a);
+    if (b) sowDates.push(b);
+  });
+
+  let winStart = projStart
+    || (sowDates.length ? new Date(Math.min.apply(null, sowDates.map(function (d) { return d.getTime(); }))) : new Date(today));
+  // the axis must reach at least to today (so AC has somewhere to land)
+  // and to the project end / last SOW date, whichever is furthest out
+  const endCandidates = [today];
+  if (projEnd) endCandidates.push(projEnd);
+  sowDates.forEach(function (d) { endCandidates.push(d); });
+  let winEnd = new Date(Math.max.apply(null, endCandidates.map(function (d) { return d.getTime(); })));
+  if (winEnd < winStart) winEnd = new Date(winStart);
+
+  let mStart = new Date(winStart.getFullYear(), winStart.getMonth(), 1);
+  let mEnd = new Date(winEnd.getFullYear(), winEnd.getMonth(), 1);
   const monthsArr = [];
   for (let d = new Date(mStart); d <= mEnd && monthsArr.length < 24; d.setMonth(d.getMonth() + 1)) {
     monthsArr.push({ y: d.getFullYear(), m: d.getMonth() });
   }
+  // guarantee strictly ascending buckets regardless of how the loop ran
+  monthsArr.sort(function (a, b) { return (a.y * 12 + a.m) - (b.y * 12 + b.m); });
   const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const monthLabels = monthsArr.map(function (mm) { return MONTH_NAMES[mm.m] + ' ' + String(mm.y).slice(2); });
   const monthKey_ = function (dt) { return dt.getFullYear() * 12 + dt.getMonth(); };
@@ -714,8 +753,10 @@ function getProjectData(projectId) {
   // so the S-curve and cash flow can be viewed in more detail. Capped
   // at 60 weeks in a window around today for very long projects.
   const dayMs = 86400000;
-  const projStartD = new Date(proj.startDate);
-  const spanStartW = !isNaN(projStartD) ? projStartD : new Date(mStart);
+  // v10: same normalized parse as the monthly window (this was
+  // new Date() on the raw cell, which could disagree by a day).
+  const projStartD = dOf_(proj.startDate);
+  const spanStartW = projStartD || new Date(mStart);
   let wFirst = new Date(spanStartW.getFullYear(), spanStartW.getMonth(), spanStartW.getDate());
   wFirst = new Date(wFirst.getTime() - ((wFirst.getDay() + 6) % 7) * dayMs);   // back to Monday
   const spanEndW = monthEnd_(monthsArr[monthsArr.length - 1]);
@@ -831,22 +872,54 @@ function getProjectData(projectId) {
   // ── v8: every curve now BEGINS AT ZERO at the project start, so day 0
   //    reads ₱0 instead of jumping straight to the first bucket's
   //    accumulated value. ──
-  const startLbl = !isNaN(projStartD)
+  const startLbl = projStartD
     ? (MONTH_SHORT_W[projStartD.getMonth()] + ' ' + projStartD.getDate() + ' (start)')
     : 'Start';
-  const prependZero_ = function (evmObj, cfObj) {
-    evmObj.labels.unshift(startLbl);
-    evmObj.pvSeries.unshift(0);
-    evmObj.acSeries.unshift(0);
-    evmObj.evSeries.unshift(0);
-    if (evmObj.nowIndex !== undefined && evmObj.nowIndex > -1) evmObj.nowIndex += 1;
-    cfObj.labels.unshift(startLbl);
-    cfObj.inflow.unshift(0);
-    cfObj.outflow.unshift(0);
-    cfObj.projectedOutflow.unshift(null);
+
+  /**
+   * prependZero_ (v10 FIX) - Adds the ₱0 origin point at the project
+   * start so both curves visibly begin at zero.
+   *
+   * It used to unshift UNCONDITIONALLY, which put a label like
+   * "Sep 1 (start)" in front of an earlier bucket such as "Jul 26" and
+   * made the axis read backwards. Now the point is only prepended when
+   * the project start genuinely precedes the first bucket; otherwise the
+   * first bucket already IS the origin and is simply zeroed and
+   * relabelled. Either way the axis can only ascend.
+   */
+  const prependZero_ = function (evmObj, cfObj, firstBucketStart) {
+    if (!evmObj || !evmObj.labels || !evmObj.labels.length) return;
+    const startsBefore = projStartD && firstBucketStart
+      ? projStartD.getTime() < firstBucketStart.getTime()
+      : false;
+
+    if (startsBefore) {
+      evmObj.labels.unshift(startLbl);
+      evmObj.pvSeries.unshift(0);
+      evmObj.acSeries.unshift(0);
+      evmObj.evSeries.unshift(0);
+      if (evmObj.nowIndex !== undefined && evmObj.nowIndex > -1) evmObj.nowIndex += 1;
+      cfObj.labels.unshift(startLbl);
+      cfObj.inflow.unshift(0);
+      cfObj.outflow.unshift(0);
+      cfObj.projectedOutflow.unshift(null);
+    } else {
+      // the window already starts at the project start: make that first
+      // bucket the zero origin instead of inserting an out-of-order one
+      evmObj.labels[0] = startLbl;
+      evmObj.pvSeries[0] = 0;
+      evmObj.acSeries[0] = 0;
+      evmObj.evSeries[0] = 0;
+      cfObj.labels[0] = startLbl;
+      cfObj.inflow[0] = 0;
+      cfObj.outflow[0] = 0;
+      cfObj.projectedOutflow[0] = null;
+    }
   };
-  prependZero_(evm, projectCashflow);
-  prependZero_(evmWeekly, projectCashflowWeekly);
+  // monthly buckets begin on the 1st of the first month; weekly buckets
+  // begin on the Monday stored in weeks[0]
+  prependZero_(evm, projectCashflow, monthsArr.length ? new Date(monthsArr[0].y, monthsArr[0].m, 1) : null);
+  prependZero_(evmWeekly, projectCashflowWeekly, weeks.length ? new Date(weeks[0].start) : null);
 
   // ── Billings + contract ──
   // v6.1: Sheets auto-parses period strings like "Jul 2026" into Date
@@ -945,6 +1018,8 @@ function getProjectData(projectId) {
     variationOrders: projectVOs.slice().reverse(),
     contractValue: parseFloat(proj.contractValue) || 0,
     retentionPct: retentionPctVal,
+    // v10: downpayment % of the contract (advance, recouped from billings)
+    downpaymentPct: parseFloat(proj.downpaymentPct) || 0,
     contractValueRevised: contractValueRevised,
     contractReady: contractReady,
     // v6.6: per-project editors

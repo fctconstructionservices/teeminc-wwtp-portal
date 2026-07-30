@@ -72,20 +72,13 @@ const RequestDetailModal = {
             user.email.toLowerCase() === String(submitterEmail).toLowerCase();
         const statusCls = data.status === 'Approved' ? 'approved' : data.status === 'Pending' ? 'pending' : data.status === 'Reviewing' ? 'pending' : 'rejected';
         
-        let attachmentsHtml = '';
-        if (data.attachments && data.attachments.length > 0) {
-            attachmentsHtml = `
-                <div class="dg-item full"><span class="dg-label">Attachments</span>
-                    <div class="dg-value" style="display:flex;gap:8px;flex-wrap:wrap;">
-                        ${data.attachments.map(function(att) {
-                            return `<a href="${att.url}" target="_blank" style="display:flex;align-items:center;gap:4px;padding:4px 8px;background:var(--bg);border-radius:4px;border:1px solid var(--line);font-size:12px;text-decoration:none;color:var(--blueprint);">
-                                ${Icon.fileText({size:13})} ${att.name || 'Attachment'}
-                            </a>`;
-                        }).join('')}
-                    </div>
-                </div>
-            `;
-        }
+        // v10: real thumbnails + lightbox instead of text links, so an
+        // approver can read the receipt without leaving the modal. Falls
+        // back to attachmentsJSON when the backend has not parsed it.
+        const attachmentsHtml = AttachmentGallery.render(
+            (data.attachments && data.attachments.length) ? data.attachments : data.attachmentsJSON,
+            'Attachments'
+        );
         
         let actionButtons = '';
         if (data.status === 'Pending') {
@@ -113,7 +106,7 @@ const RequestDetailModal = {
                 ? data.sowIds
                 : (function () { try { return JSON.parse(data.sowIdsJSON || '[]'); } catch (e) { return []; } })();
             detailsHtml = `
-            <div class="print-section"><div class="ps-title">⏱ Overtime Request Details</div>
+            <div class="print-section"><div class="ps-title">${Icon.timer({size:13})} Overtime Request Details</div>
                 <div class="detail-grid">
                     <div class="dg-item"><span class="dg-label">Requested By</span><span class="dg-value">${data.requestedBy || '—'}</span></div>
                     <div class="dg-item"><span class="dg-label">Project</span><span class="dg-value">${data.projectId || '—'}</span></div>
@@ -122,7 +115,8 @@ const RequestDetailModal = {
                     <div class="dg-item full"><span class="dg-label">Affected SOW</span><span class="dg-value">${sowIds.length ? sowIds.join(', ') : '—'}</span></div>
                     <div class="dg-item full"><span class="dg-label">Reason for OT</span><span class="dg-value">${data.reason || '—'}</span></div>
                 </div>
-                <div class="data-source-note" style="margin-top:10px;">Kapag na-approve ng lahat ng Admins, bubukas ang OT In/Out fields ng Daily Site Record para sa ${data.otDate || 'petsang ito'} sa proyektong ito.</div>
+                ${attachmentsHtml}
+                <div class="data-source-note" style="margin-top:10px;">Once all admins approve, the OT in and out fields open on the Daily Site Record for ${data.otDate || 'this date'} on this project.</div>
             </div>`;
         } else {
             detailsHtml = `
@@ -133,8 +127,8 @@ const RequestDetailModal = {
                     <div class="dg-item"><span class="dg-label">Amount</span><span class="dg-value">₱${fmtMoney((data.amount || 0))}</span></div>
                     <div class="dg-item"><span class="dg-label">Scope of Work</span><span class="dg-value">${data.scope || '—'}</span></div>
                     <div class="dg-item full"><span class="dg-label">Description</span><span class="dg-value">${data.description || '—'}</span></div>
-                    ${attachmentsHtml}
                 </div>
+                ${attachmentsHtml}
             </div>`;
         }
 
@@ -476,7 +470,7 @@ const ApprovalsPage = {
                 }
                 html += `
                 <div class="approval-request-item" style="cursor:pointer;">
-                    <div class="ar-icon">⏱</div>
+                    <div class="ar-icon">${Icon.timer({size:13})}</div>
                     <div class="ar-body" onclick="RequestDetailModal.open('${o.id}','request')">
                         <div class="ar-title">OT ${o.otDate || ''} · ${o.otStart || '?'}–${o.otEnd || '?'} (${o.projectId || '—'})</div>
                         <div class="ar-meta">

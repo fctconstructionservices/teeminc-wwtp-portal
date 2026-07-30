@@ -127,3 +127,83 @@
 #ganttLinks {
     z-index: 2;
 }
+
+/* ── v10: schedule grid (start / duration / finish / predecessor) ── */
+.sched-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 4px 0 8px;
+}
+.sched-note {
+    font-size: 11px;
+    color: var(--ink-soft);
+}
+.sched-panel {
+    margin-bottom: 14px;
+    overflow-x: auto;
+}
+.sched-table { width: 100%; border-collapse: collapse; }
+.sched-table th {
+    background: var(--blueprint-tint);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--blueprint);
+    text-align: left;
+    padding: 7px 9px;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--line);
+}
+.sched-table td {
+    padding: 6px 9px;
+    border-bottom: 1px solid var(--bg);
+    font-size: 12px;
+    vertical-align: top;
+}
+.sched-table tr:last-child td { border-bottom: none; }
+.sched-table tr:hover td { background: #FAF9F4; }
+
+.sched-desc {
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    margin-top: 2px;
+    max-width: 260px;
+}
+.sched-ms {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--amber);
+}
+.sched-in {
+    width: 100%;
+    padding: 4px 6px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    background: var(--surface);
+    color: var(--ink);
+    font: 11.5px 'IBM Plex Mono', monospace;
+}
+.sched-in:focus { outline: 2px solid var(--blueprint); outline-offset: -1px; }
+.sched-in[readonly] {
+    background: var(--bg);
+    color: var(--ink-soft);
+    cursor: not-allowed;
+}
+.sched-dur { text-align: right; }
+
+.sched-lock {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-top: 3px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9.5px;
+    color: var(--green);
+}
+
+[data-theme="dark"] .sched-table tr:hover td { background: #262626; }

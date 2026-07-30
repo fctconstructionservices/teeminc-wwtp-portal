@@ -47,7 +47,7 @@ Object.assign(ProjectPage, {
                             <b style="font-family:'Oswald';font-size:11.5px;text-transform:uppercase;color:var(--blueprint);">All estimates approved — exports ready:</b>
                             <button class="btn-sm primary" onclick="ProjectPage.printDUPA()">${Icon.printer({size:12})} Print DUPA (PDF)</button>
                             <button class="btn-sm" onclick="ProjectPage.printEstimateSummary()">${Icon.printer({size:12})} Summary (PDF)</button>
-                            <button class="btn-sm" onclick="ProjectPage.exportEstimateSummaryExcel()">📊 Summary (Excel)</button>
+                            <button class="btn-sm" onclick="ProjectPage.exportEstimateSummaryExcel()">${Icon.spreadsheet({size:12})} Summary (Excel)</button>
                         </div>
                     </div>`;
                 })()}
@@ -93,7 +93,7 @@ Object.assign(ProjectPage, {
                                 <span class="eg-sow">${group.sowId || '—'}</span>
                                 <span class="eg-desc">${group.sowDescription || 'No description'}</span>
                                 ${awaitingOthers
-                                    ? `<span style="font-size:10.5px;color:var(--green);">✓ Approved by you — awaiting other admins</span>`
+                                    ? `<span style="font-size:10.5px;color:var(--green);">${Icon.check({size:11})} Approved by you — awaiting other admins</span>`
                                     : hideStatusForSubmitter
                                     ? `<span style="font-size:10.5px;color:var(--ink-soft);">Submitted — awaiting approval</span>`
                                     : `<span class="eg-status ${group.status || 'draft'}">${group.status || 'draft'}</span>`}
@@ -166,18 +166,31 @@ Object.assign(ProjectPage, {
 
                 if (cat === 'materials') {
                     // v5 (item 5): Material · Qty · Unit(auto) · Rate · Cost
-                    const matOptionsHtml = (options || []).map(m => {
-                        const labelText = ProjectPage._materialLabel(m);
-                        const sel = String(item.material) === String(m.id) ? 'selected' : '';
-                        return `<option value="${m.id}" data-name="${labelText}" data-rate="${m.rate || 0}" data-unit="${m.unit || ''}" ${sel}>${labelText}</option>`;
-                    }).join('');
+                    // v10: searchable picker instead of a native <select> —
+                    // a few hundred approved materials cannot be found by
+                    // first-letter jump-scrolling alone.
+                    const matSSId = `ss-mat-${gIdx}-${idx}`;
+                    const matOpts = (options || []).map(m => ({
+                        value: m.id,
+                        label: ProjectPage._materialLabel(m),
+                        group: m.category || 'Uncategorized',
+                        meta: [m.unit, m.rate ? '₱' + fmtMoney(m.rate) : ''].filter(Boolean).join(' · '),
+                        keywords: [m.id, m.brand, m.model, m.specs, m.grade, m.size, m.subcategory].filter(Boolean).join(' '),
+                        unit: m.unit || '',
+                        rate: parseFloat(m.rate) || 0
+                    }));
+                    const matCurrent = matOpts.find(o => String(o.value) === String(item.material));
                     html += `
                                 <div class="field"><label>Material</label>
                                     ${isLocked ? `<span style="font-size:12px;font-weight:500;">${item.materialName || item.material || '—'}</span>` :
-                                    `<select class="est-mat-select" data-g="${gIdx}" data-idx="${idx}" data-cat="${catKey}" onchange="ProjectPage.selectMaterialForItem(${gIdx},${idx},this)">
-                                        <option value="">Select...</option>
-                                        ${matOptionsHtml}
-                                    </select>`}
+                                    SearchSelect.render({
+                                        id: matSSId,
+                                        value: item.material || '',
+                                        display: matCurrent ? matCurrent.label : (item.materialName || ''),
+                                        placeholder: 'Search name, brand, ID, spec...',
+                                        options: matOpts,
+                                        onSelect: (v, o) => ProjectPage.selectMaterialForItem(gIdx, idx, v, o)
+                                    })}
                                 </div>
                                 <div class="field"><label>Qty</label>
                                     ${isLocked ? `<span style="font-size:12px;">${item.qty || 0}</span>` :
@@ -198,18 +211,30 @@ Object.assign(ProjectPage, {
                 } else if (cat === 'labor') {
                     // v5 (items 4 & 6): Role from the approved Manpower DB ·
                     // Qty · Days · Rate · Cost
-                    const mpOptionsHtml = (options || []).map(mp => {
-                        const sel = String(item.role) === String(mp.role) ? 'selected' : '';
-                        return `<option value="${(mp.role || '').replace(/"/g, '&quot;')}" ${sel}>${mp.role}${mp.classification ? ' (' + mp.classification + ')' : ''}</option>`;
-                    }).join('');
+                    // v10: searchable role picker
+                    const lbSSId = `ss-lab-${gIdx}-${idx}`;
+                    const lbOpts = (options || []).map(mp => ({
+                        value: mp.role || '',
+                        label: mp.role || '',
+                        group: mp.classification || 'Other',
+                        meta: mp.classification || '',
+                        keywords: [mp.id, mp.code, mp.notes].filter(Boolean).join(' ')
+                    }));
+                    // keep a legacy role selectable even if it left the catalog
+                    if (item.role && !lbOpts.some(o => String(o.value) === String(item.role))) {
+                        lbOpts.unshift({ value: item.role, label: item.role + ' (legacy)', group: 'Legacy', meta: '' });
+                    }
                     html += `
                                 <div class="field"><label>Role</label>
                                     ${isLocked ? `<span style="font-size:12px;font-weight:500;">${item.role || '—'}</span>` :
-                                    `<select class="est-item-role" data-g="${gIdx}" data-idx="${idx}" data-cat="${catKey}" onchange="ProjectPage.updateEstimateItem(${gIdx},${idx},'${catKey}','role',this.value)">
-                                        <option value="">Select role...</option>
-                                        ${mpOptionsHtml}
-                                        ${item.role && !(options || []).some(mp => String(mp.role) === String(item.role)) ? `<option value="${item.role}" selected>${item.role} (legacy)</option>` : ''}
-                                    </select>`}
+                                    SearchSelect.render({
+                                        id: lbSSId,
+                                        value: item.role || '',
+                                        display: item.role || '',
+                                        placeholder: 'Search role or trade...',
+                                        options: lbOpts,
+                                        onSelect: (v) => ProjectPage.updateEstimateItem(gIdx, idx, catKey, 'role', v)
+                                    })}
                                 </div>
                                 <div class="field"><label>Qty</label>
                                     ${isLocked ? `<span style="font-size:12px;">${item.qty || 0}</span>` :
@@ -229,19 +254,30 @@ Object.assign(ProjectPage, {
                                 ${!isLocked ? `<div class="field"><button class="remove-btn" onclick="ProjectPage.removeEstimateItem(${gIdx},${idx},'${catKey}')">${Icon.close({size:13})}</button></div>` : ''}
                             `;
                 } else if (cat === 'equipment') {
-                    const eqOptionsHtml = (options || []).map(e => {
-                        const labelText = ProjectPage._equipmentLabel(e);
-                        const sel = String(item.equipment) === String(e.id) ? 'selected' : '';
-                        return `<option value="${e.id}" data-name="${labelText}" data-rate="${e.rate || 0}" data-unit="${e.unit || ''}" ${sel}>${labelText}</option>`;
-                    }).join('');
+                    // v10: searchable equipment picker
+                    const eqSSId = `ss-eq-${gIdx}-${idx}`;
+                    const eqOpts = (options || []).map(e => ({
+                        value: e.id,
+                        label: ProjectPage._equipmentLabel(e),
+                        group: e.category || e.type || 'Uncategorized',
+                        meta: [e.unit, e.rate ? '₱' + fmtMoney(e.rate) : ''].filter(Boolean).join(' · '),
+                        keywords: [e.id, e.brand, e.model, e.serial, e.capacity, e.powerSource, e.ownership].filter(Boolean).join(' '),
+                        unit: e.unit || '',
+                        rate: parseFloat(e.rate) || 0
+                    }));
+                    const eqCurrent = eqOpts.find(o => String(o.value) === String(item.equipment));
                     // v5 (item 7): Equipment · Qty · Unit(auto) · Days · Rate · Cost
                     html += `
                                 <div class="field"><label>Equipment</label>
                                     ${isLocked ? `<span style="font-size:12px;font-weight:500;">${item.equipName || item.equipment || '—'}</span>` :
-                                    `<select class="est-eq-select" data-g="${gIdx}" data-idx="${idx}" data-cat="${catKey}" onchange="ProjectPage.selectEquipmentForItem(${gIdx},${idx},this)">
-                                        <option value="">Select...</option>
-                                        ${eqOptionsHtml}
-                                    </select>`}
+                                    SearchSelect.render({
+                                        id: eqSSId,
+                                        value: item.equipment || '',
+                                        display: eqCurrent ? eqCurrent.label : (item.equipName || ''),
+                                        placeholder: 'Search brand, model, category...',
+                                        options: eqOpts,
+                                        onSelect: (v, o) => ProjectPage.selectEquipmentForItem(gIdx, idx, v, o)
+                                    })}
                                 </div>
                                 <div class="field"><label>Qty</label>
                                     ${isLocked ? `<span style="font-size:12px;">${item.qty || 0}</span>` :
@@ -423,7 +459,12 @@ Object.assign(ProjectPage, {
         return e.name || [e.brand, e.model].filter(Boolean).join(' ') || e.id;
     },
 
-    selectMaterialForItem(gIdx, idx, selectEl) {
+    /**
+     * selectMaterialForItem (v10) - receives the chosen VALUE and OPTION
+     * from SearchSelect rather than a <select> element, so the unit and
+     * DB rate still auto-fill exactly as before.
+     */
+    selectMaterialForItem(gIdx, idx, materialId, opt) {
         const est = this._estimatesData;
         if (!est || !est.groups[gIdx]) return;
         const group = est.groups[gIdx];
@@ -431,7 +472,6 @@ Object.assign(ProjectPage, {
         const item = group.materials && group.materials[idx];
         if (!item) return;
 
-        const materialId = selectEl.value;
         if (!materialId) {
             item.material = '';
             item.materialName = '';
@@ -441,22 +481,22 @@ Object.assign(ProjectPage, {
 
         const isDuplicate = group.materials.some((m, i) => i !== idx && String(m.material) === String(materialId));
         if (isDuplicate) {
-            UI.toast('This material is already added to this SOW estimate. Adjust the qty on the existing line instead.', 'error');
-            selectEl.value = item.material || '';
+            UI.toast('This material is already on this SOW estimate. Adjust the qty on the existing line instead.', 'error');
+            this.renderEstimates(this._data);   // restores the previous label
             return;
         }
 
-        const opt = selectEl.selectedOptions[0];
         item.material = materialId;
-        item.unit = opt ? (opt.dataset.unit || '') : '';   // v5: unit auto-fills from the material
-        item.materialName = opt ? opt.dataset.name : '';
-        item.rate = opt ? (parseFloat(opt.dataset.rate) || 0) : (item.rate || 0);
+        item.unit = opt ? (opt.unit || '') : '';            // auto-fills from the material DB
+        item.materialName = opt ? opt.label : '';
+        item.rate = opt && opt.rate ? opt.rate : (item.rate || 0);
         item.cost = (parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0);
         this.renderEstimates(this._data);
         this.renderSOWBudget(this._data);
     },
 
-    selectEquipmentForItem(gIdx, idx, selectEl) {
+    /** selectEquipmentForItem (v10) - value + option from SearchSelect. */
+    selectEquipmentForItem(gIdx, idx, equipId, opt) {
         const est = this._estimatesData;
         if (!est || !est.groups[gIdx]) return;
         const group = est.groups[gIdx];
@@ -464,7 +504,6 @@ Object.assign(ProjectPage, {
         const item = group.equipment && group.equipment[idx];
         if (!item) return;
 
-        const equipId = selectEl.value;
         if (!equipId) {
             item.equipment = '';
             item.equipName = '';
@@ -474,16 +513,15 @@ Object.assign(ProjectPage, {
 
         const isDuplicate = group.equipment.some((e, i) => i !== idx && String(e.equipment) === String(equipId));
         if (isDuplicate) {
-            UI.toast('This equipment is already added to this SOW estimate. Adjust the qty/duration on the existing line instead.', 'error');
-            selectEl.value = item.equipment || '';
+            UI.toast('This equipment is already on this SOW estimate. Adjust the qty or duration on the existing line instead.', 'error');
+            this.renderEstimates(this._data);
             return;
         }
 
-        const opt = selectEl.selectedOptions[0];
         item.equipment = equipId;
-        item.equipName = opt ? opt.dataset.name : '';
-        item.unit = opt ? (opt.dataset.unit || '') : '';   // v5: unit auto-fills from the equipment
-        item.rate = opt ? (parseFloat(opt.dataset.rate) || 0) : (item.rate || 0);
+        item.equipName = opt ? opt.label : '';
+        item.unit = opt ? (opt.unit || '') : '';            // auto-fills from the equipment DB
+        item.rate = opt && opt.rate ? opt.rate : (item.rate || 0);
         item.cost = (parseFloat(item.qty) || 0) * (parseFloat(item.duration) || 0) * (parseFloat(item.rate) || 0);
         this.renderEstimates(this._data);
         this.renderSOWBudget(this._data);

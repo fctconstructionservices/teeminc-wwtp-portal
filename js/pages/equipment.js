@@ -130,9 +130,9 @@ const EquipmentPage = {
         const pending = this._allEquipment.filter(e => e.status === 'pending').length;
         el.innerHTML = `
             <button class="${!q && this._currentFilter === 'approved' ? 'active' : ''}" onclick="EquipmentPage.setFilter('approved')">${Icon.checkCircle({size:13})} Approved (${approved})</button>
-            <button class="${!q && this._currentFilter === 'pending' ? 'active' : ''}" onclick="EquipmentPage.setFilter('pending')">⏳ Pending (${pending})</button>
-            <button class="${!q && this._currentFilter === 'warehouse' ? 'active' : ''}" onclick="EquipmentPage.setFilter('warehouse')">🏭 Warehouse</button>
-            ${q ? `<button class="active" onclick="EquipmentPage.clearSearch()">${Icon.search({size:13})} Search Results (${this._filteredList().length}) ✕</button>` : ''}`;
+            <button class="${!q && this._currentFilter === 'pending' ? 'active' : ''}" onclick="EquipmentPage.setFilter('pending')">${Icon.hourglass({size:13})} Pending (${pending})</button>
+            <button class="${!q && this._currentFilter === 'warehouse' ? 'active' : ''}" onclick="EquipmentPage.setFilter('warehouse')">${Icon.warehouse({size:13})} Warehouse</button>
+            ${q ? `<button class="active" onclick="EquipmentPage.clearSearch()">${Icon.search({size:13})} Search Results (${this._filteredList().length}) ${Icon.close({size:11})}</button>` : ''}`;
     },
 
     renderList() {
@@ -227,7 +227,7 @@ const EquipmentPage = {
                 <div class="kpi-card warn"><div class="k-label">Pending Transfers</div><div class="k-val">${wh.pendingCount || 0}</div><div class="k-sub">awaiting approval</div></div>
             </div>
             <div class="section-head"><h2 style="font-size:13px;">Equipment in Warehouse</h2><div class="rule"></div>
-                <button class="btn-sm" onclick="EquipmentPage.renderWarehouse(true)" title="Re-pull the latest stock">⟳ Refresh</button>
+                <button class="btn-sm" onclick="EquipmentPage.renderWarehouse(true)" title="Re-pull the latest stock">${Icon.refresh({size:12})} Refresh</button>
             </div>
             <div class="panel"><table><thead><tr><th>Equipment</th><th style="text-align:right">Qty</th><th>Last From</th><th>Date</th></tr></thead><tbody>`;
         if (!eqs.length) {

@@ -80,7 +80,7 @@ Object.assign(ProjectPage, {
             : `<span class="badge" style="color:var(--amber);border-color:var(--amber);" title="${[
                     cr.unapproved.length ? 'Estimates not approved/empty: ' + cr.unapproved.join(', ') : '',
                     cr.zeroBudget.length ? 'No budget: ' + cr.zeroBudget.join(', ') : ''
-                ].filter(Boolean).join(' | ')}">⚠ Setup incomplete — ${[
+                ].filter(Boolean).join(' | ')}">${Icon.warning({size:13})} Setup incomplete — ${[
                     cr.unapproved.length ? cr.unapproved.length + ' estimate(s) not approved' : '',
                     cr.zeroBudget.length ? cr.zeroBudget.length + ' SOW without budget' : ''
                 ].filter(Boolean).join(' · ')}</span>`;
@@ -90,7 +90,7 @@ Object.assign(ProjectPage, {
                 <div class="rule"></div>
                 ${badgeHtml}
                 ${this._canEdit !== false ? `<button class="btn-sm" style="margin-left:8px;" title="Snapshot current dates as the baseline"
-                    onclick="ProjectPage.saveGanttBaseline()">📌 Save Baseline</button>` : ''}
+                    onclick="ProjectPage.saveGanttBaseline()">${Icon.pin({size:12})} Save Baseline</button>` : ''}
             </div>
             <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 10px;">
                 <span style="font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);">Scale:</span>
@@ -102,6 +102,10 @@ Object.assign(ProjectPage, {
                 <button class="btn-sm" title="Zoom in" onclick="ProjectPage.ganttZoom(1.25)">+</button>
                 <button class="btn-sm" title="Fit the whole timeline in view" onclick="ProjectPage.ganttFit()">Fit All</button>
             </div>
+            <!-- v10: editable schedule table (start / duration / finish /
+                 predecessor). You cannot drag a bar to "18 working days",
+                 and a delayed chain used to need retyping row by row. -->
+            ${this.renderScheduleGrid()}
             <div class="gantt-wrapper" id="ganttWrapper">
                 <div class="gantt-container" id="ganttContainer" style="position:relative;">
                     <div class="gantt-timeline" id="ganttTimeline"></div>

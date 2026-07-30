@@ -62,7 +62,10 @@ const SCHEMAS = {
   // (empty/absent = open to all, the pre-feature behavior). Approvals
   // stay role-based and are NOT affected by this list.
   Projects: ['id', 'name', 'status', 'revenue', 'expenses', 'cashPosition',
-    'clientId', 'location', 'startDate', 'endDate', 'contractValue', 'retentionPct', 'editorsJSON'],
+    'clientId', 'location', 'startDate', 'endDate', 'contractValue', 'retentionPct', 'editorsJSON',
+    // v10: downpayment % of the contract. The advance is recouped from
+    // every progress billing until it is fully worked off.
+    'downpaymentPct'],
   // v3 additions (appended):
   //   budgetMode   -> 'auto' (mat+labor+equip from approved estimate),
   //                   'indirect' (indirect costs only) or 'manual'
@@ -115,8 +118,15 @@ const SCHEMAS = {
   Liquidations: ['id', 'cashAdvanceId', 'projectId', 'requestor', 'requestorEmail', 
     'amount', 'description', 'receiptNo', 'attachmentsJSON', 'status', 'createdAt', 'reviewedBy'],  
 
+  // v10: sourceType makes the origin of the money EXPLICIT.
+  // 'Client Collection' = traceable to a billing (downpayment or
+  // progress) and therefore counts as Collected against the contract.
+  // 'Funding' = owner capital, partner injections, loans — real cash,
+  // but NOT a client collection. Portfolio "Collected" reads this field,
+  // which is what stopped capital from inflating the collected figure.
   IncomingCashRequests: ['id', 'type', 'projectId', 'requestor', 'requestorEmail', 'amount', 'description',
-    'paymentMethod', 'reference', 'transactionDate', 'attachmentsJSON', 'status', 'createdAt'],
+    'paymentMethod', 'reference', 'transactionDate', 'attachmentsJSON', 'status', 'createdAt',
+    'sourceType'],
   
   // v3 NEW: client directory for the Add Project form
   ClientLists: ['id', 'name', 'contactPerson', 'contactNumber', 'email', 'address', 'createdAt'],
@@ -159,8 +169,12 @@ const SCHEMAS = {
 
   // v6 NEW: progress billings. gross = (currentPct − prevPct) × revised
   // contract; retention withheld; Paid creates an Approved IncomingCash.
+  // v10: billingType distinguishes a Downpayment (an advance at 0%
+  // accomplishment) from a Progress billing; dpRecoupment is the slice
+  // of the advance deducted from THIS billing.
   Billings: ['id', 'projectId', 'billingNo', 'period', 'prevPct', 'currentPct',
-    'grossAmount', 'retentionAmount', 'netAmount', 'status', 'submittedBy', 'createdAt', 'paidAt'],
+    'grossAmount', 'retentionAmount', 'netAmount', 'status', 'submittedBy', 'createdAt', 'paidAt',
+    'billingType', 'dpRecoupment'],
 
   // v6 NEW: variation orders. Client-Approved VOs raise the affected SOW
   // budget and the revised contract value (computed live, non-destructive).

@@ -118,9 +118,9 @@ const MaterialsPage = {
         const pending = this._allMaterials.filter(m => m.status === 'pending').length;
         el.innerHTML = `
             <button class="${!q && this._currentFilter === 'approved' ? 'active' : ''}" onclick="MaterialsPage.setFilter('approved')">${Icon.checkCircle({size:13})} Approved (${approved})</button>
-            <button class="${!q && this._currentFilter === 'pending' ? 'active' : ''}" onclick="MaterialsPage.setFilter('pending')">⏳ Pending (${pending})</button>
-            <button class="${!q && this._currentFilter === 'warehouse' ? 'active' : ''}" onclick="MaterialsPage.setFilter('warehouse')">🏭 Warehouse</button>
-            ${q ? `<button class="active" onclick="MaterialsPage.clearSearch()">${Icon.search({size:13})} Search Results (${this._filteredList().length}) ✕</button>` : ''}`;
+            <button class="${!q && this._currentFilter === 'pending' ? 'active' : ''}" onclick="MaterialsPage.setFilter('pending')">${Icon.hourglass({size:13})} Pending (${pending})</button>
+            <button class="${!q && this._currentFilter === 'warehouse' ? 'active' : ''}" onclick="MaterialsPage.setFilter('warehouse')">${Icon.warehouse({size:13})} Warehouse</button>
+            ${q ? `<button class="active" onclick="MaterialsPage.clearSearch()">${Icon.search({size:13})} Search Results (${this._filteredList().length}) ${Icon.close({size:11})}</button>` : ''}`;
     },
 
     renderList() {
@@ -215,7 +215,7 @@ const MaterialsPage = {
                 <div class="kpi-card good"><div class="k-label">Est. Value</div><div class="k-val">₱${fmtMoney(wh.estValue || 0)}</div><div class="k-sub">sa DB rate</div></div>
             </div>
             <div class="section-head"><h2 style="font-size:13px;">Warehouse Stock</h2><div class="rule"></div>
-                <button class="btn-sm" onclick="MaterialsPage.renderWarehouse(true)" title="Re-pull the latest stock">⟳ Refresh</button>
+                <button class="btn-sm" onclick="MaterialsPage.renderWarehouse(true)" title="Re-pull the latest stock">${Icon.refresh({size:12})} Refresh</button>
             </div>
             <div class="panel"><div class="panel-head"><h3>Materials</h3></div>
             <table><thead><tr><th>Material</th><th>Unit</th><th style="text-align:right">On Hand</th><th>Last From</th><th>Date</th></tr></thead><tbody>`;

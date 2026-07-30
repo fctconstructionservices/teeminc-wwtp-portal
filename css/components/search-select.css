@@ -1,0 +1,102 @@
+/* ================================================================
+   components/search-select.css — SearchSelect (v10)
+   Searchable pickers for the Estimates tab, replacing native <select>
+   dropdowns that could not be searched by any part of a name.
+   ================================================================ */
+
+.ss { position: relative; }
+
+.ss-input {
+    width: 100%;
+    padding: 7px 26px 7px 9px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--ink);
+    font: 12.5px Inter, sans-serif;
+}
+.ss-input:focus {
+    outline: 2px solid var(--blueprint);
+    outline-offset: -1px;
+}
+.ss-input::placeholder { color: var(--ink-soft); }
+
+.ss-caret {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--ink-soft);
+    pointer-events: none;
+    line-height: 0;
+}
+
+.ss-list {
+    position: absolute;
+    top: calc(100% + 3px);
+    left: 0;
+    right: 0;
+    min-width: 240px;
+    background: var(--surface);
+    border: 1px solid var(--blueprint);
+    border-radius: 7px;
+    box-shadow: var(--shadow);
+    max-height: 230px;
+    overflow-y: auto;
+    z-index: 60;
+    display: none;
+}
+.ss-list.open { display: block; }
+
+.ss-group {
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    color: var(--ink-soft);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 8.5px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    padding: 6px 10px 3px;
+    border-bottom: 1px solid var(--line);
+}
+
+.ss-opt {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+    padding: 7px 10px;
+    cursor: pointer;
+    font-size: 12.5px;
+    border-bottom: 1px solid var(--bg);
+}
+.ss-opt:last-child { border-bottom: none; }
+.ss-opt:hover,
+.ss-opt.sel { background: var(--blueprint-tint); }
+
+.ss-opt-label { flex: 1; min-width: 0; }
+.ss-opt-label mark {
+    background: #FCE9A8;
+    color: inherit;
+    border-radius: 2px;
+    padding: 0 1px;
+}
+.ss-opt-meta {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    color: var(--ink-soft);
+    white-space: nowrap;
+}
+
+.ss-empty {
+    padding: 10px;
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    line-height: 1.5;
+}
+
+[data-theme="dark"] .ss-opt-label mark {
+    background: #6A5A20;
+    color: #F5EFD8;
+}

@@ -233,6 +233,11 @@ const API_ACTIONS = {
   // Personnel directory (actual people, separate from the role catalog)
   getAllPersonnel: getAllPersonnel,
 
+  // ── v10: downpayment workflow ──
+  setDownpaymentPct: setDownpaymentPct,
+  createDownpaymentBilling: createDownpaymentBilling,
+  getDPLedger: getDPLedger,
+
   // ── v9: Site ops — OT, punchlist, safety, drawings ──
   requestOT: requestOT,
   getOTRequests: getOTRequests,

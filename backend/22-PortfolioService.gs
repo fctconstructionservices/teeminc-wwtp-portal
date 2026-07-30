@@ -57,6 +57,7 @@ function getPortfolioData() {
   var rows = [];
 
   var totalContract = 0, totalBilled = 0, totalCollected = 0, totalVO = 0;
+  var totalFunding = 0;   // v10: owner capital, reported separately from collections
 
   projects.forEach(function (p) {
     if (String(p.status || '').toLowerCase() === 'archived') return;
@@ -103,9 +104,29 @@ function getPortfolioData() {
       return r.projectId === p.id && r.status === 'Reviewed';
     }).reduce(function (s, r) { return s + (parseFloat(r.amount) || 0); }, 0);
 
-    var collected = allIncoming.filter(function (c) {
+    // ── v10: COLLECTED = CLIENT MONEY ONLY ──
+    // This used to sum EVERY approved incoming-cash row, but that sheet
+    // also holds owner capital, partner injections and loans. Capital was
+    // therefore reported as client collections, which made Collected
+    // exceed Billed and drove "Uncollected" negative.
+    // A collection must be traceable to a billing: either the auto-posted
+    // row from Mark Paid (sourceType 'Client Collection') or, for rows
+    // created before this column existed, a Billing Collection /
+    // Downpayment payment method or a reference to a billing number.
+    var projIncoming = allIncoming.filter(function (c) {
       return c.projectId === p.id && c.status === 'Approved';
-    }).reduce(function (s, c) { return s + (parseFloat(c.amount) || 0); }, 0);
+    });
+    var isClientMoney = function (c) {
+      if (c.sourceType) return String(c.sourceType) === 'Client Collection';
+      var pm = String(c.paymentMethod || '');
+      if (pm === 'Billing Collection' || pm === 'Downpayment') return true;
+      return /^(PB|DP)-\d+/.test(String(c.reference || ''));   // legacy rows
+    };
+    var collected = projIncoming.filter(isClientMoney)
+      .reduce(function (s, c) { return s + (parseFloat(c.amount) || 0); }, 0);
+    // everything else is real cash but it is FUNDING, not a collection
+    var funding = projIncoming.filter(function (c) { return !isClientMoney(c); })
+      .reduce(function (s, c) { return s + (parseFloat(c.amount) || 0); }, 0);
 
     var billedGross = bills.filter(function (b) { return b.status !== 'Rejected'; })
       .reduce(function (s, b) { return s + (parseFloat(b.grossAmount) || 0); }, 0);
@@ -120,6 +141,7 @@ function getPortfolioData() {
     totalContract += contract;
     totalBilled += billedGross;
     totalCollected += collected;
+    totalFunding += funding;
     totalVO += voSum;
 
     // ── health verdict ──
@@ -199,7 +221,8 @@ function getPortfolioData() {
       billed: Math.round(billedGross),
       collected: Math.round(collected),
       actualCost: Math.round(actualCost),
-      cashPosition: Math.round(collected - actualCost),
+      funding: Math.round(funding),
+      cashPosition: Math.round(collected + funding - actualCost),
       health: health,
       healthClass: healthClass
     });
@@ -216,6 +239,7 @@ function getPortfolioData() {
       totalVO: Math.round(totalVO),
       totalBilled: Math.round(totalBilled),
       totalCollected: Math.round(totalCollected),
+      totalFunding: Math.round(totalFunding),
       uncollected: Math.round(uncollected),
       attentionCount: attention.length,
       urgentCount: attention.filter(function (a) { return a.severity === 1; }).length

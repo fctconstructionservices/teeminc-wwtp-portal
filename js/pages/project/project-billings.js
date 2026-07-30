@@ -36,13 +36,57 @@ Object.assign(ProjectPage, {
         ].filter(Boolean).join(' · ');
 
         let html = `
-            ${!cr.ready ? `<div style="background:#FBF1DE;border:1px solid var(--amber);border-left:3px solid var(--amber);border-radius:8px;padding:11px 14px;font-size:12.5px;color:var(--ink);margin-bottom:14px;"><b>⚠ Billing locked — contract basis incomplete.</b> ${crMsg}. Approve all estimates and set every SOW budget to unlock billing.</div>` : ''}
+            ${!cr.ready ? `<div style="background:#FBF1DE;border:1px solid var(--amber);border-left:3px solid var(--amber);border-radius:8px;padding:11px 14px;font-size:12.5px;color:var(--ink);margin-bottom:14px;"><b>${Icon.warning({size:12})} Billing locked — contract basis incomplete.</b> ${crMsg}. Approve all estimates and set every SOW budget to unlock billing.</div>` : ''}
             <div class="kpi-strip" style="margin-bottom:14px;">
                 <div class="kpi-card"><div class="k-label">Contract Value (revised)</div><div class="k-val mono">₱${fmtMoney(revised)}</div><div class="k-sub">base ₱${fmtMoney(p.contractValue || 0)}${voSum ? ' + VOs ₱' + fmtMoney(voSum) : ''} · retention ${Math.round((p.retentionPct || 0.10) * 100)}%</div></div>
                 <div class="kpi-card good"><div class="k-label">Billed to Date</div><div class="k-val mono">₱${fmtMoney(billedGross)}</div><div class="k-sub">${lastPct}% of contract billed</div></div>
                 <div class="kpi-card good"><div class="k-label">Collected (net)</div><div class="k-val mono">₱${fmtMoney(collected)}</div><div class="k-sub">paid billings → project revenue</div></div>
                 <div class="kpi-card warn"><div class="k-label">Retention Held</div><div class="k-val mono">₱${fmtMoney(retentionHeld)}</div><div class="k-sub">released on turnover</div></div>
             </div>`;
+
+        // ── v10: DOWNPAYMENT LEDGER ──
+        // A downpayment is an ADVANCE against the contract, not extra
+        // income: it must be recouped from later billings or the client
+        // ends up paying for the same work twice. This panel makes the
+        // position explicit — advance, recouped so far, still outstanding.
+        const dpPct = parseFloat(p.downpaymentPct) || 0;
+        const dpBill = billings.find(b => b.billingType === 'Downpayment' && b.status !== 'Rejected');
+        const dpAdvance = dpBill ? (parseFloat(dpBill.grossAmount) || 0) : 0;
+        const dpRecouped = billings.filter(b => b.status !== 'Rejected')
+            .reduce((s2, b) => s2 + (parseFloat(b.dpRecoupment) || 0), 0);
+        const dpOutstanding = Math.max(0, dpAdvance - dpRecouped);
+
+        if (dpPct > 0 || dpAdvance > 0) {
+            const pctRecouped = dpAdvance ? Math.round(dpRecouped / dpAdvance * 100) : 0;
+            html += `
+            <div class="panel" style="margin-bottom:14px;">
+                <div class="panel-head"><h3>Downpayment</h3>
+                    <span class="cc-note">${Math.round(dpPct * 100)}% of contract &middot; recouped from every progress billing</span>
+                </div>
+                <div style="padding:12px 16px;">
+                    ${!dpBill ? `
+                        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                            <div style="font-size:12.5px;color:var(--ink-soft);flex:1;min-width:240px;">
+                                No downpayment recorded yet. Recording it creates billing <b>DP-0001</b> for
+                                <b>₱${fmtMoney(revised * dpPct)}</b> at 0% accomplishment, which then goes through
+                                the normal approval and collection path.
+                            </div>
+                            ${isAdmin && cr.ready && this._canEdit !== false ? `<button class="btn-sm primary" onclick="ProjectPage.recordDownpayment()">Record downpayment</button>` : ''}
+                        </div>` : `
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;">
+                            <div><div class="k-label">Advance</div><div class="mono" style="font-size:15px;">₱${fmtMoney(dpAdvance)}</div>
+                                <div class="k-sub">${dpBill.billingNo} &middot; <span class="stamp ${dpBill.status === 'Paid' ? 'approved' : dpBill.status === 'Approved' ? 'approved' : 'pending'}">${dpBill.status}</span></div></div>
+                            <div><div class="k-label">Recouped to date</div><div class="mono" style="font-size:15px;color:var(--green);">₱${fmtMoney(dpRecouped)}</div>
+                                <div class="k-sub">${pctRecouped}% of the advance</div></div>
+                            <div><div class="k-label">Still outstanding</div><div class="mono" style="font-size:15px;color:${dpOutstanding > 0 ? 'var(--amber)' : 'var(--green)'};">₱${fmtMoney(dpOutstanding)}</div>
+                                <div class="k-sub">${dpOutstanding > 0 ? 'deducted from future billings' : 'fully worked off'}</div></div>
+                        </div>
+                        <div style="margin-top:10px;height:7px;background:#E4E1D6;border-radius:4px;overflow:hidden;">
+                            <div style="height:100%;width:${Math.min(100, pctRecouped)}%;background:var(--green);border-radius:4px;"></div>
+                        </div>`}
+                </div>
+            </div>`;
+        }
 
         // Super Admin: set contract value inline
         if (isSuper) {
@@ -53,6 +97,8 @@ Object.assign(ProjectPage, {
                         <input type="number" id="bil-contract-value" value="${p.contractValue || ''}" placeholder="e.g. 18500000" style="width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);" /></div>
                     <div class="field" style="min-width:120px;"><label style="display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:3px;">Retention %</label>
                         <input type="number" id="bil-retention-pct" value="${Math.round((p.retentionPct || 0.10) * 100)}" min="0" max="50" style="width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);" /></div>
+                    <div class="field" style="min-width:120px;"><label style="display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:3px;" title="Advance paid at project start, recouped from every progress billing">Downpayment %</label>
+                        <input type="number" id="bil-dp-pct" value="${Math.round((p.downpaymentPct || 0) * 100)}" min="0" max="60" style="width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);" /></div>
                     <button class="btn-sm primary" onclick="ProjectPage.saveContract()">Save</button>
                 </div>
             </div>`;
@@ -60,18 +106,18 @@ Object.assign(ProjectPage, {
 
         html += `
             <div class="section-head"><h2>Billing Register</h2><div class="rule"></div>
-                ${billings.length ? `<button class="btn-sm" onclick="ProjectPage.exportBillingsExcel()">📊 Export Excel</button>` : ''}
+                ${billings.length ? `<button class="btn-sm" onclick="ProjectPage.exportBillingsExcel()">${Icon.spreadsheet({size:12})} Export Excel</button>` : ''}
                 ${isAdmin && cr.ready && this._canEdit !== false ? `<button class="btn-sm primary" onclick="ProjectPage.generateBilling()">+ Generate from Progress (${p.totalProgress || 0}%)</button>` : ''}
             </div>
             <div class="panel"><table><thead><tr>
                 <th>Billing #</th><th>Period</th>
                 <th style="text-align:right">% Range</th>
-                <th style="text-align:right">Gross</th><th style="text-align:right">Retention</th><th style="text-align:right">Net</th>
+                <th style="text-align:right">Gross</th><th style="text-align:right">DP recoup</th><th style="text-align:right">Retention</th><th style="text-align:right">Net</th>
                 <th>Status</th><th></th>
             </tr></thead><tbody>`;
 
         if (!billings.length) {
-            html += `<tr><td colspan="8" style="text-align:center;color:var(--ink-soft);padding:24px">No billings yet. ${revised > 0 ? 'Generate the first one from progress.' : 'Set the Contract Value first.'}</td></tr>`;
+            html += `<tr><td colspan="9" style="text-align:center;color:var(--ink-soft);padding:24px">No billings yet. ${revised > 0 ? 'Generate the first one from progress.' : 'Set the Contract Value first.'}</td></tr>`;
         } else {
             const myEmail = user ? String(user.email).toLowerCase() : '';
             billings.forEach(b => {
@@ -94,14 +140,18 @@ Object.assign(ProjectPage, {
                 // been approved yet (Pending only — approved/paid billings
                 // are part of the financial record and stay).
                 if (b.status === 'Pending' && isSuper) {
-                    actions += ` <button class="btn-sm danger" title="Delete this unapproved billing" onclick="ProjectPage.deleteBillingPrompt('${b.id}', '${b.billingNo}')">🗑</button>`;
+                    actions += ` <button class="btn-sm danger" title="Delete this unapproved billing" onclick="ProjectPage.deleteBillingPrompt('${b.id}', '${b.billingNo}')">${Icon.trash({size:12})}</button>`;
                 }
+                const isDP = b.billingType === 'Downpayment';
+                const recoup = parseFloat(b.dpRecoupment) || 0;
                 html += `<tr>
-                    <td><span class="req-id" style="cursor:pointer;text-decoration:underline;" title="View Statement of Work Accomplishment" onclick="ProjectPage.openSWA('${b.id}')">${b.billingNo}</span></td>
+                    <td><span class="req-id" style="cursor:pointer;text-decoration:underline;" title="${isDP ? 'Downpayment — an advance against the contract' : 'View Statement of Work Accomplishment'}" onclick="ProjectPage.openSWA('${b.id}')">${b.billingNo}</span>
+                        ${isDP ? '<div style="font-size:9.5px;color:var(--amber);font-family:\'IBM Plex Mono\',monospace;text-transform:uppercase;letter-spacing:.07em;">advance</div>' : ''}</td>
                     <td>${b.period || '—'}</td>
-                    <td class="amt">${b.prevPct}% → ${b.currentPct}%</td>
+                    <td class="amt">${isDP ? '—' : b.prevPct + '% → ' + b.currentPct + '%'}</td>
                     <td class="amt">₱${fmtMoney(b.grossAmount || 0)}</td>
-                    <td class="amt">₱${fmtMoney(b.retentionAmount || 0)}</td>
+                    <td class="amt">${recoup ? '<span style="color:var(--amber)">−₱' + fmtMoney(recoup) + '</span>' : '—'}</td>
+                    <td class="amt">${(parseFloat(b.retentionAmount) || 0) ? '₱' + fmtMoney(b.retentionAmount) : '—'}</td>
                     <td class="amt"><b>₱${fmtMoney(b.netAmount || 0)}</b></td>
                     <td><span class="stamp ${cls}">${b.status}</span></td>
                     <td>${actions}</td>
@@ -134,12 +184,44 @@ Object.assign(ProjectPage, {
     async saveContract() {
         const cv = parseFloat(document.getElementById('bil-contract-value')?.value);
         const rpRaw = parseFloat(document.getElementById('bil-retention-pct')?.value);
+        const dpRaw = parseFloat(document.getElementById('bil-dp-pct')?.value);
         if (isNaN(cv) || cv < 0) { UI.toast('Enter a valid contract value.', 'error'); return; }
         const rp = isNaN(rpRaw) ? 0.10 : rpRaw / 100;
         try {
             await DataService.updateProjectContract(this._currentProjectId, cv, rp);
+            // v10: the downpayment % is stored separately (Super Admin only)
+            if (!isNaN(dpRaw)) {
+                const dp = dpRaw / 100;
+                if (dp < 0 || dp > 0.6) { UI.toast('Downpayment must be between 0% and 60%.', 'error'); return; }
+                if (dp !== (parseFloat((this._data || {}).downpaymentPct) || 0)) {
+                    await DataService.setDownpaymentPct(this._currentProjectId, dp);
+                }
+            }
             UI.toast('Contract settings saved.', 'success');
             await this.open(this._currentProjectId, true);   // v6.5: stays on this tab
+            this.switchTab('billings');
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
+
+    /**
+     * recordDownpayment (v10) - Creates the DP-0001 advance billing. It
+     * follows the same approval path as a progress billing; marking it
+     * paid posts a Client Collection so it counts toward Collected.
+     */
+    async recordDownpayment() {
+        const p = this._data || {};
+        const pct = parseFloat(p.downpaymentPct) || 0;
+        if (pct <= 0) { UI.toast('Set the Downpayment % in Contract Settings first.', 'error'); return; }
+        const ok = await Confirm.open('Record downpayment?',
+            `This creates billing DP-0001 for ${Math.round(pct * 100)}% of the revised contract at 0% accomplishment. ` +
+            `It needs the usual approvals, and the advance will be recouped from every progress billing afterwards.`);
+        if (!ok) return;
+        try {
+            const res = await DataService.createDownpaymentBilling(this._currentProjectId);
+            UI.toast(`${res.billingNo} recorded (₱${fmtMoney(res.net)}) — awaiting approval.`, 'success');
+            await this.open(this._currentProjectId, true);
+            this.switchTab('billings');
+            if (typeof App.updateApprovalBadge === 'function') App.updateApprovalBadge();
         } catch (err) { UI.toast('' + err.message, 'error'); }
     },
 

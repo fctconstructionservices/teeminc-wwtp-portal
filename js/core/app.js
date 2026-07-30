@@ -130,7 +130,7 @@ const App = {
             <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;max-width:420px;width:100%;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;">
                 <div style="padding:13px 18px;border-bottom:1px solid var(--line);background:var(--blueprint-tint);display:flex;justify-content:space-between;align-items:center;">
                     <h3 style="font-family:'Oswald';font-size:13px;text-transform:uppercase;color:var(--blueprint);margin:0;">View As — Test Another User</h3>
-                    <span style="cursor:pointer;color:var(--ink-soft);" onclick="document.getElementById('viewAsModal').remove()">✕</span>
+                    <span style="cursor:pointer;color:var(--ink-soft);" onclick="document.getElementById('viewAsModal').remove()">${Icon.close({size:12})}</span>
                 </div>
                 <div style="padding:14px 18px;overflow:auto;">
                     <div style="font-size:11.5px;color:var(--ink-soft);margin-bottom:10px;line-height:1.5;">
@@ -190,7 +190,7 @@ const App = {
             bar.style.cssText = 'position:sticky;top:0;z-index:900;background:var(--amber);color:#1C2321;padding:7px 14px;font-size:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;';
             document.body.prepend(bar);
         }
-        bar.innerHTML = `👁 <b>Viewing as ${(this.currentUser || {}).email || ''}</b>
+        bar.innerHTML = `${Icon.eye({size:13})} <b>Viewing as ${(this.currentUser || {}).email || ''}</b>
             <span style="opacity:.8;">— this is not your own account (${(this._realUser || {}).email || ''}). All actions remain logged under your real identity.</span>
             <button onclick="App.stopViewAs()" style="margin-left:auto;background:#1C2321;color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:11px;cursor:pointer;">Stop</button>`;
     },

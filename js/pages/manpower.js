@@ -74,12 +74,12 @@ const ManpowerPage = {
             </div>
 
             <div class="status-tabs" style="margin-bottom:4px;">
-                <button class="${!isPersonnel ? 'active' : ''}" onclick="ManpowerPage.setMainTab('roles')">🛠 Roles / Trades (${this._all.filter(m => m.status === 'approved').length})</button>
-                <button class="${isPersonnel ? 'active' : ''}" onclick="ManpowerPage.setMainTab('personnel')">👷 Personnel — Actual Names (${this._personnel.filter(p => p.status === 'active').length})</button>
+                <button class="${!isPersonnel ? 'active' : ''}" onclick="ManpowerPage.setMainTab('roles')">${Icon.wrench({size:13})} Roles / Trades (${this._all.filter(m => m.status === 'approved').length})</button>
+                <button class="${isPersonnel ? 'active' : ''}" onclick="ManpowerPage.setMainTab('personnel')">${Icon.safety({size:13})} Personnel — Actual Names (${this._personnel.filter(p => p.status === 'active').length})</button>
             </div>
             <div class="data-source-note" style="margin-bottom:12px;">
-                <b>Roles</b> = catalog ng trades/positions — ito ang ginagamit ng <b>Estimates</b> (approved roles only) at ng Daily Report role dropdown.
-                <b>Personnel</b> = actual na pangalan ng mga tao para sa <b>site execution</b>; ang position nila ay pinipili mula sa approved roles.
+                <b>Roles</b> is the catalog of trades and positions. <b>Estimates</b> and the Daily Report role dropdown draw from approved roles only.
+                <b>Personnel</b> holds the actual names of workers for <b>site execution</b>; each person's position is chosen from the approved roles.
             </div>
 
             <div id="mpRoleForm" style="display:none;margin-bottom:20px;">
@@ -146,15 +146,15 @@ const ManpowerPage = {
             const inact = this._personnel.filter(p => p.status !== 'active').length;
             el.innerHTML = `
                 <button class="${!q && this._pFilter === 'active' ? 'active' : ''}" onclick="ManpowerPage.setPFilter('active')">${Icon.checkCircle({size:13})} Active (${act})</button>
-                <button class="${!q && this._pFilter === 'inactive' ? 'active' : ''}" onclick="ManpowerPage.setPFilter('inactive')">💤 Inactive (${inact})</button>
-                ${q ? `<button class="active" onclick="ManpowerPage.clearSearch()">${Icon.search({size:13})} Search Results ✕</button>` : ''}`;
+                <button class="${!q && this._pFilter === 'inactive' ? 'active' : ''}" onclick="ManpowerPage.setPFilter('inactive')">${Icon.moon({size:12})} Inactive (${inact})</button>
+                ${q ? `<button class="active" onclick="ManpowerPage.clearSearch()">${Icon.search({size:13})} Search Results ${Icon.close({size:11})}</button>` : ''}`;
         } else {
             const approved = this._all.filter(m => m.status === 'approved').length;
             const pending = this._all.filter(m => m.status === 'pending').length;
             el.innerHTML = `
                 <button class="${!q && this._currentFilter === 'approved' ? 'active' : ''}" onclick="ManpowerPage.setFilter('approved')">${Icon.checkCircle({size:13})} Approved (${approved})</button>
-                <button class="${!q && this._currentFilter === 'pending' ? 'active' : ''}" onclick="ManpowerPage.setFilter('pending')">⏳ Pending (${pending})</button>
-                ${q ? `<button class="active" onclick="ManpowerPage.clearSearch()">${Icon.search({size:13})} Search Results ✕</button>` : ''}`;
+                <button class="${!q && this._currentFilter === 'pending' ? 'active' : ''}" onclick="ManpowerPage.setFilter('pending')">${Icon.hourglass({size:13})} Pending (${pending})</button>
+                ${q ? `<button class="active" onclick="ManpowerPage.clearSearch()">${Icon.search({size:13})} Search Results ${Icon.close({size:11})}</button>` : ''}`;
         }
     },
 
@@ -217,7 +217,7 @@ const ManpowerPage = {
             list = this._personnel.filter(p => (this._pFilter === 'active') === (p.status === 'active'));
         }
         if (!list.length) {
-            el.innerHTML = `<div class="empty"><p>No personnel found. Idagdag ang mga actual na pangalan ng tao gamit ang "+ Add Person".</p></div>`;
+            el.innerHTML = `<div class="empty"><p>No personnel found. Use "Add person" to record the actual names of workers.</p></div>`;
             return;
         }
         let html = `<div class="panel"><table><thead><tr>
@@ -235,15 +235,15 @@ const ManpowerPage = {
                 <td class="amt">${p.dailyRate ? '₱' + fmtMoney(p.dailyRate) : '—'}</td>
                 <td><span class="stamp ${stampCls}">${p.status === 'active' ? 'Active' : 'Inactive'}</span></td>
                 ${isAdmin ? `<td style="white-space:nowrap">
-                    <button class="btn-sm" onclick="ManpowerPage.editPerson('${p.id}')">✎</button>
+                    <button class="btn-sm" onclick="ManpowerPage.editPerson('${p.id}')">${Icon.pencil({size:12})}</button>
                     ${p.status === 'active'
-                        ? `<button class="btn-sm danger" title="Deactivate" onclick="ManpowerPage.setPersonStatus('${p.id}','inactive')">💤</button>`
-                        : `<button class="btn-sm success" title="Re-activate" onclick="ManpowerPage.setPersonStatus('${p.id}','active')">↩</button>`}
+                        ? `<button class="btn-sm danger" title="Deactivate" onclick="ManpowerPage.setPersonStatus('${p.id}','inactive')">${Icon.moon({size:12})}</button>`
+                        : `<button class="btn-sm success" title="Re-activate" onclick="ManpowerPage.setPersonStatus('${p.id}','active')">${Icon.restore({size:12})}</button>`}
                 </td>` : ''}
             </tr>`;
         });
         html += `</tbody></table></div>
-            <div class="data-source-note">Ang Personnel list ay para sa actual site execution — hindi ito ginagamit ng Estimates (roles lang ang basehan doon). Deactivated personnel are kept for history.</div>`;
+            <div class="data-source-note">The Personnel list is for actual site execution. Estimates do not use it; they draw on roles only. Deactivated personnel are kept for history.</div>`;
         el.innerHTML = html;
     },
 

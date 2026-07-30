@@ -209,21 +209,21 @@ Object.assign(ProjectPage, {
             let statusLabel = estimateStatus.charAt(0).toUpperCase() + estimateStatus.slice(1);
             
             if (estimateStatus === 'approved') {
-                statusIcon = '✅';
+                statusIcon = Icon.checkCircle({size:12});
                 statusClass = 'approved';
             } else if (estimateStatus === 'pending') {
-                statusIcon = '⏳';
+                statusIcon = Icon.hourglass({size:12});
                 statusClass = 'pending';
             } else {
-                statusIcon = '📄';
+                statusIcon = Icon.fileText({size:12});
                 statusClass = 'draft';
             }
 
             // v3: label follows the item's budgetMode
             const mode = item.budgetMode || 'auto';
             const budgetSourceLabel =
-                mode === 'manual'   ? '<span class="budget-source">✏️ manual</span>' :
-                mode === 'indirect' ? '<span class="budget-source">🧾 indirect costs only</span>' :
+                mode === 'manual'   ? Icon.pencil({size:11}) + ' <span class="budget-source">manual</span>' :
+                mode === 'indirect' ? '<span class="budget-source">${Icon.receipt({size:12})} indirect costs only</span>' :
                 '<span class="budget-source">Σ mat + labor + equipment</span>';
 
             const variance = budget - actual;
@@ -232,11 +232,11 @@ Object.assign(ProjectPage, {
 
             let estimateNote = '';
             if (estimateStatus === 'pending') {
-                estimateNote = '⏳ awaiting approval';
+                estimateNote = Icon.hourglass({size:11}) + ' awaiting approval';
             } else if (estimateStatus === 'draft') {
-                estimateNote = '📄 draft — not yet approved';
+                estimateNote = Icon.fileText({size:11}) + ' draft \u2014 not yet approved';
             } else if (estimateStatus === 'approved') {
-                estimateNote = '✅ approved estimate';
+                estimateNote = Icon.checkCircle({size:11}) + ' approved estimate';
             }
 
             html += `
@@ -262,7 +262,7 @@ Object.assign(ProjectPage, {
                         <div class="sow-number-group budget">
                             <span class="sn-label">Budget
                                 <button class="btn-sm" style="padding:0 5px;font-size:9px;margin-left:4px;" title="Edit how this budget is computed"
-                                    onclick="event.stopPropagation();ProjectPage.editSOWBudget('${item.id}')">✎</button>
+                                    onclick="event.stopPropagation();ProjectPage.editSOWBudget('${item.id}')">${Icon.pencil({size:12})}</button>
                             </span>
                             <span class="sn-value">₱${fmtMoney(budget)}</span>
                             ${budgetSourceLabel}
@@ -304,15 +304,15 @@ Object.assign(ProjectPage, {
                         </button>
                         ${estimateStatus === 'pending' && App.isApprover() ? 
                             `<button class="btn-sm success" onclick="event.stopPropagation();ProjectPage.switchTab('estimates')">
-                                ⏳ Review
+                                ${Icon.hourglass({size:12})} Review
                             </button>` : ''
                         }
                         ${(App.getUser() || {}).role === 'superadmin' ? `
                         <span style="margin-left:auto;display:inline-flex;gap:4px;" title="Super Admin controls">
-                            <button class="btn-sm" title="Move up" ${idx === 0 ? 'disabled style="opacity:.35;"' : ''} onclick="event.stopPropagation();ProjectPage.moveSOW('${item.id}','up')">↑</button>
-                            <button class="btn-sm" title="Move down" ${idx === sowItems.length - 1 ? 'disabled style="opacity:.35;"' : ''} onclick="event.stopPropagation();ProjectPage.moveSOW('${item.id}','down')">↓</button>
-                            <button class="btn-sm" title="Edit name" onclick="event.stopPropagation();ProjectPage.renameSOW('${item.id}')">✎</button>
-                            <button class="btn-sm danger" title="Delete SOW" onclick="event.stopPropagation();ProjectPage.deleteSOW('${item.id}')">🗑</button>
+                            <button class="btn-sm" title="Move up" ${idx === 0 ? 'disabled style="opacity:.35;"' : ''} onclick="event.stopPropagation();ProjectPage.moveSOW('${item.id}','up')">${Icon.arrowUp({size:12})}</button>
+                            <button class="btn-sm" title="Move down" ${idx === sowItems.length - 1 ? 'disabled style="opacity:.35;"' : ''} onclick="event.stopPropagation();ProjectPage.moveSOW('${item.id}','down')">${Icon.arrowDown({size:12})}</button>
+                            <button class="btn-sm" title="Edit name" onclick="event.stopPropagation();ProjectPage.renameSOW('${item.id}')">${Icon.pencil({size:12})}</button>
+                            <button class="btn-sm danger" title="Delete SOW" onclick="event.stopPropagation();ProjectPage.deleteSOW('${item.id}')">${Icon.trash({size:12})}</button>
                         </span>` : ''}
                     </div>
                 </div>`;
@@ -334,9 +334,9 @@ Object.assign(ProjectPage, {
                         <span class="count draft">${draftCount}</span> Draft
                     </span>
                     ${hasPending ? 
-                        `<span class="summary-alert pending">⏳ ${pendingCount} SOW(s) have pending estimates — review them!</span>` : 
+                        `<span class="summary-alert pending">${Icon.hourglass({size:12})} ${pendingCount} SOW(s) have pending estimates — review them!</span>` : 
                         allApproved ?
-                        `<span class="summary-alert success">✅ All ${sowItems.length} SOW(s) have approved estimates!</span>` :
+                        `<span class="summary-alert success">${Icon.checkCircle({size:12})} All ${sowItems.length} SOW(s) have approved estimates!</span>` :
                         sowItems.length > 0 ?
                         `<span class="summary-alert info">${sowItems.length - approvedCount} SOW(s) need estimate approval</span>` :
                         `<span class="summary-alert info">No SOW items created yet</span>`

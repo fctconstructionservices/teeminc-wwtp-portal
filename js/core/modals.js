@@ -206,6 +206,8 @@ const MatPrintModal = {
 
 // ─── EQUIPMENT PRINT MODAL ─────────────────────────────────────
 
+/* v10: material datasheets can carry a PDF spec sheet plus the photo —
+   both now render through the shared gallery. */
 const EquipPrintModal = {
     open(equip) {
         const modal = document.getElementById('equipPrintModal');
@@ -381,5 +383,111 @@ const SearchDetailModal = {
         });
         document.body.appendChild(overlay);
         document.body.style.overflow = 'hidden';
+    }
+};
+
+// ─── ATTACHMENT GALLERY (v10) ──────────────────────────────────
+/**
+ * AttachmentGallery — the single component every modal uses to show
+ * files that were attached to a record.
+ *
+ * WHY IT EXISTS: request modals previously listed attachments as plain
+ * text links, so an approver could not see a receipt without opening a
+ * new tab — and in practice approved without looking. (The links were
+ * often missing entirely, because the row carries `attachmentsJSON` as
+ * a string while the modal looked for a parsed `attachments` array.)
+ *
+ * Usage:  AttachmentGallery.render(list, 'Attachments')
+ *   list: [{ url, name }] — or a JSON string, or a single URL string.
+ * Images render as thumbnails that open in a lightbox; anything else
+ * (PDF, DWG) becomes a labelled card that opens in a new tab. A URL
+ * that fails to load collapses to a caption instead of a broken box.
+ */
+const AttachmentGallery = {
+    _items: [],
+
+    /** normalize — accepts an array, a JSON string, or a bare URL. */
+    normalize(input) {
+        let list = [];
+        if (!input) return list;
+        if (typeof input === 'string') {
+            const t = input.trim();
+            if (t.startsWith('[')) { try { list = JSON.parse(t) || []; } catch (e) { list = []; } }
+            else if (t) list = [{ url: t, name: '' }];
+        } else if (Array.isArray(input)) {
+            list = input.slice();
+        }
+        return list
+            .map(a => (typeof a === 'string' ? { url: a, name: '' } : a))
+            .filter(a => a && a.url);
+    },
+
+    _isImage(a) {
+        const u = String(a.url || '').toLowerCase();
+        if (/\.(jpg|jpeg|png|gif|webp|bmp|heic)(\?|$)/.test(u)) return true;
+        if (/\.(pdf|dwg|dxf|docx?|xlsx?|zip)(\?|$)/.test(u)) return false;
+        // Drive thumbnail/uc links are images; viewer links are unknown but
+        // render fine through driveImgSrc, so treat them as images.
+        return u.indexOf('drive.google.com') > -1 || u.indexOf('googleusercontent') > -1;
+    },
+
+    /**
+     * render(input, label) — returns HTML. Empty input returns '' so
+     * callers can drop it in unconditionally.
+     */
+    render(input, label) {
+        const list = this.normalize(input);
+        if (!list.length) return '';
+        this._items = list;
+        const cells = list.map((a, i) => {
+            const nm = String(a.name || '').replace(/"/g, '&quot;') || ('File ' + (i + 1));
+            if (this._isImage(a)) {
+                return `
+                <button type="button" class="att-card" onclick="AttachmentGallery.open(${i})" title="${nm}">
+                    <img src="${driveImgSrc(a.url)}" alt="${nm}" loading="lazy"
+                        onerror="this.style.display='none';this.parentElement.querySelector('.att-fallback').style.display='flex';" />
+                    <span class="att-fallback">${Icon.warning({size:15})} Preview unavailable</span>
+                    <span class="att-cap">${Icon.camera({size:11})} <span>${nm}</span></span>
+                </button>`;
+            }
+            const ext = (String(a.url).match(/\.(\w{2,4})(\?|$)/) || [, 'FILE'])[1].toUpperCase();
+            return `
+                <a class="att-card att-doc" href="${a.url}" target="_blank" rel="noopener" title="${nm}">
+                    <span class="att-ext">${Icon.fileText({size:20})}<b>${ext}</b></span>
+                    <span class="att-cap">${Icon.fileText({size:11})} <span>${nm}</span></span>
+                </a>`;
+        }).join('');
+        return `
+            <div class="att-block">
+                <div class="att-label">${label || 'Attachments'} <span class="att-count">${list.length}</span></div>
+                <div class="att-grid">${cells}</div>
+            </div>`;
+    },
+
+    open(i) {
+        const a = this._items[i];
+        if (!a) return;
+        let box = document.getElementById('attLightbox');
+        if (!box) {
+            box = document.createElement('div');
+            box.id = 'attLightbox';
+            box.className = 'att-lightbox';
+            box.addEventListener('click', e => { if (e.target === box || e.target.dataset.close) AttachmentGallery.close(); });
+            document.body.appendChild(box);
+        }
+        const nm = String(a.name || 'Attachment').replace(/</g, '&lt;');
+        box.innerHTML = `
+            <button type="button" class="att-lb-close" data-close="1" aria-label="Close">${Icon.close({size:20})}</button>
+            <div class="att-lb-frame"><img src="${driveImgSrc(a.url)}" alt="${nm}" /></div>
+            <div class="att-lb-cap">${nm} · <a href="${a.url}" target="_blank" rel="noopener">Open original</a></div>`;
+        box.classList.add('open');
+        this._esc = e => { if (e.key === 'Escape') AttachmentGallery.close(); };
+        document.addEventListener('keydown', this._esc);
+    },
+
+    close() {
+        const box = document.getElementById('attLightbox');
+        if (box) box.classList.remove('open');
+        if (this._esc) document.removeEventListener('keydown', this._esc);
     }
 };

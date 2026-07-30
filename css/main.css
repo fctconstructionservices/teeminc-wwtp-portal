@@ -23,6 +23,8 @@
 @import url('components/cards.css');
 @import url('components/tables.css');
 @import url('components/stamps.css');
+@import url('components/attachments.css');
+@import url('components/search-select.css');
 @import url('components/forms.css');
 @import url('components/charts.css');
 @import url('components/toast.css');

@@ -110,11 +110,11 @@ const ProjectPage = {
                 <div class="editors-row">
                     <span class="editors-lbl">Editors:</span>
                     ${editorChips || '<span class="editors-open">Open to all users</span>'}
-                    ${isSuperE ? `<button class="btn-sm" style="border-style:dashed;" onclick="ProjectPage.openEditorsModal()">⚙ Manage Editors</button>` : ''}
+                    ${isSuperE ? `<button class="btn-sm" style="border-style:dashed;" onclick="ProjectPage.openEditorsModal()">${Icon.settings({size:12})} Manage Editors</button>` : ''}
                 </div>`;
             const viewOnlyBanner = this._canEdit ? '' : `
                 <div class="data-source-note" style="border-left:3px solid var(--amber);color:var(--amber);margin-bottom:14px;">
-                    🔒 <b>View-only.</b> This project is assigned to: ${(p.editors || []).join(', ') || '—'}. You can see everything, but editing is limited to the assigned editors.
+                    ${Icon.lock({size:11})} <b>View-only.</b> This project is assigned to: ${(p.editors || []).join(', ') || '—'}. You can see everything, but editing is limited to the assigned editors.
                 </div>`;
 
             let html = `
@@ -140,9 +140,9 @@ const ProjectPage = {
                 <button data-tab="equipment" onclick="ProjectPage.switchTab('equipment')">Equipment</button>
                 <button data-tab="billings" onclick="ProjectPage.switchTab('billings')">Billings</button>
                 <button data-tab="variations" onclick="ProjectPage.switchTab('variations')">Variations</button>
-                <button data-tab="punchlist" onclick="ProjectPage.switchTab('punchlist')">📋 Punchlist</button>
-                <button data-tab="safety" onclick="ProjectPage.switchTab('safety')">🦺 Safety</button>
-                <button data-tab="drawings" onclick="ProjectPage.switchTab('drawings')">📐 Drawings</button>
+                <button data-tab="punchlist" onclick="ProjectPage.switchTab('punchlist')">${Icon.punchlist({size:13})} Punchlist</button>
+                <button data-tab="safety" onclick="ProjectPage.switchTab('safety')">${Icon.safety({size:13})} Safety</button>
+                <button data-tab="drawings" onclick="ProjectPage.switchTab('drawings')">${Icon.drawing({size:13})} Drawings</button>
             </div>
 
             <div id="proj-tab-overview" class="project-tab-content active"></div>
@@ -205,7 +205,7 @@ const ProjectPage = {
             <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;max-width:430px;width:100%;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;">
                 <div style="padding:13px 18px;border-bottom:1px solid var(--line);background:var(--blueprint-tint);display:flex;justify-content:space-between;align-items:center;">
                     <h3 style="font-family:'Oswald';font-size:13px;text-transform:uppercase;color:var(--blueprint);margin:0;">Assign Editors — ${this._currentProjectId}</h3>
-                    <span style="cursor:pointer;color:var(--ink-soft);" onclick="document.getElementById('editorsModal').remove()">✕</span>
+                    <span style="cursor:pointer;color:var(--ink-soft);" onclick="document.getElementById('editorsModal').remove()">${Icon.close({size:12})}</span>
                 </div>
                 <div style="padding:14px 18px;overflow:auto;">
                     <input id="editorSearch" placeholder="Search user..." oninput="ProjectPage.filterEditorList(this.value)"
@@ -289,7 +289,7 @@ const ProjectPage = {
                 <div class="print-header">
                     <h2>Add New Project</h2>
                     <div class="print-meta" style="font-size:11px;color:var(--ink-soft);">
-                        ⚠️ Super Admin only
+                        ${Icon.warning({size:13})} Super Admin only
                     </div>
                 </div>
                 <form id="addProjectForm" onsubmit="return ProjectPage.submitAddProject(event)">

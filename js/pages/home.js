@@ -62,13 +62,13 @@ const HomePage = {
                 const tabsHtml = `
                     <div class="project-status-tabs" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
                         <button class="btn-sm primary" data-status="ongoing" onclick="HomePage.filterProjects('ongoing')">
-                            🔵 Ongoing
+                            ${Icon.circleDot({size:11})} Ongoing
                         </button>
                         <button class="btn-sm" data-status="completed" onclick="HomePage.filterProjects('completed')">
-                            ✅ Completed
+                            ${Icon.checkCircle({size:13})} Completed
                         </button>
                         <button class="btn-sm" data-status="all" onclick="HomePage.filterProjects('all')">
-                            📋 All Projects
+                            ${Icon.punchlist({size:13})} All Projects
                         </button>
                     </div>
                 `;

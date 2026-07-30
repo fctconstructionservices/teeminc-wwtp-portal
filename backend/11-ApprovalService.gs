@@ -115,6 +115,12 @@ function getPendingApprovals() {
     return low_(m.status) === 'pending' && m.requestedBy && m.requestedBy.toLowerCase() !== userEmail;
   });
 
+  // v10: attach parsed attachments to every pending item so the list can
+  // show a paperclip count and the modal can render them immediately.
+  [cashAdvances, releases, incoming, liquidations, materials, equipment].forEach(function (arr) {
+    (arr || []).forEach(function (r) { r.attachments = attachmentsOf_(r); });
+  });
+
   // v9: pending OVERTIME requests (multi-sig like everything else)
   const otRequests = readAll_('OTRequests').filter(function (o) {
     return o.status === 'Pending' && o.requestedBy && o.requestedBy.toLowerCase() !== userEmail;
@@ -280,10 +286,38 @@ function getRequestById(id) {
     if (req) {
       req.type = lookups[i][1];
       if (req.type === 'OTRequest') req.sowIds = safeParse_(req.sowIdsJSON, []);
+      // v10 ATTACHMENT FIX: the row carries attachmentsJSON (a STRING);
+      // the detail modal looked for a parsed `attachments` ARRAY, so
+      // uploaded receipts and photos never rendered anywhere. Parse it
+      // here so every modal receives real objects: [{url, name}].
+      req.attachments = attachmentsOf_(req);
       return sanitizeDatesDeep_(req);
     }
   }
   return null;
+}
+
+/**
+ * attachmentsOf_ (v10) - Normalizes any row's attachment field into a
+ * clean [{ url, name }] array. Handles the attachmentsJSON string used
+ * by cash/liquidation rows, the single `image` column used by the
+ * catalog and site-ops rows, and rows that already hold an array.
+ */
+function attachmentsOf_(row) {
+  var out = [];
+  if (!row) return out;
+  var raw = row.attachments !== undefined ? row.attachments : row.attachmentsJSON;
+  if (Array.isArray(raw)) out = raw.slice();
+  else if (typeof raw === 'string' && raw) out = safeParse_(raw, []);
+  // single-image columns used elsewhere in the system
+  ['image', 'beforeImage', 'afterImage', 'fileUrl', 'receiptUrl'].forEach(function (f) {
+    if (row[f] && String(row[f]).indexOf('http') === 0) {
+      var label = f === 'beforeImage' ? 'Before' : f === 'afterImage' ? 'After'
+                : f === 'fileUrl' ? (row.fileName || 'File') : f === 'receiptUrl' ? 'Receipt' : 'Photo';
+      out.push({ url: row[f], name: label });
+    }
+  });
+  return out.filter(function (a) { return a && a.url; });
 }
 
 function approveItem(id, type) {

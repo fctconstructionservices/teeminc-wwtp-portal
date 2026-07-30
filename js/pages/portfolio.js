@@ -27,7 +27,7 @@ const PortfolioPage = {
             this._data = await DataService.getPortfolioData();
         } catch (err) {
             container.innerHTML = `<div class="empty">
-                <div class="empty-ico">📊</div>
+                <div class="empty-ico">${Icon.spreadsheet({size:12})}</div>
                 <h4>Unable to load portfolio</h4>
                 <p>${err.message}</p>
             </div>`;
@@ -52,7 +52,13 @@ const PortfolioPage = {
                     <div class="k-sub">${s.totalVO ? '+₱' + fmtMoney(s.totalVO) + ' from variation orders' : 'no variation orders'}</div></div>
                 <div class="kpi-card ${s.uncollected > 0 ? 'warn' : 'good'}"><div class="k-label">Uncollected</div>
                     <div class="k-val mono">₱${fmtMoney(s.uncollected)}</div>
-                    <div class="k-sub">₱${fmtMoney(s.totalBilled)} billed · ₱${fmtMoney(s.totalCollected)} collected</div></div>
+                    <div class="k-sub">₱${fmtMoney(s.totalBilled)} billed · ₱${fmtMoney(s.totalCollected)} collected from clients</div></div>
+                <!-- v10: owner capital is real money but it is NOT a client
+                     collection. Keeping it in its own card is what stops
+                     "Collected" from overstating what the clients have paid. -->
+                <div class="kpi-card"><div class="k-label">Funding (own capital)</div>
+                    <div class="k-val mono">₱${fmtMoney(s.totalFunding || 0)}</div>
+                    <div class="k-sub">partner injections and loans · not client money</div></div>
                 <div class="kpi-card ${s.urgentCount ? 'bad' : s.attentionCount ? 'warn' : 'good'}">
                     <div class="k-label">Needs Attention</div>
                     <div class="k-val">${s.attentionCount}</div>
@@ -64,7 +70,7 @@ const PortfolioPage = {
             <span class="cc-note">highest severity first</span></div>`;
         if (!d.attention.length) {
             html += `<div class="panel"><div class="empty" style="padding:26px;">
-                <div class="empty-ico">✓</div>
+                <div class="empty-ico">${Icon.check({size:12})}</div>
                 <h4>Nothing needs attention</h4>
                 <p>All projects are on schedule and within budget, with no overdue billings.</p>
             </div></div>`;
@@ -136,8 +142,8 @@ const PortfolioPage = {
         html += `<div class="chart-grid" style="margin-top:16px;">
             <div class="chart-card"><div class="cc-head"><h3>Contract Value by Project</h3></div>
                 <div class="canvas-wrap short"><canvas id="pfMixChart"></canvas></div></div>
-            <div class="chart-card"><div class="cc-head"><h3>Billed vs Collected</h3></div>
-                <div class="canvas-wrap short"><canvas id="pfCollectChart"></canvas></div></div>
+            <div class="chart-card"><div class="cc-head"><h3>Billed vs Collected</h3><span class="cc-note">pale tail = receivable</span></div>
+                <div class="canvas-wrap tall"><canvas id="pfCollectChart"></canvas></div></div>
         </div>`;
 
         container.innerHTML = html;
@@ -182,22 +188,65 @@ const PortfolioPage = {
         const col = document.getElementById('pfCollectChart');
         if (col) {
             if (this._charts.collect) { try { this._charts.collect.destroy(); } catch (_) {} }
+            // ── v10 CHART REWRITE: Billed vs Collected ──
+            // Vertical bars forced project names onto the x-axis, where
+            // they rotated 45° and clipped. Project names are TEXT, so
+            // they belong on a horizontal axis. Collected is drawn as a
+            // BAR INSIDE the billed bar (a thinner overlay on the same
+            // stack), so the remaining pale length IS the receivable —
+            // no mental arithmetic between two separate heights.
+            // Sorted by the largest receivable first, so whatever needs
+            // chasing is always the top row.
+            const cRows = rows.slice().sort((a, b) =>
+                ((b.billed - b.collected) - (a.billed - a.collected)));
             this._charts.collect = new Chart(col, {
                 type: 'bar',
                 data: {
-                    labels: rows.map(r => r.name),
+                    labels: cRows.map(r => r.name),
                     datasets: [
-                        { label: 'Billed', data: rows.map(r => r.billed), backgroundColor: '#24455A', borderRadius: 4 },
-                        { label: 'Collected', data: rows.map(r => r.collected), backgroundColor: '#2F7A46', borderRadius: 4 }
+                        {
+                            label: 'Uncollected',
+                            data: cRows.map(r => Math.max(0, (r.billed || 0) - (r.collected || 0))),
+                            backgroundColor: '#DCD7C8',
+                            borderRadius: { topRight: 4, bottomRight: 4 },
+                            stack: 'bill',
+                            barPercentage: 0.72
+                        },
+                        {
+                            label: 'Collected',
+                            data: cRows.map(r => r.collected || 0),
+                            backgroundColor: '#2F7A46',
+                            borderRadius: { topLeft: 4, bottomLeft: 4 },
+                            stack: 'bill',
+                            barPercentage: 0.72
+                        }
                     ]
                 },
                 options: {
+                    indexAxis: 'y',
                     responsive: true, maintainAspectRatio: false,
                     plugins: {
                         legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, font: { size: 10 } } },
-                        tooltip: { callbacks: { label: c => `${c.dataset.label}: ₱${fmtMoney(c.parsed.y)}` } }
+                        tooltip: {
+                            callbacks: {
+                                label: c => {
+                                    const r = cRows[c.dataIndex];
+                                    const pct = r.billed ? Math.round((r.collected || 0) / r.billed * 100) : 0;
+                                    return c.dataset.label === 'Collected'
+                                        ? `Collected: ₱${fmtMoney(r.collected || 0)} (${pct}% of billed)`
+                                        : `Uncollected: ₱${fmtMoney(Math.max(0, r.billed - r.collected))}`;
+                                },
+                                afterBody: c => {
+                                    const r = cRows[c[0].dataIndex];
+                                    return `Billed: ₱${fmtMoney(r.billed || 0)}`;
+                                }
+                            }
+                        }
                     },
-                    scales: { y: { ticks: { callback: fmtAxisMoney }, grid: { color: '#EEEBE0' } }, x: { grid: { display: false } } }
+                    scales: {
+                        x: { stacked: true, ticks: { callback: fmtAxisMoney }, grid: { color: '#EEEBE0' } },
+                        y: { stacked: true, grid: { display: false }, ticks: { font: { size: 11 }, autoSkip: false } }
+                    }
                 }
             });
         }
