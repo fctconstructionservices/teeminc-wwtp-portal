@@ -37,7 +37,7 @@ const RequestDetailModal = {
             if (type === 'request') {
                 data = await DataService.getRequestById(id);
                 if (!data) {
-                    const pending = await DataService.getPendingApprovals();
+                    const pending = await DataService.getPendingApprovals(true);
                     const found = pending.requests.find(r => r.id === id);
                     if (found) data = found;
                 }
@@ -171,7 +171,7 @@ const ApprovalsPage = {
             const isAdmin = user && user.role === 'admin';
             const isApprover = App.isApprover() && !isSuperAdmin && !isAdmin;
 
-            const pendingData = await DataService.getPendingApprovals();
+            const pendingData = await DataService.getPendingApprovals(true);   // v9.3: always fresh on this page
             const myRequests = await DataService.getMyPendingRequests();
             const myApproved = await DataService.getMyApprovedRequests ? await DataService.getMyApprovedRequests() : [];
             const myRejected = await DataService.getMyRejectedRequests ? await DataService.getMyRejectedRequests() : [];

@@ -1,0 +1,42 @@
+# Auto-rebuilds css/bundle.css whenever any modular CSS file changes.
+#
+# WHY: index.html loads the single bundled stylesheet (one request instead
+# of a 23-file @import waterfall). Without this workflow, editing a file
+# under css/ and pushing would have NO visible effect until someone
+# remembered to run the build — a nasty footgun. This removes it: push
+# your CSS edit and the bundle is regenerated and committed automatically.
+name: Build CSS bundle
+
+on:
+  push:
+    paths:
+      - 'css/**.css'
+      - 'tools/build-css.js'
+    branches: [dev, main]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Rebuild bundle
+        run: node tools/build-css.js
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- css/bundle.css; then
+            echo "bundle unchanged"
+          else
+            git config user.name  "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add css/bundle.css
+            git commit -m "chore: rebuild css/bundle.css [skip ci]"
+            git push
+          fi

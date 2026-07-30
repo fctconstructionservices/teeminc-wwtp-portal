@@ -119,6 +119,39 @@ const DataService = {
     },
 
     // ─── PROJECT ──────────────────────────────────────────────
+    // ── v9.3 PERF: catalog cache ──────────────────────────────
+    // The approved Materials / Equipment / Manpower lists feed every
+    // project's dropdowns but change only when someone approves a new
+    // catalog entry. They used to be re-fetched on EVERY project open
+    // (3 API calls each time). They are cached for the session here and
+    // invalidated the moment anything is approved, so the dropdowns can
+    // never go stale.
+    _catalogCache: null,
+    _catalogAt: 0,
+    _CATALOG_TTL: 5 * 60 * 1000,   // 5 minutes
+
+    invalidateCatalogs() { this._catalogCache = null; },
+
+    async getCatalogs(force) {
+        const fresh = this._catalogCache && (Date.now() - this._catalogAt) < this._CATALOG_TTL;
+        if (fresh && !force) return this._catalogCache;
+        const [m, e, p] = await Promise.allSettled([
+            this.getMaterials('approved'),
+            this.getEquipment('approved'),
+            this.getManpower('approved')
+        ]);
+        if (m.status === 'rejected') console.error('catalog materials:', m.reason);
+        if (e.status === 'rejected') console.error('catalog equipment:', e.reason);
+        if (p.status === 'rejected') console.error('catalog manpower:', p.reason);
+        this._catalogCache = {
+            materials: m.status === 'fulfilled' ? (m.value || []) : [],
+            equipment: e.status === 'fulfilled' ? (e.value || []) : [],
+            manpower:  p.status === 'fulfilled' ? (p.value || []) : []
+        };
+        this._catalogAt = Date.now();
+        return this._catalogCache;
+    },
+
     async getProjectData(projectId) {
         return await gasCall('getProjectData', projectId);
     },
@@ -175,6 +208,7 @@ const DataService = {
     },
     async approveMaterial(id) {
         const result = await gasCall('approveItem', id, 'Material');
+        this.invalidateCatalogs();   // v9.3: dropdowns must see it now
         await this.getAllMaterials();
         return result;
     },
@@ -199,6 +233,7 @@ const DataService = {
     },
     async approveEquipment(id) {
         const result = await gasCall('approveItem', id, 'Equipment');
+        this.invalidateCatalogs();   // v9.3
         await this.getAllEquipment();
         return result;
     },
@@ -225,6 +260,7 @@ const DataService = {
     },
     async approveManpower(id) {
         const result = await gasCall('approveItem', id, 'Manpower');
+        this.invalidateCatalogs();   // v9.3
         await this.getAllManpower();
         return result;
     },
@@ -288,7 +324,31 @@ const DataService = {
     },
 
     // ─── APPROVALS ────────────────────────────────────────────
-    async getPendingApprovals() {
+    // v9.3 PERF: getPendingApprovals reads ~13 sheets server-side, yet
+    // App.navigate() calls it on EVERY page change just to paint the
+    // badge number. A short TTL + in-flight de-duplication means moving
+    // around the app no longer pays for that read each time, while the
+    // Approvals page itself always forces a fresh pull (force = true),
+    // and any approve/reject drops the cache immediately.
+    _pendingCache: null,
+    _pendingAt: 0,
+    _pendingInflight: null,
+    _PENDING_TTL: 45 * 1000,
+
+    invalidatePending() { this._pendingCache = null; this._pendingInflight = null; },
+
+    async getPendingApprovals(force) {
+        const fresh = this._pendingCache && (Date.now() - this._pendingAt) < this._PENDING_TTL;
+        if (fresh && !force) return this._pendingCache;
+        // de-dupe: if a fetch is already in flight, ride along with it
+        if (this._pendingInflight && !force) return this._pendingInflight;
+        this._pendingInflight = this._fetchPendingApprovals()
+            .then(d => { this._pendingCache = d; this._pendingAt = Date.now(); this._pendingInflight = null; return d; })
+            .catch(err => { this._pendingInflight = null; throw err; });
+        return this._pendingInflight;
+    },
+
+    async _fetchPendingApprovals() {
         const data = await gasCall('getPendingApprovals') || {};
         const requests = [...(data.cashAdvances || []), ...(data.releases || []), ...(data.liquidations || [])];
         return {
@@ -317,16 +377,27 @@ const DataService = {
         return await gasCall('getRequestById', id);
     },
     async approveItemGeneric(id, type) {
-        return await gasCall('approveItem', id, type);
+        const r = await gasCall('approveItem', id, type);
+        this.invalidatePending();   // v9.3
+        // v9.3: any catalog approval must refresh the cached dropdowns
+        if (type === 'Material' || type === 'Equipment' || type === 'Manpower') this.invalidateCatalogs();
+        return r;
     },
     async rejectItemGeneric(id, type) {
-        return await gasCall('rejectItem', id, type);
+        const r = await gasCall('rejectItem', id, type);
+        this.invalidatePending();   // v9.3
+        return r;
     },
     async forceApprove(id, type) {
-        return await gasCall('forceApprove', id, type);
+        const r = await gasCall('forceApprove', id, type);
+        this.invalidatePending();   // v9.3
+        if (type === 'Material' || type === 'Equipment' || type === 'Manpower') this.invalidateCatalogs();
+        return r;
     },
     async forceReject(id, type) {
-        return await gasCall('forceReject', id, type);
+        const r = await gasCall('forceReject', id, type);
+        this.invalidatePending();   // v9.3
+        return r;
     },
 
     // ─── CASH ADVANCE ──────────────────────────────────────────

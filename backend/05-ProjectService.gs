@@ -181,10 +181,15 @@ function getProjectData(projectId) {
   // instead of ~16 separate round-trips. Subsequent readAll_ calls below
   // are served from the per-request memo, so the code stays readable and
   // the duplicate reads that used to cost extra trips are now free.
+  // v9.3 PERF: the v9 additions (Users name-map + the four site-ops
+  // registers + Personnel) were being read one-by-one AFTER this batch,
+  // costing 6 extra Sheets round-trips on every project open. They are
+  // part of the batch now, so the whole payload is 1 pass.
   readMany_(['Projects', 'SOWItems', 'EstimateGroups', 'EstimateMaterials',
     'EstimateLabor', 'EstimateEquipment', 'EstimateIndirect', 'DailyRecords',
     'CashAdvanceRequests', 'CashRelease', 'IncomingCashRequests', 'Liquidations',
-    'VariationOrders', 'Billings', 'Approvals', 'ClientLists', 'Transfers', 'Equipment']);
+    'VariationOrders', 'Billings', 'Approvals', 'ClientLists', 'Transfers', 'Equipment',
+    'Users', 'OTRequests', 'Punchlist', 'SafetyRecords', 'Drawings', 'Personnel']);
 
   const projects = readAll_('Projects');
   const proj = projects.find(function (p) { return p.id === projectId; });
@@ -654,6 +659,11 @@ function getProjectData(projectId) {
   // v6.8: EV as a monthly series — for each past month-end, reconstruct
   // every SOW's % complete from the daily reports and value it on the
   // contract basis. Future months are null - EV cannot be forecast.
+  // v9.3 PERF: build the progress timeline ONCE; every bucket below
+  // (monthly here, weekly further down) now does a binary search
+  // instead of re-scanning all daily records.
+  const progressIdx = buildProgressIndex_(dailyRecords);
+
   const evSeries = monthsArr.map(function (mm) {
     if (mm.y * 12 + mm.m > nowKey) return null;
     const cutD = monthEnd_(mm) < today ? monthEnd_(mm) : today;
@@ -663,7 +673,7 @@ function getProjectData(projectId) {
       if (x.isMilestone) return;
       const basis = (x.estimateTotal || 0) + (x.voAdjustment || 0);
       if (!basis) return;
-      ev += basis * (computeSOWProgressAsOf_(x.id, dailyRecords, cut) / 100);
+      ev += basis * (progressAsOfIdx_(progressIdx, x.id, cut) / 100);
     });
     return Math.round(ev);
   });
@@ -796,7 +806,7 @@ function getProjectData(projectId) {
       if (x.isMilestone) return;
       const basis = (x.estimateTotal || 0) + (x.voAdjustment || 0);
       if (!basis) return;
-      ev += basis * (computeSOWProgressAsOf_(x.id, dailyRecords, cut) / 100);
+      ev += basis * (progressAsOfIdx_(progressIdx, x.id, cut) / 100);
     });
     return Math.round(ev);
   });
@@ -1118,6 +1128,62 @@ function getSOWItemsForProject(projectId) {
  * midnight — that off-by-hours gap zeroed the whole EV line even though
  * the EV KPI (computed by the tolerant computeSOWProgress_) was correct.
  */
+/**
+ * buildProgressIndex_ (v9.3 PERF) - Builds, in ONE pass over the daily
+ * records, a per-SOW timeline: { sowId: [{ d: 'yyyy-MM-dd', p: pct }, ...] }
+ * sorted by date, one entry per date (max % reported that day).
+ *
+ * WHY: the S-curve asked "what was SOW X's % as of date D" once per
+ * (bucket x SOW). Each of those calls re-scanned EVERY daily record, so
+ * the cost was months x SOW x records — and the v9 weekly series
+ * multiplied it again (up to 60 more buckets). On a long project that
+ * was millions of iterations, i.e. SECONDS of Apps Script CPU on every
+ * project open. Building the index once and binary-searching it gives
+ * identical numbers for a tiny fraction of the work.
+ */
+function buildProgressIndex_(dailyRecords) {
+  var byS = {};
+  (dailyRecords || []).forEach(function (d) {
+    if (d.status === 'rejected') return;
+    var key = String(d.date || '');
+    if (!key) return;
+    (d.workAccomplished || []).forEach(function (w) {
+      var sid = String(w.scope || '');
+      if (!sid) return;
+      var pct = parseFloat(w.percentComplete) || 0;
+      if (!byS[sid]) byS[sid] = {};
+      // same date, multiple rows for the SOW -> keep the highest %
+      if (byS[sid][key] === undefined || pct > byS[sid][key]) byS[sid][key] = pct;
+    });
+  });
+  var out = {};
+  Object.keys(byS).forEach(function (sid) {
+    out[sid] = Object.keys(byS[sid]).sort().map(function (dt) {
+      return { d: dt, p: byS[sid][dt] };
+    });
+  });
+  return out;
+}
+
+/**
+ * progressAsOfIdx_ (v9.3 PERF) - The % of a SOW as of a cutoff date,
+ * read from buildProgressIndex_ via binary search. Matches the old
+ * computeSOWProgressAsOf_ exactly: the value from the most recent
+ * record on or before the cutoff that reported this SOW.
+ */
+function progressAsOfIdx_(index, sowId, cutoffStr) {
+  var arr = index[String(sowId)];
+  if (!arr || !arr.length) return 0;
+  var lo = 0, hi = arr.length - 1, best = -1;
+  while (lo <= hi) {
+    var mid = (lo + hi) >> 1;
+    if (arr[mid].d <= cutoffStr) { best = mid; lo = mid + 1; }
+    else hi = mid - 1;
+  }
+  if (best < 0) return 0;
+  return Math.min(100, Math.max(0, arr[best].p));
+}
+
 function computeSOWProgressAsOf_(sowId, dailyRecords, cutoffStr) {
   let bestKey = '';
   let best = 0;

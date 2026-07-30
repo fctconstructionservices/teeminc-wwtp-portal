@@ -45,6 +45,12 @@ const ProjectPage = {
             : null;
 
         try {
+            // v9.3 PERF: the three catalogs do NOT depend on the project
+            // payload, but they used to be fetched only AFTER it returned —
+            // two sequential waves, so every project open paid two full
+            // round-trips. They are fired TOGETHER with getProjectData now,
+            // and served from a short-lived cache when still fresh.
+            const catalogsPromise = DataService.getCatalogs();
             const p = await DataService.getProjectData(projectId);
             if (!p) { 
                 UI.setContent(container, `<div class="empty"><p>Project not found.</p></div>`); 
@@ -61,21 +67,12 @@ const ProjectPage = {
             this._estimatesData = p.estimates || {};
             this._estimatesData.groups = Array.isArray(this._estimatesData.groups) ? this._estimatesData.groups : [];
 
-            // v6.5 (H): the three catalog fetches used to run one after
-            // another (3 sequential round-trips). Fire them together —
-            // same data, roughly a third of the wall time.
-            const [matRes, eqRes, mpRes] = await Promise.allSettled([
-                DataService.getMaterials('approved'),
-                DataService.getEquipment('approved'),
-                DataService.getManpower('approved')
-            ]);
-            this._approvedMaterials = matRes.status === 'fulfilled' ? matRes.value : [];
-            this._approvedEquipment = eqRes.status === 'fulfilled' ? eqRes.value : [];
-            this._approvedManpower = mpRes.status === 'fulfilled' ? mpRes.value : [];
-            if (matRes.status === 'rejected') console.error('Failed to load approved materials:', matRes.reason);
-            if (eqRes.status === 'rejected') console.error('Failed to load approved equipment:', eqRes.reason);
-            if (mpRes.status === 'rejected') {
-                console.error('Failed to load approved manpower:', mpRes.reason);
+            // v9.3: already in flight since before the await above
+            const cat = await catalogsPromise;
+            this._approvedMaterials = cat.materials;
+            this._approvedEquipment = cat.equipment;
+            this._approvedManpower = cat.manpower;
+            if (!this._approvedManpower) {
                 this._approvedManpower = [];
             }
 

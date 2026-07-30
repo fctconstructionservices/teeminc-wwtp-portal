@@ -10,7 +10,10 @@
     </script>
     <!-- v8: SheetJS for Excel exports (Estimates summary, Billings/SWA) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <link rel="stylesheet" href="css/main.css" />
+    <!-- v9.3 PERF: ONE bundled stylesheet instead of a 23-file @import
+         waterfall. Sources stay modular under css/ — edit those, then run
+         node tools/build-css.js to regenerate. -->
+    <link rel="stylesheet" href="css/bundle.css" />
 </head>
 <body>
 
