@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FCTC ERP System v3</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js">
+    </script>
+    <!-- v8: SheetJS for Excel exports (Estimates summary, Billings/SWA) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- v9.3 PERF: ONE bundled stylesheet instead of a 23-file @import
+         waterfall. Sources stay modular under css/ — edit those, then run
+         node tools/build-css.js to regenerate. -->
+    <link rel="stylesheet" href="css/bundle.css" />
+</head>
+<body>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!--  CONFIRM DIALOG                             -->
+    <!-- ════════════════════════════════════════════ -->
+    <div class="confirm-overlay" id="confirmOverlay">
+        <div class="confirm-box">
+            <h3 id="confirmTitle">Confirm</h3>
+            <p id="confirmMessage">Are you sure?</p>
+            <div class="actions">
+                <button class="btn-ghost" onclick="Confirm.cancel()">Cancel</button>
+                <button class="btn-primary" id="confirmBtn" onclick="Confirm.confirm()">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!--  PRINT MODAL (Daily)                        -->
+    <!-- ════════════════════════════════════════════ -->
+    <div class="print-modal-overlay" id="printModal">
+        <div class="print-modal-content" id="printContent">
+            <button class="close-modal" onclick="PrintModal.close()"></button>
+            <div id="printBody"></div>
+        </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!--  MATERIAL PRINT MODAL                       -->
+    <!-- ════════════════════════════════════════════ -->
+    <div class="print-modal-overlay" id="matPrintModal">
+        <div class="print-modal-content" id="matPrintContent">
+            <button class="close-modal" onclick="MatPrintModal.close()"></button>
+            <div id="matPrintBody"></div>
+        </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!--  EQUIPMENT PRINT MODAL                      -->
+    <!-- ════════════════════════════════════════════ -->
+    <div class="print-modal-overlay" id="equipPrintModal">
+        <div class="print-modal-content" id="equipPrintContent">
+            <button class="close-modal" onclick="EquipPrintModal.close()"></button>
+            <div id="equipPrintBody"></div>
+        </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!--  SOW BREAKDOWN MODAL                        -->
+    <!-- ════════════════════════════════════════════ -->
+    <div class="print-modal-overlay" id="sowBreakdownModal">
+        <div class="print-modal-content breakdown-modal" id="sowBreakdownContent">
+            <button class="close-modal" onclick="SOWBreakdownModal.close()"></button>
+            <div id="sowBreakdownBody"></div>
+        </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!--  REQUEST DETAIL MODAL                       -->
+    <!-- ════════════════════════════════════════════ -->
+    <div class="print-modal-overlay" id="requestDetailModal">
+        <div class="print-modal-content" id="requestDetailContent">
+            <button class="close-modal" onclick="RequestDetailModal.close()"></button>
+            <div id="requestDetailBody"></div>
+        </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!--  LIGHTBOX                                   -->
+    <!-- ════════════════════════════════════════════ -->
+    <div class="lightbox" id="lightbox">
+        <button class="lb-close" onclick="Lightbox.close()"></button>
+        <button class="lb-nav prev" onclick="Lightbox.prev()">‹</button>
+        <button class="lb-nav next" onclick="Lightbox.next()">›</button>
+        <div class="lb-content"><img id="lbImg" src="#" alt="gallery" /></div>
+        <div class="lb-counter" id="lbCounter"></div>
+    </div>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!--  TOAST                                      -->
+    <!-- ════════════════════════════════════════════ -->
+    <div class="toast" id="toast"></div>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!--  LOGIN                                      -->
+    <!-- ════════════════════════════════════════════ -->
+    <section id="page-login" class="page active" aria-label="Login">
+        <div class="login-card">
+            <div class="login-mark">FCTC</div>
+            <h1>FCTC ERP System</h1>
+            <p class="sub">Sign in to continue</p>
+            <form id="loginForm" onsubmit="return handleLogin(event)">
+                <div class="field" id="login-email-field">
+                    <label for="login-email">Email</label>
+                    <input type="email" id="login-email" placeholder="you@example.com" autocomplete="username" required />
+                    <div class="error-msg">Please enter a valid email.</div>
+                </div>
+                <div class="field" id="login-pass-field">
+                    <label for="login-pass">Password</label>
+                    <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password" required />
+                    <div class="error-msg">Password is required.</div>
+                </div>
+                <button type="submit" class="login-btn">Log In</button>
+            </form>
+            <p class="login-note">
+                For FCTC Construction Services internal use only.
+                <small><strong>Under Development: </strong>Under Development</small>
+            </p>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!--  HOME                                       -->
+    <!-- ════════════════════════════════════════════ -->
+    <section id="page-home" class="page" aria-label="Home">
+        <div class="wrap">
+            <div class="topbar">
+                <div class="mark">F</div>
+                <div class="brand">
+                    <div class="name">FCTC ERP System</div>
+                    <div class="sub" id="home-user-label">Managing Partner — D. Fabon</div>
+                </div>
+                <div class="spacer"></div>
+                <button class="hamburger" onclick="toggleMenu()" aria-label="Toggle menu"></button>
+                <div class="actions" id="topActions">
+                    <button class="theme-toggle" onclick="App.toggleTheme()" title="Toggle dark mode"></button>
+                    <button class="superadmin-only" onclick="App.openViewAs()">👁 View As (test)</button>
+                    <button onclick="App.logout()">Log Out</button>
+                </div>
+            </div>
+
+            <div class="section-head"><h2>Start a Transaction</h2><div class="rule"></div></div>
+            <div class="tickets">
+                <!-- tickets will be rendered dynamically -->
+            </div>
+
+            <div class="section-head" id="projectsSectionHead">
+                <h2>Projects</h2>
+            <div class="rule"></div>
+            </div>
+
+            <!-- NEW: Status Tabs -->
+            <div class="project-status-tabs" id="projectStatusTabs" style="display:flex;gap:8px;margin-bottom:16px;">
+            <button class="btn-sm primary active" data-status="ongoing" onclick="HomePage.filterProjects('ongoing')">Ongoing
+            </button>
+            <button class="btn-sm" data-status="completed" onclick="HomePage.filterProjects('completed')">Completed
+            </button>
+            <button class="btn-sm" data-status="all" onclick="HomePage.filterProjects('all')">All Projects
+            </button>
+            </div>
+
+            <div id="projectsContainer">
+            <div class="loading-overlay"><div class="loader"></div><p>Loading projects...</p></div>
+            </div>
+
+            <div class="section-head">
+                <h2>Finance Overview</h2><div class="rule"></div>
+                <button class="link-btn" onclick="App.navigate('finance')">Full Dashboard <span class="btn-arrow"></span></button>
+            </div>
+            <div id="gaugesContainer">
+                <div class="loading-overlay"><div class="loader"></div><p>Loading finance snapshot...</p></div>
+            </div>
+
+            <div class="section-head"><h2>Approval Queue</h2><div class="rule"></div></div>
+            <div class="cols" id="approvalContainer">
+                <div class="loading-overlay"><div class="loader"></div><p>Loading queue...</p></div>
+            </div>
+
+            <p style="margin-top:16px;font-size:11px;color:var(--ink-soft);text-align:center">
+                All rights reserved.
+            </p>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!--  FINANCE                                   -->
+    <!-- ════════════════════════════════════════════ -->
+    <section id="page-finance" class="page" aria-label="Finance Dashboard">
+        <div class="wrap">
+            <div class="topbar">
+                <div class="mark">FCTC</div>
+                <div class="brand">
+                    <div class="name">Finance Dashboard</div>
+                    <div class="sub">Cost control · Cashflow · Forecasting</div>
+                </div>
+                <div class="spacer"></div>
+                <button class="hamburger" onclick="toggleMenu()"></button>
+                <div class="actions" id="topActionsFinance">
+                    <button class="theme-toggle" onclick="App.toggleTheme()"></button>
+                    <button class="superadmin-only" onclick="App.openViewAs()">👁 View As (test)</button>
+                    <button onclick="App.logout()">Log Out</button>
+                </div>
+            </div>
+            <div class="crumb"><button onclick="App.navigate('home')">Home</button> / Finance Dashboard</div>
+            <div id="financeContent">
+                <div class="loading-overlay"><div class="loader"></div><p>Loading finance data...</p></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!--  PORTFOLIO DASHBOARD (v7.2)                 -->
+    <!-- ════════════════════════════════════════════ -->
+    <section id="page-portfolio" class="page" aria-label="Portfolio Dashboard">
+        <div class="wrap">
+            <div class="topbar">
+                <div class="mark">F</div>
+                <div class="brand">
+                    <div class="name">Portfolio</div>
+                    <div class="sub">Lahat ng proyekto sa isang tanaw</div>
+                </div>
+                <div class="spacer"></div>
+                <button class="hamburger" onclick="toggleMenu()"></button>
+                <div class="actions" id="topActionsPortfolio">
+                    <button class="theme-toggle" onclick="App.toggleTheme()"></button>
+                    <button class="superadmin-only" onclick="App.openViewAs()">👁 View As (test)</button>
+                    <button onclick="App.logout()">Log Out</button>
+                </div>
+            </div>
+            <div class="crumb"><button onclick="App.navigate('home')">Home</button> / Portfolio</div>
+            <div id="portfolioContent">
+                <div class="loading-overlay"><div class="loader"></div><p>Loading portfolio...</p></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!--  PROJECT (with Tabs)                        -->
+    <!-- ════════════════════════════════════════════ -->
+    <section id="page-project" class="page" aria-label="Project Dashboard">
+        <div class="wrap">
+            <div class="topbar">
+                <div class="mark">F</div>
+                <div class="brand">
+                    <div class="name" id="proj-name">Project Name</div>
+                    <div class="sub" id="proj-status">Ongoing</div>
+                </div>
+                <div class="spacer"></div>
+                <button class="hamburger" onclick="toggleMenu()"></button>
+                <div class="actions" id="topActionsProject">
+                    <button class="theme-toggle" onclick="App.toggleTheme()"></button>
+                    <button class="superadmin-only" onclick="App.openViewAs()">👁 View As (test)</button>
+                    <button onclick="App.logout()">Log Out</button>
+                </div>
+            </div>
+            <div class="crumb"><button onclick="App.navigate('home')">Home</button> / Projects / <span id="proj-crumb">—</span></div>
+
+            <div id="projectContent">
+                <div class="loading-overlay"><div class="loader"></div><p>Loading project details...</p></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!--  MATERIALS DATABASE PAGE                   -->
+    <!-- ════════════════════════════════════════════ -->
+    <section id="page-materials" class="page" aria-label="Materials Database">
+        <div class="wrap">
+            <div class="topbar">
+                <div class="mark">F</div>
+                <div class="brand">
+                    <div class="name">Materials Database</div>
+                    <div class="sub">Master list · Search · Approval</div>
+                </div>
+                <div class="spacer"></div>
+                <button class="hamburger" onclick="toggleMenu()"></button>
+                <div class="actions" id="topActionsMaterials">
+                    <button class="theme-toggle" onclick="App.toggleTheme()"></button>
+                    <button onclick="App.navigate('home')">Back</button>
+                </div>
+            </div>
+            <div class="crumb"><button onclick="App.navigate('home')">Home</button> / Materials Database</div>
+            <div id="materialsContent">
+                <div class="loading-overlay"><div class="loader"></div><p>Loading materials...</p></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!--  EQUIPMENT DATABASE PAGE                   -->
+    <!-- ════════════════════════════════════════════ -->
+    <section id="page-equipment" class="page" aria-label="Tools & Equipment Database">
+        <div class="wrap">
+            <div class="topbar">
+                <div class="mark">F</div>
+                <div class="brand">
+                    <div class="name">Tools & Equipment Database</div>
+                    <div class="sub">Equipment inventory · Search · Approval</div>
+                </div>
+                <div class="spacer"></div>
+                <button class="hamburger" onclick="toggleMenu()"></button>
+                <div class="actions" id="topActionsEquipment">
+                    <button class="theme-toggle" onclick="App.toggleTheme()"></button>
+                    <button onclick="App.navigate('home')">Back</button>
+                </div>
+            </div>
+            <div class="crumb"><button onclick="App.navigate('home')">Home</button> / Tools & Equipment</div>
+            <div id="equipmentContent">
+                <div class="loading-overlay"><div class="loader"></div><p>Loading equipment...</p></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!--  MANPOWER DATABASE PAGE (v3)               -->
+    <!-- ════════════════════════════════════════════ -->
+    <section id="page-manpower" class="page" aria-label="Manpower Database">
+        <div class="wrap">
+            <div class="topbar">
+                <div class="mark">F</div>
+                <div class="brand">
+                    <div class="name">Manpower Database</div>
+                    <div class="sub">Roles & trades · Search · Approval</div>
+                </div>
+                <div class="spacer"></div>
+                <button class="hamburger" onclick="toggleMenu()"></button>
+                <div class="actions" id="topActionsManpower">
+                    <button class="theme-toggle" onclick="App.toggleTheme()"></button>
+                    <button onclick="App.navigate('home')">Back</button>
+                </div>
+            </div>
+            <div class="crumb"><button onclick="App.navigate('home')">Home</button> / Manpower</div>
+            <div id="manpowerContent">
+                <div class="loading-overlay"><div class="loader"></div><p>Loading manpower...</p></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!--  APPROVALS PAGE (NEW)                      -->
+    <!-- ════════════════════════════════════════════ -->
+    <section id="page-approvals" class="page" aria-label="Approvals">
+        <div class="wrap">
+            <div class="topbar">
+                <div class="mark">F</div>
+                <div class="brand">
+                    <div class="name">Approvals</div>
+                    <div class="sub">Pending requests · My submissions</div>
+                </div>
+                <div class="spacer"></div>
+                <button class="hamburger" onclick="toggleMenu()"></button>
+                <div class="actions" id="topActionsApprovals">
+                    <button class="theme-toggle" onclick="App.toggleTheme()"></button>
+                    <button onclick="App.navigate('home')">Back</button>
+                </div>
+            </div>
+            <div class="crumb"><button onclick="App.navigate('home')">Home</button> / Approvals</div>
+
+            <div id="approvalsContent">
+                <div class="loading-overlay"><div class="loader"></div><p>Loading approvals...</p></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!--  REQUEST CASH ADVANCE                       -->
+    <!-- ════════════════════════════════════════════ -->
+    <section id="page-request" class="page" aria-label="Request Cash Advance">
+        <div class="wrap">
+            <div class="topbar">
+                <div class="mark">F</div>
+                <div class="brand"><div class="name">Request Cash Advance</div><div class="sub">New requisition</div></div>
+                <div class="spacer"></div>
+                <button class="hamburger" onclick="toggleMenu()"></button>
+                <div class="actions" id="topActionsRequest">
+                    <button class="theme-toggle" onclick="App.toggleTheme()"></button>
+                    <button onclick="App.navigate('home')">Back</button>
+                </div>
+            </div>
+            <div class="crumb"><button onclick="App.navigate('home')">Home</button> / Request Cash Advance</div>
+            <div class="form-card">
+                <div class="requester-badge" id="req-badge">Requesting as: <strong>J. Fabon</strong></div>
+                <form id="requestForm" onsubmit="return submitRequestForm(event)">
+                    <div class="field">
+                        <label>Request Type</label>
+                        <select id="req-type">
+                            <option>General and Administrative</option>
+                            <option>Project Overhead</option>
+                            <option>Labor / Payroll</option>
+                            <option>Equipment Rental</option>
+                            <option>Materials Purchase</option>
+                            <option>Reimbursement</option>
+                        </select>
+                    </div>
+                    <div class="field" id="req-project-field">
+                        <label>Project</label>
+                        <select id="req-project">
+                            <option value="ga-overhead">General and Administrative Expenses (G&amp;A)</option>
+                            <option value="fctc-cs">FCTC Construction Services</option>
+                        </select>
+                        <div class="error-msg">Please select a project.</div>
+                    </div>
+                    <div class="field" id="req-desc-field">
+                        <label>Request Description / Purpose</label>
+                        <textarea id="req-desc" rows="3" placeholder="e.g. Expenses for Permits"></textarea>
+                        <div class="error-msg">Description is required.</div>
+                    </div>
+                    <div class="field" id="req-scope-field">
+                        <label>Scope of Work Item</label>
+                        <select id="req-scope">
+                        <option value="">— Select SOW Item —</option>
+                        </select>
+                    <div class="error-msg">Please select a SOW item.</div>
+                    </div>
+                    <div class="field" id="req-amount-field">
+                        <label>Amount (₱)</label>
+                        <input type="number" id="req-amount" placeholder="0.00" step="0.01" />
+                        <div class="error-msg">Please enter a valid amount greater than 0.</div>
+                    </div>
+                    <div class="field" id="req-date-field">
+                        <label>Date Needed (minimum 3 days from today)</label>
+                        <input type="date" id="req-date" required />
+                        <div class="error-msg">Please select when is this request needed.</div>
+                    </div>
+                    <div class="field" id="req-file-field">
+                        <label>Quotation / Basis</label>
+                        <div class="file-drop">
+                            <input type="file" accept="image/*,.pdf" id="req-file" required />
+                            <span class="file-drop-hint">Upload quotation, screenshot, or basis — JPG, PNG, or PDF</span>
+                         <div class="error-msg">Please upload a quotation or basis document.</div>
+                        </div>
+                    </div>
+                    <div class="submit-row">
+                        <button type="submit" class="btn-primary">Submit Request</button>
+                        <button type="button" class="btn-ghost" onclick="App.navigate('home')">Cancel</button>
+                    </div>
+                </form>
+                <!-- Result display -->
+                <div id="submissionResult" style="margin-top:16px;display:none;padding:12px 16px;border-radius:8px;"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!--  LIQUIDATE                                 -->
+    <!-- ════════════════════════════════════════════ -->
+    <section id="page-liquidate" class="page" aria-label="Liquidate Cash Advance">
+        <div class="wrap">
+            <div class="topbar">
+                <div class="mark">F</div>
+                <div class="brand"><div class="name">Liquidate Cash Advance</div><div class="sub">Submit receipts & balance</div></div>
+                <div class="spacer"></div>
+                <button class="hamburger" onclick="toggleMenu()"></button>
+                <div class="actions" id="topActionsLiquidate">
+                    <button class="theme-toggle" onclick="App.toggleTheme()"></button>
+                    <button onclick="App.navigate('home')">Back</button>
+                </div>
+            </div>
+            <div class="crumb"><button onclick="App.navigate('home')">Home</button> / Liquidate Cash Advance</div>
+            <div class="form-card">
+                <div class="requester-badge">Liquidated by: <strong>J. Fabon</strong></div>
+                <form id="liquidateForm" onsubmit="return submitLiquidateForm(event)">
+                    <div class="field" id="liq-req-field">
+                        <label>Cash Advance Request ID</label>
+                        <select id="liq-req-id">
+                            <option value="">— Loading your advances to liquidate... —</option>
+                        </select>
+                        <div class="error-msg">Please select a request.</div>
+                    </div>
+                    <div class="field" id="liq-receipt-field">
+                        <label>Receipt No.</label>
+                        <input type="text" id="liq-receipt" placeholder="e.g. 1234" />
+                        <div class="error-msg">Receipt number is required.</div>
+                    </div>
+                    <div class="field">
+                        <label>Vendor Name</label>
+                        <input type="text" id="liq-vendor" placeholder="e.g. ABC Hardware Supply" />
+                    </div>
+                    <div class="field">
+                        <label>Vendor TIN Number</label>
+                        <input type="text" id="liq-tin" placeholder="e.g. 123-456-789-0000" />
+                    </div>
+                    <div class="field" id="liq-amount-field">
+                        <label>Amount (₱)</label>
+                        <input type="number" id="liq-amount" placeholder="0.00" step="0.01" />
+                        <div class="error-msg">Please enter a valid amount.</div>
+                    </div>
+                    <div class="field" id="liq-desc-field">
+                        <label>Description / Purpose</label>
+                        <textarea id="liq-desc" rows="3" placeholder="What was this spent on?"></textarea>
+                        <div class="error-msg">Description is required.</div>
+                    </div>
+                    <div class="field">
+                        <label>Transaction Date</label>
+                        <input type="date" id="liq-date" />
+                    </div>
+                    <div class="field">
+                        <label>Attach Receipt Photo</label>
+                        <div class="file-drop">
+                            <input type="file" accept="image/*,.pdf" id="liq-file" />
+                            <span class="file-drop-hint">Upload receipt photo — JPG, PNG, or PDF</span>
+                        </div>
+                    </div>
+                    <div class="submit-row">
+                        <button type="submit" class="btn-primary">Submit Liquidation</button>
+                        <button type="button" class="btn-ghost" onclick="App.navigate('home')">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!--  RECORD INCOMING CASH — FIXED               -->
+    <!-- ════════════════════════════════════════════ -->
+    <section id="page-record-cash" class="page" aria-label="Record Incoming Cash">
+        <div class="wrap">
+            <div class="topbar">
+                <div class="mark">F</div>
+                <div class="brand">
+                    <div class="name">Record Incoming Cash</div>
+                    <div class="sub">Capital / cash injections</div>
+                </div>
+                <div class="spacer"></div>
+                <button class="hamburger" onclick="toggleMenu()"></button>
+                <div class="actions" id="topActionsRecordCash">
+                    <button class="theme-toggle" onclick="App.toggleTheme()"></button>
+                    <button onclick="App.navigate('home')">Back</button>
+                </div>
+            </div>
+            <div class="crumb"><button onclick="App.navigate('home')">Home</button> / Record Incoming Cash</div>
+            <div class="form-card">
+                <div class="requester-badge">Logged by: <strong>J. Fabon</strong></div>
+                
+                <div class="system-check-note" style="margin-bottom:16px;">
+                    ⚠️ This transaction requires approval before it is recorded.
+                    <br>All fields are required. Upload proof of transaction.
+                </div>
+                
+                <form id="recordCashForm" onsubmit="return submitRecordCashForm(event)">
+                    <!-- Type of Transaction -->
+                    <div class="field" id="rc-type-field">
+                        <label for="rc-type">Type of Transaction *</label>
+                        <select id="rc-type" required>
+                            <option value="">— Select type —</option>
+                            <option value="Cash Injection">Cash Injection</option>
+                            <option value="Client Payment">Client Payment</option>
+                            <option value="Other Income">Other Income</option>
+                        </select>
+                        <div class="error-msg">Please select a transaction type.</div>
+                    </div>
+                    
+                    <!-- Description -->
+                    <div class="field" id="rc-desc-field">
+                        <label for="rc-desc">Description *</label>
+                        <textarea id="rc-desc" rows="3" placeholder="e.g. Initial Capital - FCTC Construction Services" required></textarea>
+                        <div class="error-msg">Description is required.</div>
+                    </div>
+                    
+                    <!-- Amount -->
+                    <div class="field" id="rc-amount-field">
+                        <label for="rc-amount">Amount (₱) *</label>
+                        <input type="number" id="rc-amount" placeholder="0.00" step="0.01" required />
+                        <div class="error-msg">Please enter a valid amount greater than 0.</div>
+                    </div>
+                    
+                    <!-- Payment Method -->
+                    <div class="field" id="rc-method-field">
+                        <label for="rc-method">Payment Method *</label>
+                        <select id="rc-method" required>
+                            <option value="">— Select method —</option>
+                            <option value="Online Transfer (InstaPay)">Online Transfer (InstaPay)</option>
+                            <option value="Bank Transfer">Bank Transfer</option>
+                            <option value="Cash">Cash</option>
+                            <option value="Check">Check</option>
+                            <option value="Other">Other</option>
+                        </select>
+                        <div class="error-msg">Please select a payment method.</div>
+                    </div>
+                    
+                    <!-- Reference Number -->
+                    <div class="field" id="rc-ref-field">
+                        <label for="rc-ref">Reference Number *</label>
+                        <input type="text" id="rc-ref" placeholder="e.g. 704371" required />
+                        <div class="error-msg">Reference number is required.</div>
+                    </div>
+                    
+                    <!-- Date of Transaction -->
+                    <div class="field" id="rc-date-field">
+                        <label for="rc-date">Date of Transaction *</label>
+                        <input type="date" id="rc-date" required />
+                        <div class="error-msg">Please select a transaction date.</div>
+                    </div>
+                    
+                    <!-- Project -->
+                    <div class="field" id="rc-project-field">
+                        <label for="rc-project">Project</label>
+                        <select id="rc-project" required>
+                            <option value="">— Select Ongoing Project —</option>
+                        </select>
+                        <div class="error-msg">Please select a project.</div>
+                    </div>
+                    
+                    <!-- Proof of Transaction -->
+                    <div class="field" id="rc-file-field">
+                        <label>Proof of Transaction *</label>
+                        <div class="file-drop">
+                            <input type="file" accept="image/*,.pdf" id="rc-file" required />
+                            <span class="file-drop-hint">Upload transfer receipt or screenshot — JPG, PNG, or PDF (Required)</span>
+                            <div class="error-msg">Please upload proof of transaction.</div>
+                        </div>
+                    </div>
+                    
+                    <div class="submit-row">
+                        <button type="submit" class="btn-primary">Submit for Approval</button>
+                        <button type="button" class="btn-ghost" onclick="App.navigate('home')">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!--  RELEASE CASH                              -->
+    <!-- ════════════════════════════════════════════ -->
+    <section id="page-release-cash" class="page" aria-label="Release Cash">
+        <div class="wrap">
+            <div class="topbar">
+                <div class="mark">F</div>
+                <div class="brand"><div class="name">Release Cash</div><div class="sub">Release an approved advance</div></div>
+                <div class="spacer"></div>
+                <button class="hamburger" onclick="toggleMenu()"></button>
+                <div class="actions" id="topActionsReleaseCash">
+                    <button class="theme-toggle" onclick="App.toggleTheme()"></button>
+                    <button onclick="App.navigate('home')">Back</button>
+                </div>
+            </div>
+            <div class="crumb"><button onclick="App.navigate('home')">Home</button> / Release Cash</div>
+            <div class="form-card">
+                <div class="requester-badge">Released by: <strong>J. Fabon</strong></div>
+                <form id="releaseForm" onsubmit="return submitReleaseForm(event)">
+                    <div class="field" id="rel-req-field">
+                        <label>Cash Advance Request ID</label>
+                        <select id="rel-req-id">
+                            <option value="">— Select approved request —</option>
+                        </select>
+                        <div class="error-msg">Please select a request.</div>
+                    </div>
+                    <div class="field" id="rel-amount-field">
+                        <label>Amount to be Released (₱)</label>
+                        <input type="number" id="rel-amount" placeholder="0.00" step="0.01" />
+                        <div class="error-msg">Please enter a valid amount.</div>
+                    </div>
+                    <div class="field">
+                        <label>Proof of Cash Release</label>
+                        <div class="file-drop">
+                            <input type="file" accept="image/*,.pdf" id="rel-file" />
+                            <span class="file-drop-hint">Upload proof of transfer/release</span>
+                        </div>
+                    </div>
+                    <div class="system-check-note">
+                        <strong>System auto-checks:</strong> Request validity, amount vs approved, at duplicate release prevention.
+                    </div>
+                    <div class="submit-row">
+                        <button type="submit" class="btn-primary">Submit Release</button>
+                        <button type="button" class="btn-ghost" onclick="App.navigate('home')">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!--  SEARCH                                    -->
+    <!-- ════════════════════════════════════════════ -->
+    <section id="page-search" class="page" aria-label="Search Records">
+        <div class="wrap">
+            <div class="topbar">
+                <div class="mark">F</div>
+                <div class="brand"><div class="name">Search Records</div><div class="sub">Cash advances, releases & liquidations</div></div>
+                <div class="spacer"></div>
+                <button class="hamburger" onclick="toggleMenu()"></button>
+                <div class="actions" id="topActionsSearch">
+                    <button class="theme-toggle" onclick="App.toggleTheme()"></button>
+                    <button onclick="App.navigate('home')">Back</button>
+                </div>
+            </div>
+            <div class="crumb"><button onclick="App.navigate('home')">Home</button> / Search Records</div>
+            <div class="searchbar">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-soft)" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+                <input type="text" id="searchInput" placeholder="Search by ID, requestor, project, material, equipment, personnel…" oninput="performSearch()" />
+            </div>
+            <div class="panel" style="margin-bottom:14px;">
+                <div class="panel-head"><h3>Results</h3><span class="mono" style="font-size:11px;color:var(--ink-soft)" id="searchCount">0 found</span></div>
+                <div class="empty" id="searchEmpty">
+                    <div class="glyph">⌕</div>
+                    <p>Mag-type para maghanap.</p>
+                    <p class="small">Projects, cash requests, materials, equipment, manpower, billings, at transfers. I-click ang resulta para makita ang detalye.</p>
+                </div>
+            </div>
+            <!-- v8: grouped, type-aware result tables render here -->
+            <div id="searchResults"></div>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!--  SCRIPTS                                   -->
+    <!-- ════════════════════════════════════════════ -->
+    <!-- ============================================================
+         SCRIPT LOAD ORDER (critical):
+         1. core       — icons, App shell, auth, UI helpers, modals
+         2. services   — DataService (backend bridge)
+         3. pages      — page modules; the four project/* files build
+                         ONE ProjectPage object via Object.assign, so
+                         project-core.js must load before the others
+         4. features   — search + form submissions
+         5. init.js    — boots the app; must stay LAST
+         ============================================================ -->
+    <script src="js/core/icons.js"></script>
+    <!-- v10: searchable pickers for the Estimates tab -->
+    <script src="js/components/search-select.js"></script>
+    <script src="js/core/app.js"></script>
+    <script src="js/core/auth.js"></script>
+    <script src="js/core/ui.js"></script>
+    <script src="js/core/modals.js"></script>
+    <script src="js/services/data-service.js"></script>
+    <script src="js/pages/home.js"></script>
+    <script src="js/pages/project/project-core.js"></script>
+    <script src="js/pages/project/project-daily.js"></script>
+    <script src="js/pages/project/project-sow.js"></script>
+    <!-- project-gantt.js augments ProjectPage via Object.assign — must load AFTER project-sow.js -->
+    <script src="js/pages/project/project-gantt.js"></script>
+    <script src="js/pages/project/project-schedule.js"></script>
+    <script src="js/pages/project/project-estimates.js"></script>
+    <!-- v6 tabs — augment ProjectPage via Object.assign, load after project-core.js -->
+    <script src="js/pages/project/project-materials.js"></script>
+    <script src="js/pages/project/project-equipment.js"></script>
+    <script src="js/pages/project/project-billings.js"></script>
+    <script src="js/pages/project/project-variations.js"></script>
+    <script src="js/pages/project/project-siteops.js"></script>
+    <script src="js/pages/approvals.js"></script>
+    <script src="js/pages/finance.js"></script>
+    <script src="js/pages/portfolio.js"></script>
+    <script src="js/pages/materials.js"></script>
+    <script src="js/pages/equipment.js"></script>
+    <script src="js/pages/manpower.js"></script>
+    <script src="js/features/search.js"></script>
+    <script src="js/features/form-submissions.js"></script>
+    <script src="js/init.js"></script>
+
+    <!-- ════════════════════════════════════════════════════════════════ -->
+    <!--  DYNAMIC TOPBAR USER LABEL UPDATER                            -->
+    <!-- ════════════════════════════════════════════════════════════════ -->
+    <script>
+        (function() {
+            'use strict';
+
+            function updateTopbarUserLabel() {
+                try {
+                    const stored = localStorage.getItem('fctc_user');
+                    if (!stored) return;
+
+                    const user = JSON.parse(stored);
+                    if (!user || !user.name) return;
+
+                    const userName = user.name;
+                    const roleLabel = user.roleLabel || user.role || 'User';
+
+                    const label = document.getElementById('home-user-label');
+                    if (label) {
+                        label.textContent = roleLabel + ' — ' + userName;
+                    }
+
+                    document.querySelectorAll('.requester-badge').forEach(function(el) {
+                        const strong = el.querySelector('strong');
+                        if (strong) {
+                            strong.textContent = userName;
+                        } else {
+                            const text = el.textContent;
+                            const colonIndex = text.indexOf(':');
+                            if (colonIndex > -1) {
+                                const prefix = text.substring(0, colonIndex + 1);
+                                el.textContent = prefix + ' ' + userName;
+                            } else {
+                                el.textContent = 'Requesting as: ' + userName;
+                            }
+                        }
+                    });
+
+                } catch (_) { /* ignore errors */ }
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', updateTopbarUserLabel);
+            } else {
+                updateTopbarUserLabel();
+            }
+
+            window.addEventListener('storage', function(e) {
+                if (e.key === 'fctc_user') {
+                    updateTopbarUserLabel();
+                }
+            });
+
+            window.updateTopbarUserLabel = updateTopbarUserLabel;
+
+            if (typeof App !== 'undefined' && App && App.navigate) {
+                const originalNavigate = App.navigate;
+                App.navigate = function(page) {
+                    const result = originalNavigate.call(this, page);
+                    setTimeout(updateTopbarUserLabel, 100);
+                    return result;
+                };
+            }
+
+            if (typeof handleLogin === 'function') {
+                const originalLogin = handleLogin;
+                window.handleLogin = async function(e) {
+                    const result = await originalLogin(e);
+                    setTimeout(updateTopbarUserLabel, 150);
+                    return result;
+                };
+            }
+
+            //console.log('✅ Dynamic topbar user label updater loaded.');
+        })();
+    </script>
+</body>
+</html>
