@@ -117,7 +117,7 @@ function getPendingApprovals() {
 
   // v10: attach parsed attachments to every pending item so the list can
   // show a paperclip count and the modal can render them immediately.
-  [cashAdvances, releases, incoming, liquidations, materials, equipment].forEach(function (arr) {
+  [cashAdvances, releases, incomingCash, liquidations, materials, equipment].forEach(function (arr) {
     (arr || []).forEach(function (r) { r.attachments = attachmentsOf_(r); });
   });
 
