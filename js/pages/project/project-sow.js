@@ -311,7 +311,7 @@ Object.assign(ProjectPage, {
                         <span style="margin-left:auto;display:inline-flex;gap:4px;" title="Super Admin controls">
                             <button class="btn-sm" title="Move up" ${idx === 0 ? 'disabled style="opacity:.35;"' : ''} onclick="event.stopPropagation();ProjectPage.moveSOW('${item.id}','up')">${Icon.arrowUp({size:12})}</button>
                             <button class="btn-sm" title="Move down" ${idx === sowItems.length - 1 ? 'disabled style="opacity:.35;"' : ''} onclick="event.stopPropagation();ProjectPage.moveSOW('${item.id}','down')">${Icon.arrowDown({size:12})}</button>
-                            <button class="btn-sm" title="Edit name" onclick="event.stopPropagation();ProjectPage.renameSOW('${item.id}')">${Icon.pencil({size:12})}</button>
+                            <button class="btn-sm" title="Edit SOW item" onclick="event.stopPropagation();ProjectPage.editSOW('${item.id}')">${Icon.pencil({size:12})}</button>
                             <button class="btn-sm danger" title="Delete SOW" onclick="event.stopPropagation();ProjectPage.deleteSOW('${item.id}')">${Icon.trash({size:12})}</button>
                         </span>` : ''}
                     </div>
@@ -471,30 +471,150 @@ Object.assign(ProjectPage, {
         } catch (err) { UI.toast('' + err.message, 'error'); }
     },
 
-    async renameSOW(sowId) {
-        const item = (this._data.sowItems || []).find(s => s.id === sowId);
-        if (!item) return;
-        const current = item.description || '';
-        const name = prompt(`New name for ${sowId}:`, current);
-        if (name === null) return;                       // cancelled
-        const trimmed = name.trim();
-        if (!trimmed || trimmed === current) return;
+    // ─── EDIT SOW (v11 BATCH B) ─────────────────────────────────
+    // This used to be renameSOW(): a single browser prompt() that could
+    // only change the description. A typo in the SOW NUMBER meant
+    // deleting the item and rebuilding its whole estimate by hand.
+    // It is now the same modal as Add SOW, pre-filled, so every field
+    // the item was created with can be corrected — including the id.
+    // renameSOW is kept as an alias so any stale cached markup still
+    // works.
+    renameSOW(sowId) { return this.editSOW(sowId); },
+
+    SOW_UNITS: ['pcs', 'kg', 'tons', 'm', 'sq.m', 'cu.m', 'liters', 'bags',
+                'rolls', 'ea.', 'sets', 'lot', 'unit'],
+
+    editSOW(sowId) {
+        const item = (this._sowItems || this._data.sowItems || []).find(s => s.id === sowId);
+        if (!item) { UI.toast('SOW item not found.', 'error'); return; }
+
+        const existing = document.getElementById('editSOWModal');
+        if (existing) existing.remove();
+
+        // An estimate that is pending or approved is frozen by the
+        // approval flow, so renaming its SOW id is blocked here rather
+        // than failing halfway through the cascade on the server.
+        // The status is NOT a field on the SOW item — it lives on the
+        // estimate group, exactly as the SOW list derives it.
+        const groups = (this._estimatesData && this._estimatesData.groups)
+            || (this._data && this._data.estimates && this._data.estimates.groups)
+            || [];
+        const group = groups.find(g => g.sowId === sowId);
+        const est = String((group && group.status) || 'draft').toLowerCase();
+        const idLocked = est === 'pending' || est === 'approved';
+
+        const esc = v => String(v == null ? '' : v)
+            .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+
+        const unitOptions = this.SOW_UNITS.map(u =>
+            `<option value="${u}" ${String(item.unit) === u ? 'selected' : ''}>${u}</option>`).join('');
+
+        const modal = document.createElement('div');
+        modal.className = 'print-modal-overlay open';
+        modal.id = 'editSOWModal';
+        modal.innerHTML = `
+            <div class="print-modal-content" style="max-width:500px;">
+                <button class="close-modal" onclick="document.getElementById('editSOWModal').remove()">${Icon.close({size:18})}</button>
+                <div class="print-header"><h2>Edit SOW Item</h2>
+                    <div class="print-meta">${esc(sowId)}</div></div>
+                <form id="editSOWForm" onsubmit="return ProjectPage.submitEditSOW(event, '${esc(sowId)}')">
+                    <div class="field">
+                        <label>SOW ID *</label>
+                        <input type="text" id="esow-id" value="${esc(item.id)}" ${idLocked ? 'disabled' : ''} required />
+                        ${idLocked
+                            ? `<p style="font-size:11px;color:var(--amber);margin-top:4px;">The ID is locked because this item's estimate is ${esc(est)}. Reject or return the estimate to draft first.</p>`
+                            : `<p style="font-size:11px;color:var(--ink-soft);margin-top:4px;">Changing the ID relinks this item's estimate, cash advances, variations, punchlist, OT requests, predecessor links and daily-report progress.</p>`}
+                    </div>
+                    <div class="field"><label>Description *</label>
+                        <input type="text" id="esow-desc" value="${esc(item.description)}" required /></div>
+                    <div class="field"><label>Quantity *</label>
+                        <input type="number" id="esow-qty" step="0.01" min="0" value="${parseFloat(item.qty) || 0}" required /></div>
+                    <div class="field"><label>Unit *</label>
+                        <select id="esow-unit" required>
+                            <option value="">Select unit...</option>
+                            ${unitOptions}
+                        </select>
+                    </div>
+                    <div class="field"><label>Predecessors</label>
+                        <input type="text" id="esow-pred" value="${esc(item.predecessors)}" placeholder="e.g. A.1, A.2 — comma separated" />
+                        <p style="font-size:11px;color:var(--ink-soft);margin-top:4px;">Finish-to-start links. This item starts the day after the latest predecessor finishes.</p>
+                    </div>
+                    <div class="field" style="display:flex;align-items:center;gap:8px;">
+                        <input type="checkbox" id="esow-milestone" ${item.isMilestone ? 'checked' : ''} style="width:auto;" />
+                        <label for="esow-milestone" style="margin:0;">Milestone (zero duration, drawn as a diamond)</label>
+                    </div>
+                    <div class="submit-row">
+                        <button type="submit" class="btn-primary" id="editSOWSubmitBtn">Save Changes</button>
+                        <button type="button" class="btn-ghost" onclick="document.getElementById('editSOWModal').remove()">Cancel</button>
+                    </div>
+                </form>
+            </div>`;
+        document.body.appendChild(modal);
+        setTimeout(() => document.getElementById('esow-desc')?.focus(), 50);
+    },
+
+    async submitEditSOW(e, sowId) {
+        e.preventDefault();
+        const idEl = document.getElementById('esow-id');
+        const newId = idEl.disabled ? sowId : idEl.value.trim();
+        const description = document.getElementById('esow-desc').value.trim();
+        const qty = parseFloat(document.getElementById('esow-qty').value) || 0;
+        const unit = document.getElementById('esow-unit').value;
+        const predecessors = document.getElementById('esow-pred').value.trim();
+        const isMilestone = document.getElementById('esow-milestone').checked;
+
+        if (!newId || !description || !qty || !unit) {
+            UI.toast('Please fill in all required fields.', 'error');
+            return false;
+        }
+        if (newId.indexOf(',') > -1) {
+            UI.toast('A SOW ID cannot contain a comma — predecessor lists are comma separated.', 'error');
+            return false;
+        }
+
+        const renaming = newId !== sowId;
+        if (renaming) {
+            const ok = await Confirm.open(`Rename ${sowId} to ${newId}?`,
+                `Every reference to ${sowId} in this project will be updated: its estimate, cash advances, cash releases, variation orders, punchlist items, OT requests, predecessor links on other tasks, and the accomplishment rows in your daily site reports. Other projects are not touched.`);
+            if (!ok) return false;
+        }
+
+        const btn = document.getElementById('editSOWSubmitBtn');
+        const original = btn.textContent;
+        btn.textContent = 'Saving...';
+        btn.disabled = true;
+
         try {
-            await DataService.updateSOWItem(this._currentProjectId, sowId, { description: trimmed });
-            UI.toast(`${sowId} renamed.`, 'success');
+            await DataService.updateSOWItem(this._currentProjectId, sowId, {
+                newId: newId, description, qty, unit, predecessors, isMilestone
+            });
+            UI.toast(renaming ? `${sowId} renamed to ${newId}.` : `${newId} updated.`, 'success');
+            document.getElementById('editSOWModal')?.remove();
             await this.open(this._currentProjectId, true);
             this.switchTab('sow');
-        } catch (err) { UI.toast('' + err.message, 'error'); }
+        } catch (err) {
+            UI.toast('' + err.message, 'error');
+            btn.textContent = original;
+            btn.disabled = false;
+        }
+        return false;
     },
 
     async deleteSOW(sowId) {
-        const item = (this._data.sowItems || []).find(s => s.id === sowId);
+        const item = (this._sowItems || this._data.sowItems || []).find(s => s.id === sowId);
+        // v11 BATCH B: the old text promised the estimate would be
+        // "orphaned" — which is exactly the bug that was fixed. The
+        // backend now removes the estimate group and every material,
+        // labor, equipment and indirect line under it, so the warning
+        // says what actually happens.
         const ok = await Confirm.open(`Delete ${sowId}?`,
-            `"${item ? item.description : sowId}" will be removed from the SOW list, together with its schedule bar. Its estimate group (if any) will be orphaned. This cannot be undone.`);
+            `"${item ? item.description : sowId}" will be removed from the SOW list and the schedule, together with its ENTIRE estimate — every material, labor, equipment and indirect line item under it. Cash advances and variation orders are kept but unlinked. Predecessor links to this item are cleared. This cannot be undone.`);
         if (!ok) return;
         try {
-            await DataService.deleteSOWItem(this._currentProjectId, sowId);
-            UI.toast(`${sowId} deleted.`, 'success');
+            const res = await DataService.deleteSOWItem(this._currentProjectId, sowId);
+            const extra = res && res.lineItems
+                ? ` (${res.lineItems} estimate line item${res.lineItems === 1 ? '' : 's'} removed)` : '';
+            UI.toast(`${sowId} deleted.${extra}`, 'success');
             await this.open(this._currentProjectId, true);
             this.switchTab('sow');
         } catch (err) { UI.toast('' + err.message, 'error'); }

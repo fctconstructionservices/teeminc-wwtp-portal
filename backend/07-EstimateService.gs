@@ -107,10 +107,7 @@ function submitEstimatesForApproval(projectId, sowId) {
   if (!g) throw new Error('Estimate group not found');
   updateRow_('EstimateGroups', 'id', g.id, { status: 'pending', submittedBy: currentUserEmail_() });
   logActivity_('Estimate for ' + sowId + ' submitted for approval by ' + currentUserName_(), 'g');
-  // v11 BATCH A: Super Admin bypass. Routed through the approval engine
-  // so the estimate total is still written back to the SOW budget.
-  var autoApproved = autoApproveIfSuper_(g.id, 'Estimate');
-  return { success: true, autoApproved: autoApproved };
+  return { success: true };
 }
 
 function approveEstimates(projectId, sowId) {
@@ -127,7 +124,10 @@ function approveEstimates(projectId, sowId) {
     const mode = (sow && sow.budgetMode) || 'auto';
     if (mode !== 'manual') {
       newBudget = computeEstimateGroupTotalByMode_(g.id, mode);
-      updateRow_('SOWItems', 'id', sowId, { budget: newBudget });
+      // v11 BATCH B: scoped to id + projectId. SOW ids are hand-typed
+      // and repeat across projects, so approving an estimate here could
+      // overwrite the budget of the same-numbered SOW in another project.
+      updateRowWhere_('SOWItems', { id: sowId, projectId: projectId }, { budget: newBudget });
     }
   }
   logActivity_('Estimate for ' + sowId + ' approved' + (newBudget !== null ? ' — SOW budget set to ₱' + newBudget.toFixed(2) : ''), 'g');

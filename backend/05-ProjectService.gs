@@ -1045,7 +1045,13 @@ function getProjectData(projectId) {
 
 function addSOWItem(projectId, data) {
   assertProjectEditor_(projectId);   // v6.6
-  const id = data.id || 'SOW-' + Utilities.getUuid().slice(0, 6).toUpperCase();
+  const id = String(data.id || 'SOW-' + Utilities.getUuid().slice(0, 6).toUpperCase()).trim();
+  // v11 BATCH B: same id rule the rename path enforces, applied at
+  // creation too — otherwise an id containing a comma would silently
+  // corrupt every predecessor list it was later added to.
+  if (!/^[A-Za-z0-9._\- ]{1,40}$/.test(id)) {
+    throw new Error('SOW ID may only contain letters, numbers, dots, dashes, underscores and spaces (max 40).');
+  }
   const description = data.description || '';
   const qty = parseFloat(data.qty) || 0;
   const unit = data.unit || '';
@@ -1074,17 +1080,58 @@ function addSOWItem(projectId, data) {
     baselineStart: '', baselineEnd: ''
   });
 
-  appendRow_('EstimateGroups', {
-    id: nextId_('EG'), projectId: projectId, sowId: id,
-    sowDescription: description, status: 'draft'
+  // v11 BATCH B: only create the estimate group if this SOW does not
+  // already have one. Before the cascade delete existed, a deleted-then-
+  // re-added SOW could end up with two groups pointing at the same id,
+  // and every estimate read would pick whichever came first.
+  const hasGroup = readAll_('EstimateGroups').some(function (g) {
+    return g.projectId === projectId && String(g.sowId) === id;
   });
+  if (!hasGroup) {
+    appendRow_('EstimateGroups', {
+      id: nextId_('EG'), projectId: projectId, sowId: id,
+      sowDescription: description, status: 'draft'
+    });
+  }
 
   logActivity_('SOW ' + id + ' added to project ' + projectId, 'blue', id);
   return { success: true, id: id };
 }
 
+/**
+ * updateSOWItem - Edits a SOW item.
+ *
+ * ── v11 BATCH B ──────────────────────────────────────────────
+ * TWO CHANGES.
+ *
+ * 1. SCOPED WRITES. Every lookup here matched SOWItems by `id` ALONE.
+ *    SOW ids are hand-typed ("A.1", "1.1") and repeat freely across
+ *    projects, so editing A.1 in this project could rewrite A.1 in a
+ *    different one. All SOWItems access is now keyed on id + projectId.
+ *
+ * 2. THE ID ITSELF IS EDITABLE, via data.newId. The old flow only ever
+ *    changed the description (the UI was a single prompt()), so a typo
+ *    in the SOW number meant deleting the item and rebuilding its whole
+ *    estimate. Renaming is a genuine cascade — the id is a foreign key
+ *    in eight places — so it is handled by renameSOWId_() below rather
+ *    than a bare column write.
+ */
 function updateSOWItem(projectId, sowId, data) {
   assertProjectEditor_(projectId);   // v6.6
+
+  const key = { id: sowId, projectId: projectId };
+  if (findRowNumWhere_('SOWItems', key) === -1) throw new Error('SOW item not found in this project.');
+
+  // ── the id rename runs FIRST, so the field patch below lands on the
+  //    row under its new id ──
+  var renamedTo = null;
+  if (data.newId !== undefined && String(data.newId).trim() &&
+      String(data.newId).trim() !== String(sowId)) {
+    renamedTo = renameSOWId_(projectId, sowId, String(data.newId).trim());
+    sowId = renamedTo;
+    key.id = sowId;
+  }
+
   const patch = {};
   if (data.description !== undefined) patch.description = data.description;
   if (data.budget !== undefined) patch.budget = parseFloat(data.budget) || 0;
@@ -1098,17 +1145,110 @@ function updateSOWItem(projectId, sowId, data) {
   if (data.budgetMode !== undefined) patch.budgetMode = data.budgetMode;
   if (data.predecessors !== undefined) patch.predecessors = String(data.predecessors || '');
   if (data.isMilestone !== undefined) patch.isMilestone = data.isMilestone ? 'TRUE' : '';
-  const found = findRowNum_('SOWItems', 'id', sowId);
-  if (found === -1) throw new Error('SOW item not found.');
-  updateRow_('SOWItems', 'id', sowId, patch);
+
+  if (Object.keys(patch).length) updateRowWhere_('SOWItems', key, patch);
+
   // v8: keep the estimate group's description in sync when the SOW is
   // renamed, so the Estimates tab and breakdown modal show the new name.
   if (data.description !== undefined) {
     const grp = readAll_('EstimateGroups').find(function (g) { return g.projectId === projectId && g.sowId === sowId; });
     if (grp) updateRow_('EstimateGroups', 'id', grp.id, { sowDescription: data.description });
   }
-  logActivity_('SOW ' + sowId + ' updated', 'blue', sowId);
-  return { success: true };
+
+  logActivity_('SOW ' + sowId + ' updated' + (renamedTo ? ' (renamed from ' + arguments[1] + ')' : ''), 'blue', sowId);
+  return { success: true, id: sowId, renamed: !!renamedTo };
+}
+
+/**
+ * renameSOWId_ (v11 BATCH B) - Changes a SOW item's id and rewrites
+ * every reference to it inside the SAME project.
+ *
+ * The SOW id is an unenforced foreign key in eight places. Changing the
+ * SOWItems row alone would leave all of them pointing at an id that no
+ * longer exists — the estimate would detach, the item would vanish from
+ * its own budget rollup, and its cash advances would stop counting
+ * toward "actual". Every one of those is rewritten here:
+ *
+ *   SOWItems.id                     the row itself
+ *   SOWItems.predecessors           sibling tasks that depend on it
+ *   EstimateGroups.sowId            the estimate and all its line items
+ *   CashAdvanceRequests.sowId       feeds the SOW actual
+ *   CashRelease.sowId               feeds the SOW actual
+ *   VariationOrders.sowId           adjusts the SOW budget + contract
+ *   Punchlist.sowId                 defect tracking
+ *   OTRequests.sowIdsJSON           affected-SOW array
+ *   DailyRecords.workAccomplishedJSON[].scope   drives % complete
+ *
+ * Everything is scoped by projectId, so an identical id in another
+ * project is never touched.
+ *
+ * The whole call runs inside the document lock doPost() already takes
+ * for write actions, so no other request can read a half-renamed state.
+ */
+function renameSOWId_(projectId, oldId, newId) {
+  if (!/^[A-Za-z0-9._\- ]{1,40}$/.test(newId)) {
+    throw new Error('SOW ID may only contain letters, numbers, dots, dashes, underscores and spaces (max 40).');
+  }
+  const clash = readAll_('SOWItems').find(function (s) {
+    return s.projectId === projectId && String(s.id) === newId;
+  });
+  if (clash) throw new Error('SOW ID "' + newId + '" already exists in this project.');
+
+  // 1. the row itself
+  updateRowWhere_('SOWItems', { id: oldId, projectId: projectId }, { id: newId });
+
+  // 2. predecessor links on sibling tasks (comma-separated id list)
+  readAll_('SOWItems').filter(function (s) {
+    return s.projectId === projectId && String(s.predecessors || '').indexOf(oldId) > -1;
+  }).forEach(function (s) {
+    const rebuilt = String(s.predecessors).split(',')
+      .map(function (p) { return p.trim(); })
+      .map(function (p) { return p === oldId ? newId : p; })
+      .filter(String).join(',');
+    if (rebuilt !== String(s.predecessors)) {
+      updateRowWhere_('SOWItems', { id: s.id, projectId: projectId }, { predecessors: rebuilt });
+    }
+  });
+
+  // 3. simple sowId foreign keys, all project-scoped
+  [['EstimateGroups', 'sowId'], ['CashAdvanceRequests', 'sowId'],
+   ['CashRelease', 'sowId'], ['VariationOrders', 'sowId'],
+   ['Punchlist', 'sowId']].forEach(function (spec) {
+    const sheetName = spec[0], col = spec[1];
+    readAll_(sheetName).filter(function (r) {
+      return r.projectId === projectId && String(r[col]) === oldId;
+    }).forEach(function (r) {
+      const p = {}; p[col] = newId;
+      updateRow_(sheetName, 'id', r.id, p);
+    });
+  });
+
+  // 4. OT requests hold an ARRAY of affected SOW ids
+  readAll_('OTRequests').filter(function (o) { return o.projectId === projectId; })
+    .forEach(function (o) {
+      const ids = safeParse_(o.sowIdsJSON, []);
+      if (ids.indexOf(oldId) === -1) return;
+      const next = ids.map(function (x) { return x === oldId ? newId : x; });
+      updateRow_('OTRequests', 'id', o.id, { sowIdsJSON: JSON.stringify(next) });
+    });
+
+  // 5. daily reports scope each accomplishment row to a SOW id — this is
+  //    what computeSOWProgress_ reads, so missing it would zero the
+  //    item's % complete and its earned value.
+  readAll_('DailyRecords').filter(function (d) { return d.projectId === projectId; })
+    .forEach(function (d) {
+      const rows = safeParse_(d.workAccomplishedJSON, []);
+      if (!rows.length) return;
+      var touched = false;
+      rows.forEach(function (w) {
+        if (String(w.scope) === oldId) { w.scope = newId; touched = true; }
+      });
+      if (touched) updateRow_('DailyRecords', 'id', d.id, { workAccomplishedJSON: JSON.stringify(rows) });
+    });
+
+  logActivity_('SOW ' + oldId + ' renamed to ' + newId + ' in ' + projectId +
+    ' — estimates, cash advances, variations, punchlist, OT and daily reports relinked', 'blue', newId);
+  return newId;
 }
 
 /**
@@ -1157,17 +1297,82 @@ function moveSOWItem(projectId, sowId, direction) {
   return { success: true, moved: true };
 }
 
+/**
+ * deleteSOWItem - Removes a SOW item and everything that belongs to it.
+ *
+ * ── v11 BATCH B: TWO BUGS FIXED ──────────────────────────────
+ *
+ * 1. WRONG-PROJECT DELETE. The row was found with
+ *    findRowNum_('SOWItems', 'id', sowId) — id only. SOW ids are typed
+ *    by hand and repeat across projects, so deleting "A.1" here could
+ *    delete "A.1" belonging to another project, whichever sat higher in
+ *    the sheet. Silent, unrecoverable data loss. Now scoped to
+ *    id + projectId.
+ *
+ * 2. ORPHANED ESTIMATE LINE ITEMS. The EstimateGroups row was deleted
+ *    but its children in EstimateMaterials / EstimateLabor /
+ *    EstimateEquipment / EstimateIndirect were left behind forever,
+ *    keyed to a groupId nothing points at any more. The old confirm
+ *    dialog even admitted this ("its estimate group will be orphaned").
+ *    Every material, labor, equipment and indirect row you ever entered
+ *    for a deleted SOW stayed in the spreadsheet, growing it on every
+ *    delete and slowing every estimate read. They are now removed with
+ *    the group.
+ *
+ * Returns what was actually deleted so the UI can report it honestly.
+ */
 function deleteSOWItem(projectId, sowId) {
   assertProjectEditor_(projectId);   // v6.6
-  const rowNum = findRowNum_('SOWItems', 'id', sowId);
-  if (rowNum > -1) sheet_('SOWItems').deleteRow(rowNum);
-  const group = readAll_('EstimateGroups').find(function (g) { return g.projectId === projectId && g.sowId === sowId; });
-  if (group) {
-    const groupRow = findRowNum_('EstimateGroups', 'id', group.id);
-    if (groupRow > -1) sheet_('EstimateGroups').deleteRow(groupRow);
+
+  const deleted = deleteRowsWhere_('SOWItems', { id: sowId, projectId: projectId });
+  if (!deleted) throw new Error('SOW item not found in this project.');
+
+  // ── cascade: estimate group + every line item under it ──
+  const groupIds = readAll_('EstimateGroups')
+    .filter(function (g) { return g.projectId === projectId && g.sowId === sowId; })
+    .map(function (g) { return g.id; });
+
+  var lineItems = 0;
+  if (groupIds.length) {
+    ['EstimateMaterials', 'EstimateLabor', 'EstimateEquipment', 'EstimateIndirect']
+      .forEach(function (sheetName) {
+        lineItems += deleteRowsByValues_(sheetName, 'groupId', groupIds);
+      });
+    groupIds.forEach(function (gid) { deleteRow_('EstimateGroups', 'id', gid); });
   }
-  logActivity_('SOW ' + sowId + ' deleted from project ' + projectId, 'a', sowId);
-  return { success: true };
+
+  // ── dangling references: clear rather than delete ──
+  // A cash advance or variation order is a financial record and must
+  // survive its SOW. Blanking the link keeps the money in the project
+  // ledger while removing the pointer to a row that no longer exists.
+  var unlinked = 0;
+  [['CashAdvanceRequests', 'sowId'], ['CashRelease', 'sowId'], ['Punchlist', 'sowId']]
+    .forEach(function (spec) {
+      readAll_(spec[0]).filter(function (r) {
+        return r.projectId === projectId && String(r[spec[1]]) === String(sowId);
+      }).forEach(function (r) {
+        const p = {}; p[spec[1]] = '';
+        updateRow_(spec[0], 'id', r.id, p);
+        unlinked++;
+      });
+    });
+
+  // Predecessor links pointing at the deleted task would break the CPM
+  // forward pass, so they are stripped from every sibling.
+  readAll_('SOWItems').filter(function (s) {
+    return s.projectId === projectId && String(s.predecessors || '').indexOf(sowId) > -1;
+  }).forEach(function (s) {
+    const rebuilt = String(s.predecessors).split(',')
+      .map(function (p) { return p.trim(); })
+      .filter(function (p) { return p && p !== String(sowId); })
+      .join(',');
+    updateRowWhere_('SOWItems', { id: s.id, projectId: projectId }, { predecessors: rebuilt });
+  });
+
+  logActivity_('SOW ' + sowId + ' deleted from project ' + projectId +
+    ' — ' + groupIds.length + ' estimate group(s), ' + lineItems + ' line item(s) removed' +
+    (unlinked ? ', ' + unlinked + ' record(s) unlinked' : ''), 'a', sowId);
+  return { success: true, estimateGroups: groupIds.length, lineItems: lineItems, unlinked: unlinked };
 }
 
 function getSOWItemsForProject(projectId) {
@@ -1315,8 +1520,11 @@ function updateSOWBudget(projectId, sowId, mode, manualAmount) {
   const valid = ['auto', 'indirect', 'manual'];
   if (valid.indexOf(mode) === -1) throw new Error('Invalid budget mode: ' + mode);
 
-  const found = findRowNum_('SOWItems', 'id', sowId);
-  if (found === -1) throw new Error('SOW item not found.');
+  // v11 BATCH B: scoped to id + projectId. SOW ids repeat across
+  // projects, so the id-only lookup could set another project's budget.
+  if (findRowNumWhere_('SOWItems', { id: sowId, projectId: projectId }) === -1) {
+    throw new Error('SOW item not found in this project.');
+  }
 
   let budget;
   if (mode === 'manual') {
@@ -1328,7 +1536,7 @@ function updateSOWBudget(projectId, sowId, mode, manualAmount) {
     budget = g ? computeEstimateGroupTotalByMode_(g.id, mode) : 0;
   }
 
-  updateRow_('SOWItems', 'id', sowId, { budgetMode: mode, budget: budget });
+  updateRowWhere_('SOWItems', { id: sowId, projectId: projectId }, { budgetMode: mode, budget: budget });
   logActivity_('SOW ' + sowId + ' budget set to ₱' + budget.toFixed(2) + ' (' + mode + ')', 'blue', sowId);
   return { success: true, budget: budget, mode: mode };
 }
@@ -1344,7 +1552,9 @@ function saveBaseline(projectId) {
   const items = readAll_('SOWItems').filter(function (s) { return s.projectId === projectId; });
   if (!items.length) throw new Error('No SOW items to baseline.');
   items.forEach(function (s) {
-    updateRow_('SOWItems', 'id', s.id, {
+    // v11 BATCH B: scoped — an id-only write here baselined the
+    // same-numbered task in whichever project happened to sit first.
+    updateRowWhere_('SOWItems', { id: s.id, projectId: projectId }, {
       baselineStart: s.startDate || '',
       baselineEnd: s.endDate || ''
     });
