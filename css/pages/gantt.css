@@ -1,209 +1,484 @@
 /* ================================================================
-   pages/gantt.css — v3 MS Project-style Timeline
-   Imported AFTER project-sow.css so these rules override the older
-   Gantt styling (notably the wider 220px label column).
+   pages/gantt.css — v11 Timeline (frozen-pane layout)
+
+   Imported AFTER project-sow.css. The old `.gantt-*` row/label/timeline
+   rules are gone from BOTH files — this is now the only place the
+   Timeline is styled, so there is no longer a padding-left in one file
+   fighting a width in another.
+
+   THE LAYOUT. One `.gt-scroll` scrolls on both axes. Inside it a
+   two-column grid holds the frozen task table and the timeline:
+
+       grid-template-columns: var(--gt-lw) max-content
+
+   · left cells   position:sticky; left:0   z 2  — pinned sideways
+   · header cells position:sticky; top:0    z 3  — pinned downward
+   · corner cell  sticky on both             z 4
+   · today line / links                      z 1  — under both panes
+
+   Vertical scrolling is shared because it is ONE element. There is no
+   scroll-syncing script between two panes, so nothing can drift.
+
+   --gt-lw is the single source of truth for the pane width. The grid,
+   the splitter and the today line all read it.
    ================================================================ */
 
-/* Wider label column — the inline width:220px in project-gantt.js
-   must be matched here so the header offset and rows line up. */
-.gantt-timeline {
-    padding-left: 0;           /* label spacer is now an inline element */
+:root {
+    --gt-lw: 470px;
+    --gt-week-w: 63px;
+    --gt-row-h: 36px;
+    --gt-head-h: 44px;
 }
-.gantt-row-label {
-    width: 220px;              /* overrides the 120px in project-sow.css */
+
+/* ─── toolbar ─────────────────────────────────────────────── */
+.gt-toolbar {
     display: flex;
-    flex-direction: column;
-    justify-content: center;
-    line-height: 1.25;
-    white-space: normal;       /* allow the sub-line to wrap */
-    overflow: hidden;
-    padding-right: 10px;
-    gap: 1px;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin: 0 0 10px;
 }
-.gantt-label-text {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--ink);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.gantt-label-sub {
-    font-size: 8.5px;
+.gt-lbl {
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
     color: var(--ink-soft);
-    font-family: 'IBM Plex Mono', monospace;
-    white-space: nowrap;
+    font-weight: 600;
+}
+.gt-sep {
+    width: 1px;
+    height: 18px;
+    background: var(--line);
+    margin: 0 4px;
+}
+
+/* ─── the frame ───────────────────────────────────────────── */
+.gt {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
     overflow: hidden;
-    text-overflow: ellipsis;
+}
+.gt-scroll {
+    overflow: auto;
+    max-height: min(72vh, 640px);
+    overscroll-behavior: contain;
+}
+.gt-grid {
+    display: grid;
+    grid-template-columns: var(--gt-lw) max-content;
+    position: relative;
+    width: max-content;
+    min-width: 100%;
+}
+.gt-empty {
+    grid-column: 1 / -1;
+    padding: 34px 18px;
+    text-align: center;
+    color: var(--ink-soft);
+    font-size: 12.5px;
 }
 
-/* Critical-path emphasis: red outline on bars and milestones */
-.gantt-bar.gantt-critical {
-    outline: 2px solid var(--red);
-    outline-offset: 1px;
+/* ─── frozen task table ───────────────────────────────────── */
+/* The column template lives here ONCE and is shared by the header and
+   every row, so the two can never fall out of alignment. */
+.gt-cell-left,
+.gt-head-left {
+    display: grid;
+    grid-template-columns: minmax(120px, 1fr) 116px 124px 54px 124px;
 }
-.gantt-milestone.gantt-critical {
-    filter: drop-shadow(0 0 2px var(--red));
+.gt-cell-left {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: var(--surface);
+    border-right: 2px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    align-items: center;
+    height: var(--gt-row-h);
+    font-size: 11.5px;
 }
-
-/* Progress fill inside a bar (driven by daily report % complete) */
-.gantt-progress-fill {
-    position: absolute;
+.gt-cell-left > * {
+    padding: 0 7px;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+}
+.gt-head-left {
+    position: sticky;
     top: 0;
     left: 0;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.28);
-    border-radius: 6px 0 0 6px;
-    z-index: 1;
-    pointer-events: none;
-}
-.gantt-bar-label {
-    position: relative;
-    z-index: 2;
-    pointer-events: none;
-}
-.gantt-bar .resize-handle {
-    z-index: 3;
-}
-
-/* Baseline ghost bar — thin bar under the live bar */
-.gantt-baseline {
-    position: absolute;
-    bottom: 2px;
-    height: 5px;
-    background: repeating-linear-gradient(
-        90deg,
-        var(--ink-soft),
-        var(--ink-soft) 4px,
-        transparent 4px,
-        transparent 7px
-    );
-    opacity: 0.7;
-    border-radius: 3px;
-    z-index: 1;
-    pointer-events: none;
-}
-
-/* Milestone diamond */
-.gantt-milestone {
-    position: absolute;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 18px;
-    line-height: 1;
-    color: var(--blueprint, #24455A);
-    cursor: pointer;
     z-index: 4;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    background: var(--surface);
+    border-right: 2px solid var(--line);
+    border-bottom: 2px solid var(--line);
+    align-items: end;
+    height: var(--gt-head-h);
 }
-.gantt-milestone:hover {
-    color: var(--ink);
-}
-
-/* Today vertical line spanning the body */
-.gantt-today-line {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 2px;
-    background: var(--red);
-    opacity: 0.55;
-    z-index: 2;
-    pointer-events: none;
-}
-.gantt-today-line::before {
-    content: 'TODAY';
-    position: absolute;
-    top: -2px;
-    left: 3px;
-    font-size: 7px;
+.gt-head-left > * {
+    padding: 0 7px 7px;
+    font-size: 9px;
     font-weight: 700;
-    color: var(--red);
-    font-family: 'IBM Plex Mono', monospace;
-    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--ink-soft);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
+.gt-head-left .col-dur { text-align: center; }
 
-/* SVG dependency links overlay sits above rows but below bars’ hover */
-#ganttLinks {
-    z-index: 2;
-}
-
-/* ── v10: schedule grid (start / duration / finish / predecessor) ── */
-.sched-head {
+/* task label */
+.gt-task {
     display: flex;
     align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-    margin: 4px 0 8px;
+    gap: 6px;
+    min-width: 0;
+    cursor: pointer;
 }
-.sched-note {
-    font-size: 11px;
-    color: var(--ink-soft);
+.gt-task .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 2px;
+    flex-shrink: 0;
 }
-.sched-panel {
-    margin-bottom: 14px;
-    overflow-x: auto;
-}
-.sched-table { width: 100%; border-collapse: collapse; }
-.sched-table th {
-    background: var(--blueprint-tint);
+.gt-task .id {
     font-family: 'IBM Plex Mono', monospace;
-    font-size: 9px;
-    letter-spacing: .09em;
-    text-transform: uppercase;
+    font-size: 10.5px;
+    font-weight: 600;
     color: var(--blueprint);
-    text-align: left;
-    padding: 7px 9px;
+    flex-shrink: 0;
+}
+.gt-task.is-critical .id { color: var(--red); }
+.gt-task .nm {
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
-    border-bottom: 1px solid var(--line);
+    font-weight: 500;
 }
-.sched-table td {
-    padding: 6px 9px;
-    border-bottom: 1px solid var(--bg);
-    font-size: 12px;
-    vertical-align: top;
-}
-.sched-table tr:last-child td { border-bottom: none; }
-.sched-table tr:hover td { background: #FAF9F4; }
-
-.sched-desc {
-    font-size: 11.5px;
-    color: var(--ink-soft);
-    margin-top: 2px;
-    max-width: 260px;
-}
-.sched-ms {
+.gt-task .ms-tag {
     font-family: 'IBM Plex Mono', monospace;
-    font-size: 9px;
+    font-size: 8.5px;
     text-transform: uppercase;
     letter-spacing: .08em;
     color: var(--amber);
+    flex-shrink: 0;
 }
-.sched-in {
+
+/* schedule inputs */
+.gt-in {
     width: 100%;
-    padding: 4px 6px;
+    padding: 3px 5px;
     border: 1px solid var(--line);
     border-radius: 5px;
     background: var(--surface);
     color: var(--ink);
-    font: 11.5px 'IBM Plex Mono', monospace;
+    font: 11px 'IBM Plex Mono', monospace;
 }
-.sched-in:focus { outline: 2px solid var(--blueprint); outline-offset: -1px; }
-.sched-in[readonly] {
+.gt-in:focus { outline: 2px solid var(--blueprint); outline-offset: -1px; }
+.gt-in[readonly] {
     background: var(--bg);
     color: var(--ink-soft);
     cursor: not-allowed;
 }
-.sched-dur { text-align: right; }
-
-.sched-lock {
-    display: inline-flex;
+.gt-dur { text-align: center; }
+.gt-ro {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-soft);
+}
+.gt-lock {
+    display: none;   /* shown only when the column is wide enough */
     align-items: center;
     gap: 3px;
-    margin-top: 3px;
     font-family: 'IBM Plex Mono', monospace;
-    font-size: 9.5px;
+    font-size: 8.5px;
     color: var(--green);
 }
+.gt-cell-left .col-date { position: relative; }
 
-[data-theme="dark"] .sched-table tr:hover td { background: #262626; }
+/* ─── timeline cells ──────────────────────────────────────── */
+.gt-cell-track {
+    position: relative;
+    height: var(--gt-row-h);
+    border-bottom: 1px solid var(--line);
+    /* one faint rule per WEEK, not per day — a rule per day turns into
+       noise the moment you zoom out past a month */
+    background-image: linear-gradient(90deg, rgba(0, 0, 0, .028) 0 1px, transparent 1px);
+    background-size: var(--gt-week-w) 100%;
+}
+[data-theme="dark"] .gt-cell-track {
+    background-image: linear-gradient(90deg, rgba(255, 255, 255, .05) 0 1px, transparent 1px);
+}
+.gt-head-track {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: var(--surface);
+    border-bottom: 2px solid var(--line);
+    height: var(--gt-head-h);
+}
+.gt-band {
+    display: flex;
+    height: 22px;
+    align-items: center;
+}
+.gt-band .seg {
+    flex: 0 0 auto;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding-left: 6px;
+    border-left: 1px solid var(--line);
+    font-family: 'Oswald', sans-serif;
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--ink);
+    overflow: hidden;
+    white-space: nowrap;
+}
+.gt-ticks {
+    display: flex;
+    height: 22px;
+    align-items: center;
+}
+.gt-ticks .tk {
+    flex: 0 0 auto;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-left: 1px solid var(--line);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    color: var(--ink-soft);
+    overflow: hidden;
+    white-space: nowrap;
+}
+.gt-ticks .tk.is-today { color: var(--red); font-weight: 600; }
+.gt-ticks .tk.is-rest { background: rgba(0, 0, 0, .035); }
+[data-theme="dark"] .gt-ticks .tk.is-rest { background: rgba(255, 255, 255, .04); }
+
+/* ─── row highlight, spanning BOTH panes ──────────────────── */
+.gt-cell-left.is-hover,
+.gt-cell-track.is-hover { background-color: var(--blueprint-tint); }
+
+/* ─── bars ────────────────────────────────────────────────── */
+.gt-bar {
+    position: absolute;
+    top: 8px;
+    height: 19px;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    cursor: grab;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .16);
+    transition: filter var(--transition);
+    touch-action: none;
+}
+.gt-bar:active { cursor: grabbing; }
+.gt-bar:hover { filter: brightness(1.08); }
+.gt-bar.is-critical { outline: 2px solid var(--red); outline-offset: 1px; }
+.gt-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background: rgba(0, 0, 0, .3);
+    border-radius: 5px 0 0 5px;
+    pointer-events: none;
+}
+.gt-bar-lbl {
+    position: relative;
+    z-index: 2;
+    padding: 0 7px;
+    pointer-events: none;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9.5px;
+    font-weight: 600;
+    color: #fff;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, .35);
+    overflow: hidden;
+    white-space: nowrap;
+}
+.gt-handle {
+    position: absolute;
+    top: 0;
+    width: 7px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 3;
+    opacity: 0;
+    background: rgba(255, 255, 255, .55);
+}
+.gt-handle.left { left: 0; border-radius: 5px 0 0 5px; }
+.gt-handle.right { right: 0; border-radius: 0 5px 5px 0; }
+.gt-bar:hover .gt-handle { opacity: 1; }
+
+.gt-baseline {
+    position: absolute;
+    bottom: 3px;
+    height: 4px;
+    border-radius: 2px;
+    background: repeating-linear-gradient(90deg,
+        var(--ink-soft), var(--ink-soft) 4px, transparent 4px, transparent 7px);
+    opacity: .55;
+    pointer-events: none;
+}
+.gt-ms {
+    position: absolute;
+    top: 9px;
+    width: 17px;
+    height: 17px;
+    margin-left: -8px;
+    background: var(--blueprint);
+    transform: rotate(45deg);
+    border-radius: 2px;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .25);
+}
+.gt-ms.is-critical { outline: 2px solid var(--red); outline-offset: 1px; }
+.gt-ms.is-done { background: var(--green); }
+.gt-nodates {
+    position: absolute;
+    left: 10px;
+    top: 10px;
+    font-size: 10px;
+    color: var(--red);
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.gt-today {
+    position: absolute;
+    top: var(--gt-head-h);
+    bottom: 0;
+    width: 2px;
+    z-index: 1;
+    background: var(--red);
+    opacity: .75;
+    pointer-events: none;
+}
+.gt-today::before {
+    content: 'TODAY';
+    position: absolute;
+    top: 2px;
+    left: 4px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    color: var(--red);
+}
+.gt-links {
+    position: absolute;
+    top: var(--gt-head-h);
+    pointer-events: none;
+    z-index: 1;
+    overflow: visible;
+}
+
+/* ─── splitter ────────────────────────────────────────────── */
+/* Sits outside the scroll box. The pane is sticky at left:0, so its
+   right edge never moves relative to the frame — which is exactly what
+   makes a plain absolute position correct here. */
+.gt-splitter {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 9px;
+    z-index: 6;
+    left: calc(var(--gt-lw) - 4px);
+    cursor: col-resize;
+    background: transparent;
+}
+.gt-splitter:hover::after,
+.gt-splitter.is-dragging::after,
+.gt-splitter:focus-visible::after {
+    content: '';
+    position: absolute;
+    left: 3px;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--safety);
+}
+.gt-splitter:focus-visible { outline: none; }
+
+/* ─── legend ──────────────────────────────────────────────── */
+.gt-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-items: center;
+    padding: 10px 2px 0;
+    font-size: 11px;
+    color: var(--ink-soft);
+}
+.gt-legend .dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+    display: inline-block;
+    margin-right: 5px;
+}
+.gt-legend .dot-baseline {
+    background: repeating-linear-gradient(90deg,
+        var(--ink-soft), var(--ink-soft) 3px, transparent 3px, transparent 5px);
+}
+.gt-legend .gt-hint { flex-basis: 100%; font-size: 10.5px; }
+
+/* ─── tooltip (drag feedback) ─────────────────────────────── */
+.gantt-tooltip {
+    position: fixed;
+    z-index: 9999;
+    background: var(--ink);
+    color: var(--bg);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    padding: 4px 8px;
+    border-radius: 5px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .12s ease;
+}
+.gantt-tooltip.show { opacity: 1; }
+
+/* ─── wide panes get the lock caption and roomier columns ─── */
+@media (min-width: 1180px) {
+    .gt-lock { display: inline-flex; }
+    .gt-cell-left .col-date { display: flex; flex-direction: column; justify-content: center; gap: 1px; }
+}
+
+/* ─── phones ──────────────────────────────────────────────── */
+/* The pane narrows to the task name alone. The frozen-pane mechanics
+   are identical, so there is no second layout to keep in sync. */
+@media (max-width: 760px) {
+    :root { --gt-lw: 172px; }
+    .gt-cell-left,
+    .gt-head-left { grid-template-columns: 1fr; }
+    .gt-cell-left .col-pred,
+    .gt-cell-left .col-date,
+    .gt-cell-left .col-dur,
+    .gt-head-left .col-pred,
+    .gt-head-left .col-date,
+    .gt-head-left .col-dur { display: none; }
+    .gt-splitter { display: none; }
+    .gt-task .nm { font-size: 11px; }
+    .gt-task .ms-tag { display: none; }
+    .gt-scroll { max-height: none; height: 62vh; }
+    .gt-legend { gap: 10px; font-size: 10px; }
+}
+
+@media print {
+    .gt-scroll { overflow: visible; max-height: none; }
+    .gt-splitter, .gt-toolbar { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .gt-bar { transition: none; }
+    .gantt-tooltip { transition: none; }
+}

@@ -479,7 +479,7 @@ Object.assign(ProjectPage, {
      * exportBillingsExcel (v9 — item 1) - DETAILED billing export: one
      * worksheet PER BILLING containing its full SWA table (Item No,
      * Description, Amount, Wt%, Previous, This Billing, To Date) plus
-     * the gross/retention/net summary — hindi na yung register summary.
+     * the gross/retention/net summary — not the register summary.
      */
     exportBillingsExcel() {
         if (typeof XLSX === 'undefined') { UI.toast('Excel library not loaded — refresh the page and try again.', 'error'); return; }

@@ -1,14 +1,14 @@
 // ================================================================
-//  pages/project/project-schedule.js — Schedule grid (v10)
+//  pages/project/project-schedule.js — Schedule columns (v11)
 //
-//  PURPOSE: The editable table that sits above the Gantt bars, with
-//  Start, Duration, Finish and Predecessor columns.
+//  PURPOSE: The editable Predecessor / Start / Duration / Finish
+//  columns of the Timeline.
 //
 //  WHY: dragging bars is good for nudging a plan but useless for
 //  entering one — you cannot drag to "18 working days", and re-planning
 //  a delayed chain meant retyping every downstream date by hand.
 //
-//  Behaviour:
+//  Behaviour (unchanged from v10):
 //    · The three date fields stay consistent: change the DURATION and
 //      the finish moves; change the FINISH and the duration recalculates.
 //    · Duration counts WORKING DAYS and skips Sundays, which is how the
@@ -21,11 +21,29 @@
 //    · Everything writes back through updateSOWItem, the same call the
 //      draggable bars use, so the Gantt, PV curve and projected cashflow
 //      all recalculate from one source of truth.
+//
+//  ── v11 BATCH C: THE TABLE MOVED INTO THE CHART ──────────────
+//  This used to render a standalone collapsible <table> ABOVE the Gantt
+//  (renderScheduleGrid). That meant you could read a row's dates OR see
+//  its bar, never both — the "nahihide yung schedule table" problem.
+//  It was not hidden; it was simply somewhere else.
+//
+//  The same columns are now the cells of the Gantt's FROZEN LEFT PANE,
+//  so every row shows its SOW ID, name, predecessor, start, duration and
+//  finish on the SAME LINE as its bar, and they stay pinned while the
+//  timeline scrolls sideways.
+//
+//  renderScheduleGrid() is replaced by two functions that emit grid
+//  cells rather than a table:
+//      renderScheduleHeadCells()            -> the sticky corner header
+//      renderScheduleRowCells(item, idx, …) -> one row's left cell
+//
+//  Every edit handler below is untouched. The working-day maths, the
+//  predecessor chaining and the cycle guard behave exactly as before.
 // ================================================================
 
 Object.assign(ProjectPage, {
 
-    _schedOpen: true,
     _MS_DAY: 86400000,
 
     // ─── working-day helpers (Sunday is a rest day) ───────────
@@ -74,88 +92,92 @@ Object.assign(ProjectPage, {
         return String(item.predecessors || '').split(',').map(x => x.trim()).filter(Boolean)[0] || '';
     },
 
-    // ─── render ───────────────────────────────────────────────
+    // ─── the frozen pane ──────────────────────────────────────
 
-    toggleSchedule() {
-        this._schedOpen = !this._schedOpen;
-        this.renderGantt(this._data);
+    /**
+     * renderScheduleHeadCells - the sticky corner cell. Its column
+     * template must match renderScheduleRowCells exactly, so both read
+     * it from the same CSS class rather than repeating a width list.
+     */
+    renderScheduleHeadCells() {
+        return `
+            <div class="gt-head-left">
+                <div>SOW item</div>
+                <div class="col-pred">Predecessor</div>
+                <div class="col-date">Start</div>
+                <div class="col-dur">Days</div>
+                <div class="col-date">Finish</div>
+            </div>`;
     },
 
     /**
-     * renderScheduleGrid - returns the grid HTML, injected by renderGantt.
+     * renderScheduleRowCells - one row's frozen cell: the task label
+     * plus the four editable schedule columns.
+     *
+     * @param item   the SOW row
+     * @param idx    its index, so the click handlers can find it
+     * @param t      its CPM node (float, critical) — may be undefined
+     * @param health the _taskHealth result, for the status dot
      */
-    renderScheduleGrid() {
-        const items = this._sowItems || [];
+    renderScheduleRowCells(item, idx, t, health) {
         const canEdit = this._canEdit !== false;
-        if (!items.length) {
-            return `<div class="empty" style="padding:18px"><p>No SOW items yet. Add them on the SOW Budget tab, then schedule them here.</p></div>`;
-        }
-        if (!this._schedOpen) {
-            return `<div class="sched-head">
-                <button class="btn-sm" onclick="ProjectPage.toggleSchedule()">${Icon.chevronRight({ size: 12 })} Show schedule table</button>
-                <span class="sched-note">Start, duration, finish and predecessor for every SOW item</span>
-            </div>`;
-        }
+        const pred = this._predOf(item);
+        const locked = !!pred;
+        const s = this._sDay(item.startDate);
+        const e = this._sDay(item.endDate);
+        const dur = (s && e) ? this._sWorkBetween(s, e) : 1;
+        const crit = t && t.critical;
 
-        // finish = derived, so the table always agrees with the bars
-        const rows = items.map((it, i) => {
-            const pred = this._predOf(it);
-            const s = this._sDay(it.startDate);
-            const e = this._sDay(it.endDate);
-            const dur = (s && e) ? this._sWorkBetween(s, e) : 1;
-            return { it, i, pred, s, e, dur };
-        });
+        const esc = v => String(v == null ? '' : v)
+            .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
-        let html = `<div class="sched-head">
-                <button class="btn-sm" onclick="ProjectPage.toggleSchedule()">${Icon.arrowDown({ size: 12 })} Hide schedule table</button>
-                <span class="sched-note">Duration counts working days and skips Sundays. A row with a predecessor follows that item's finish.</span>
-                ${canEdit ? `<button class="btn-sm" style="margin-left:auto" onclick="ProjectPage.recalcSchedule()" title="Re-apply every predecessor link from the top down">${Icon.refresh({ size: 12 })} Recalculate chain</button>` : ''}
-            </div>
-            <div class="panel sched-panel">
-            <table class="sched-table"><thead><tr>
-                <th style="min-width:190px">SOW item</th>
-                <th style="min-width:118px">Predecessor</th>
-                <th style="min-width:128px">Start</th>
-                <th style="width:74px">Days</th>
-                <th style="min-width:128px">Finish</th>
-                <th style="width:86px">Status</th>
-            </tr></thead><tbody>`;
+        const predOpts = (this._sowItems || [])
+            .filter(o => o.id !== item.id)
+            .map(o => `<option value="${esc(o.id)}" ${pred === o.id ? 'selected' : ''}>${esc(o.id)} — ${esc((o.description || '').slice(0, 30))}</option>`)
+            .join('');
 
-        rows.forEach(r => {
-            const it = r.it;
-            const locked = !!r.pred;
-            const predOpts = items
-                .filter(o => o.id !== it.id)
-                .map(o => `<option value="${o.id}" ${r.pred === o.id ? 'selected' : ''}>${o.id} — ${(o.description || '').slice(0, 34)}</option>`)
-                .join('');
-            html += `<tr data-sow="${it.id}">
-                <td>
-                    <span class="req-id">${it.id}</span>
-                    <div class="sched-desc">${it.description || ''}${it.isMilestone ? ' <span class="sched-ms">milestone</span>' : ''}</div>
-                </td>
-                <td>
-                    ${canEdit ? `<select class="sched-in" onchange="ProjectPage.setPredecessor('${it.id}', this.value)">
+        const tip = `${item.id} — ${item.description || ''} · ${health ? health.label : ''}` +
+            (t ? (t.critical ? ' · critical path' : ' · float ' + t.float + ' day(s)') : '');
+
+        return `
+            <div class="gt-cell-left" data-id="${esc(item.id)}" data-idx="${idx}">
+                <div class="gt-task ${crit ? 'is-critical' : ''}" title="${esc(tip)}">
+                    <span class="dot" style="background:${health ? health.color : 'var(--ink-soft)'}"></span>
+                    <span class="id">${esc(item.id)}</span>
+                    <span class="nm">${esc(item.description || '')}</span>
+                    ${item.isMilestone ? '<span class="ms-tag">milestone</span>' : ''}
+                </div>
+
+                <div class="col-pred">
+                    ${canEdit ? `<select class="gt-in" onchange="ProjectPage.setPredecessor('${esc(item.id)}', this.value)"
+                        title="Finish-to-start link — this item follows the selected one">
                         <option value="">— none —</option>${predOpts}
-                    </select>` : (r.pred || '—')}
-                </td>
-                <td>
-                    ${canEdit ? `<input type="date" class="sched-in" value="${it.startDate || ''}" ${locked ? 'readonly' : ''}
-                        onchange="ProjectPage.setSchedField('${it.id}','start',this.value)" />` : (it.startDate || '—')}
-                    ${locked ? `<span class="sched-lock">${Icon.lock({ size: 10 })} follows ${r.pred}</span>` : ''}
-                </td>
-                <td>
-                    ${canEdit ? `<input type="number" min="1" class="sched-in sched-dur" value="${r.dur}"
-                        onchange="ProjectPage.setSchedField('${it.id}','dur',this.value)" />` : r.dur}
-                </td>
-                <td>
-                    ${canEdit ? `<input type="date" class="sched-in" value="${it.endDate || ''}"
-                        onchange="ProjectPage.setSchedField('${it.id}','end',this.value)" />` : (it.endDate || '—')}
-                </td>
-                <td><span class="stamp ${it.status === 'Complete' ? 'approved' : it.status === 'Overdue' ? 'rejected' : 'pending'}">${it.status || 'On Track'}</span></td>
-            </tr>`;
-        });
-        html += `</tbody></table></div>`;
-        return html;
+                    </select>` : `<span class="gt-ro">${esc(pred) || '—'}</span>`}
+                </div>
+
+                <div class="col-date">
+                    ${canEdit ? `<input type="date" class="gt-in" value="${esc(item.startDate)}" ${locked ? 'readonly' : ''}
+                        title="${locked ? 'Follows ' + esc(pred) + ' — change that item or clear the link' : 'Start date'}"
+                        onchange="ProjectPage.setSchedField('${esc(item.id)}','start',this.value)" />`
+                        : `<span class="gt-ro">${esc(item.startDate) || '—'}</span>`}
+                    ${locked ? `<span class="gt-lock" title="Start follows ${esc(pred)}">${Icon.lock({ size: 9 })} ${esc(pred)}</span>` : ''}
+                </div>
+
+                <div class="col-dur">
+                    ${item.isMilestone
+                        ? `<span class="gt-ro">—</span>`
+                        : (canEdit ? `<input type="number" min="1" class="gt-in gt-dur" value="${dur}"
+                            title="Working days, Sundays excluded"
+                            onchange="ProjectPage.setSchedField('${esc(item.id)}','dur',this.value)" />`
+                          : `<span class="gt-ro">${dur}</span>`)}
+                </div>
+
+                <div class="col-date">
+                    ${canEdit ? `<input type="date" class="gt-in" value="${esc(item.endDate)}"
+                        onchange="ProjectPage.setSchedField('${esc(item.id)}','end',this.value)" />`
+                        : `<span class="gt-ro">${esc(item.endDate) || '—'}</span>`}
+                </div>
+            </div>`;
     },
 
     // ─── editing ──────────────────────────────────────────────
@@ -314,8 +336,10 @@ Object.assign(ProjectPage, {
             chained.forEach(p => { if (!seen[p.id]) { seen[p.id] = p; all.push(p); } });
         }
 
-        // repaint immediately from local state
-        this.renderGantt(this._data);
+        // repaint immediately from local state. v11: only the chart is
+        // redrawn, not the whole tab, so the horizontal scroll position
+        // and the pane width survive an edit.
+        this._renderGanttChart(this._data);
 
         try {
             for (const p of all) {

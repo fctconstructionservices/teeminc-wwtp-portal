@@ -228,6 +228,14 @@ ${AttachmentGallery.render([
         const talks = records.filter(r => r.recordType === 'Toolbox Talk').length;
         const sevCls = sv => sv === 'Major' || sv === 'Fatal' ? 'rejected' : sv === 'Minor' ? 'pending' : 'approved';
         const typeIcon = t => t === 'Toolbox Talk' ? Icon.megaphone({size:12}) : t === 'Inspection' ? Icon.search({size:12}) : t === 'Incident' ? Icon.siren({size:12}) : t === 'Near Miss' ? Icon.warning({size:12}) : Icon.ban({size:12});
+        // v11 BATCH D: records now carry an ARRAY of photos. The backend
+        // sends `attachments` ready to use and folds any legacy single
+        // `image` into it, so pre-v11 rows render identically. The
+        // fallback here covers a stale cached payload.
+        const photosOf = r => (r.attachments && r.attachments.length)
+            ? r.attachments
+            : (r.image ? [{ url: r.image, name: 'Photo' }] : []);
+        const isSuper = (App.getUser() || {}).role === 'superadmin';
 
         let html = `
             <div class="section-head"><h2>Safety</h2><div class="rule"></div>
@@ -251,12 +259,16 @@ ${AttachmentGallery.render([
                 html += `<tr>
                     <td class="mono" style="font-size:11px;white-space:nowrap;">${r.recordDate || '—'}</td>
                     <td style="white-space:nowrap;">${typeIcon(r.recordType)} ${r.recordType}</td>
-                    <td>${r.description || '—'}${r.image ? `<div style="margin-top:5px">${AttachmentGallery.render([{ url: r.image, name: 'Safety photo' }], '')}</div>` : ''}</td>
+                    <td>${r.description || '—'}${photosOf(r).length ? `<div style="margin-top:5px">${AttachmentGallery.render(photosOf(r), '')}</div>` : ''}</td>
                     <td>${r.severity ? `<span class="stamp ${sevCls(r.severity)}" style="transform:none;padding:1px 8px;font-size:9px;">${r.severity}</span>` : '—'}</td>
                     <td style="font-size:11.5px;">${r.personsInvolved || '—'}</td>
                     <td style="font-size:11.5px;">${r.actionTaken || '—'}</td>
                     <td style="font-size:11px;">${r.reportedBy || '—'}</td>
-                    <td>${r.status === 'Open' && this._canEdit !== false ? `<button class="btn-sm success" title="Mark closed or resolved" onclick="ProjectPage.closeSafetyRecord('${r.id}')">${Icon.check({size:12})}</button>` : (r.status === 'Closed' ? '<span class="stamp approved" style="transform:none;padding:1px 8px;font-size:9px;">Closed</span>' : '')}</td>
+                    <td style="white-space:nowrap;">
+                        ${r.status === 'Open' && this._canEdit !== false ? `<button class="btn-sm success" title="Mark closed or resolved" onclick="ProjectPage.closeSafetyRecord('${r.id}')">${Icon.check({size:12})}</button>` : (r.status === 'Closed' ? '<span class="stamp approved" style="transform:none;padding:1px 8px;font-size:9px;">Closed</span>' : '')}
+                        ${this._canEdit !== false ? `<button class="btn-sm" title="Add more photos to this record" onclick="ProjectPage.addSafetyPhotos('${r.id}')">${Icon.camera({size:12})}</button>` : ''}
+                        ${isSuper ? `<button class="btn-sm danger" title="Delete this safety record (Super Admin)" onclick="ProjectPage.deleteSafetyRecordUI('${r.id}')">${Icon.trash({size:12})}</button>` : ''}
+                    </td>
                 </tr>`;
             });
             html += `</tbody></table></div>`;
@@ -284,11 +296,16 @@ ${AttachmentGallery.render([
                     </div>
                     <div class="field" style="margin-top:6px;"><label>Description *</label><textarea id="sf-desc" rows="2" placeholder="What happened, what was discussed, or what was observed"></textarea></div>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px;">
-                        <div class="field"><label>Severity (kung incident)</label><select id="sf-severity"><option value="">—</option><option>First Aid</option><option>Minor</option><option>Major</option><option>Fatal</option></select></div>
+                        <div class="field"><label>Severity (for incidents)</label><select id="sf-severity"><option value="">—</option><option>First Aid</option><option>Minor</option><option>Major</option><option>Fatal</option></select></div>
                         <div class="field"><label>Persons Involved</label><input type="text" id="sf-persons" placeholder="Names / crew" /></div>
                     </div>
                     <div class="field" style="margin-top:6px;"><label>Action Taken / Corrective Action</label><input type="text" id="sf-action" /></div>
-                    <div class="field" style="margin-top:6px;"><label>Photo (optional)</label><input type="file" accept="image/*" id="sf-image" /></div>
+                    <div class="field" style="margin-top:6px;">
+                        <label>Photos (optional)</label>
+                        <input type="file" accept="image/*" id="sf-image" multiple />
+                        <p style="font-size:11px;color:var(--ink-soft);margin-top:4px;">Select several at once. An incident usually needs the scene, the equipment and the corrective action; a toolbox talk needs the attendance sheet as well as the briefing.</p>
+                        <div id="sf-filelist" style="font-size:11px;color:var(--ink-soft);margin-top:4px;"></div>
+                    </div>
                 </div>
                 <div style="padding:12px 18px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px;">
                     <button class="btn-ghost" onclick="document.getElementById('safetyModal').remove()">Cancel</button>
@@ -297,19 +314,85 @@ ${AttachmentGallery.render([
             </div>`;
         overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
         document.body.appendChild(overlay);
+        // name the chosen files back to the user — with a multi-select
+        // it is otherwise impossible to tell how many were picked
+        document.getElementById('sf-image')?.addEventListener('change', function () {
+            const list = document.getElementById('sf-filelist');
+            const n = this.files ? this.files.length : 0;
+            list.textContent = n
+                ? `${n} photo${n === 1 ? '' : 's'} selected: ` + Array.from(this.files).map(f => f.name).join(', ')
+                : '';
+        });
+    },
+
+    /**
+     * _uploadSafetyPhotos (v11 BATCH D) - Uploads a FileList and returns
+     * [{url, name}]. Uploads run one at a time rather than in parallel:
+     * Apps Script serializes write requests anyway, and a burst of
+     * parallel uploads from a phone on site data was the reliable way to
+     * get a timeout halfway through and lose the whole record.
+     */
+    async _uploadSafetyPhotos(files, onProgress) {
+        const out = [];
+        const list = Array.from(files || []);
+        for (let i = 0; i < list.length; i++) {
+            const f = list[i];
+            if (onProgress) onProgress(i + 1, list.length, f.name);
+            const b64 = await fileToBase64_(f);
+            const up = await DataService.uploadImage(b64, f.name, f.type);
+            if (up && up.url) out.push({ url: up.url, name: f.name });
+        }
+        return out;
+    },
+
+    /**
+     * addSafetyPhotos (v11 BATCH D) - Appends photos to an existing
+     * record. The corrective-action photo often only exists days after
+     * the incident was filed, and before this the record was frozen with
+     * whatever single image it was created with.
+     */
+    async addSafetyPhotos(id) {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.multiple = true;
+        input.onchange = async () => {
+            if (!input.files || !input.files.length) return;
+            try {
+                UI.toast(`Uploading ${input.files.length} photo(s)...`, 'success');
+                const attachments = await this._uploadSafetyPhotos(input.files);
+                if (!attachments.length) { UI.toast('No photos were uploaded.', 'error'); return; }
+                await DataService.updateSafetyRecord(id, { addAttachments: attachments });
+                UI.toast(`${attachments.length} photo(s) added to ${id}.`, 'success');
+                await this._refreshSiteOps('safety');
+            } catch (err) { UI.toast('' + err.message, 'error'); }
+        };
+        input.click();
+    },
+
+    /** deleteSafetyRecordUI (v11 BATCH D) - Super Admin only. */
+    async deleteSafetyRecordUI(id) {
+        const ok = await Confirm.open(`Delete ${id}?`,
+            'This removes the record from the project safety history permanently. That history is what a client audit reads, so delete only genuine mistakes — close the record instead if the issue was simply resolved.');
+        if (!ok) return;
+        try {
+            await DataService.deleteSafetyRecord(id);
+            UI.toast(`${id} deleted.`, 'success');
+            await this._refreshSiteOps('safety');
+        } catch (err) { UI.toast('' + err.message, 'error'); }
     },
 
     async submitSafetyRecord() {
         const desc = (document.getElementById('sf-desc')?.value || '').trim();
         if (!desc) { UI.toast('Description is required.', 'error'); return; }
         try {
-            let image = '';
-            const f = document.getElementById('sf-image')?.files?.[0];
-            if (f) {
-                const b64 = await fileToBase64_(f);
-                const up = await DataService.uploadImage(b64, f.name, f.type);
-                image = (up && up.url) || '';
-            }
+            // v11 BATCH D: many photos, uploaded sequentially with the
+            // progress reported, because on site data a silent 30-second
+            // pause reads as a broken button and people tap it again.
+            const files = document.getElementById('sf-image')?.files;
+            const attachments = await this._uploadSafetyPhotos(files, (i, n, name) => {
+                UI.toast(`Uploading photo ${i} of ${n}: ${name}`, 'success');
+            });
             const type = document.getElementById('sf-type')?.value;
             const res = await DataService.addSafetyRecord({
                 projectId: this._currentProjectId,
@@ -319,7 +402,7 @@ ${AttachmentGallery.render([
                 severity: document.getElementById('sf-severity')?.value || '',
                 personsInvolved: document.getElementById('sf-persons')?.value || '',
                 actionTaken: document.getElementById('sf-action')?.value || '',
-                image: image,
+                attachments: attachments,
                 // talks/inspections are records, not open issues
                 status: (type === 'Toolbox Talk' || type === 'Inspection') ? 'Closed' : 'Open'
             });
@@ -465,7 +548,7 @@ ${AttachmentGallery.render([
     /**
      * _refreshSiteOps (v9) - Quiet refresh after a site-ops write:
      * re-pulls the project payload in the background and re-renders
-     * ONLY the affected tab (walang full-page reload, stays in place).
+     * ONLY the affected tab (no full-page reload, stays in place).
      */
     async _refreshSiteOps(tab) {
         try {

@@ -247,6 +247,7 @@ const API_ACTIONS = {
   getPunchlist: getPunchlist,
   addSafetyRecord: addSafetyRecord,
   updateSafetyRecord: updateSafetyRecord,
+  deleteSafetyRecord: deleteSafetyRecord,          // v11 BATCH D
   getSafetyRecords: getSafetyRecords,
   addDrawing: addDrawing,
   deleteDrawing: deleteDrawing,

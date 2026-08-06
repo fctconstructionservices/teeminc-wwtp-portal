@@ -157,9 +157,13 @@ const SCHEMAS = {
 
   // v9 NEW: SAFETY records — toolbox talks, inspections, incidents,
   // near-misses, violations per project.
+  // v11 BATCH D: `attachmentsJSON` added. `image` is KEPT so existing
+  // rows keep rendering — addSafetyRecord no longer writes it, and
+  // attachmentsOf_() folds any legacy single image into the gallery, so
+  // old and new records display identically with no migration.
   SafetyRecords: ['id', 'projectId', 'recordType', 'recordDate', 'description',
-    'severity', 'personsInvolved', 'actionTaken', 'image', 'status',
-    'reportedBy', 'createdAt', 'updatedAt'],
+    'severity', 'personsInvolved', 'actionTaken', 'image', 'attachmentsJSON',
+    'status', 'reportedBy', 'createdAt', 'updatedAt'],
 
   // v9 NEW: DRAWING PLANS register — drawing files (PDF/image) uploaded
   // to Drive with revision control per project.
