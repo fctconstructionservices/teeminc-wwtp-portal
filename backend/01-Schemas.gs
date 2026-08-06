@@ -161,6 +161,14 @@ const SCHEMAS = {
   // rows keep rendering — addSafetyRecord no longer writes it, and
   // attachmentsOf_() folds any legacy single image into the gallery, so
   // old and new records display identically with no migration.
+  // ── v11 BATCH E: SETTINGS ──
+  // A plain key/value store for system-wide configuration. The first
+  // consumer is the print template (company letterhead, logo, signature
+  // blocks) so every printed document carries FCTC's identity instead of
+  // a bare browser page. Values are JSON strings, so a setting can grow
+  // from a single field into an object without another schema change.
+  Settings: ['key', 'value', 'updatedBy', 'updatedAt'],
+
   SafetyRecords: ['id', 'projectId', 'recordType', 'recordDate', 'description',
     'severity', 'personsInvolved', 'actionTaken', 'image', 'attachmentsJSON',
     'status', 'reportedBy', 'createdAt', 'updatedAt'],

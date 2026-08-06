@@ -26,6 +26,29 @@ function sheet_(name) {
 function headers_(name) { return SCHEMAS[name]; }
 
 /**
+ * ensureSheet_ (v11 BATCH E) - Returns a sheet, creating it with its
+ * schema header row if it does not exist yet.
+ *
+ * sheet_() throws when a sheet is missing, which is the right behaviour
+ * for the core data sheets — a missing Projects sheet means something is
+ * badly wrong and should fail loudly. But it makes shipping a NEW sheet
+ * a manual step for whoever deploys, and a forgotten step is a broken
+ * feature. Configuration sheets that start empty can safely create
+ * themselves on first use.
+ */
+function ensureSheet_(name) {
+  var sh = ss_().getSheetByName(name);
+  if (sh) return sh;
+  var heads = SCHEMAS[name];
+  if (!heads) throw new Error('No schema defined for sheet: ' + name);
+  sh = ss_().insertSheet(name);
+  sh.getRange(1, 1, 1, heads.length).setValues([heads]);
+  sh.setFrozenRows(1);
+  _invalidateRead_(name);
+  return sh;
+}
+
+/**
  * ══ v6.5 PERFORMANCE: batched reads ══
  *
  * Every readAll_ is a separate round-trip to the Sheets service, so a

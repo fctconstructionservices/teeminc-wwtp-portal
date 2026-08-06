@@ -291,7 +291,7 @@ const RequestDetailModal = {
         </div>
         ${detailsHtml}
         <div class="print-actions">
-            <button class="btn-primary" onclick="window.print()">${Icon.printer({size:14})} Print</button>
+            <button class="btn-primary" onclick="PrintDoc.print()">${Icon.printer({size:14})} Print</button>
             ${actionButtons}
             <button class="btn-ghost" onclick="RequestDetailModal.close()">Close</button>
         </div>`;

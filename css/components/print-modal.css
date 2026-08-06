@@ -177,3 +177,135 @@
         width: 100%;
     }
 }
+
+/* ================================================================
+   v11 BATCH E — COMPANY LETTERHEAD (PrintDoc)
+
+   Injected by js/core/print-doc.js into whatever container is about to
+   print, then removed. Every printed document in the system used to
+   come out as a bare browser page with no logo, company name, address,
+   TIN or PCAB licence on it — a client had nothing identifying FCTC.
+
+   These rules are duplicated as a string in PrintDoc.baseCSS() for the
+   two prints that open a NEW WINDOW (estimate summary and DUPA). A
+   popup cannot reach the parent page's stylesheet, so that duplicate is
+   unavoidable — keep the two in step when editing.
+   ================================================================ */
+
+:root { --pd-accent: var(--blueprint); }
+
+.pd-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+}
+.pd-head.pd-center {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 4px;
+}
+.pd-head.pd-minimal { align-items: baseline; }
+.pd-id { display: flex; gap: 14px; align-items: flex-start; }
+.pd-logo { display: block; object-fit: contain; }
+.pd-name {
+    font-family: 'Oswald', sans-serif;
+    font-size: 17px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .045em;
+    color: var(--pd-accent);
+    line-height: 1.15;
+}
+.pd-tagline {
+    font-size: 10.5px;
+    color: var(--ink-soft);
+    font-style: italic;
+    margin-top: 1px;
+}
+.pd-contact {
+    margin-top: 4px;
+    font-size: 10px;
+    color: var(--ink-soft);
+    line-height: 1.5;
+}
+.pd-contact .pd-line { white-space: nowrap; }
+.pd-right { text-align: right; }
+.pd-doctitle {
+    font-family: 'Oswald', sans-serif;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--ink);
+}
+.pd-docmeta {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--ink-soft);
+    margin-top: 2px;
+}
+.pd-rule {
+    border-bottom: 2.5px solid var(--pd-accent);
+    margin: 9px 0 16px;
+}
+.pd-signs {
+    display: grid;
+    gap: 26px;
+    margin-top: 42px;
+    page-break-inside: avoid;
+}
+.pd-sign { text-align: center; }
+.pd-sign-line {
+    border-bottom: 1px solid var(--ink);
+    padding-bottom: 3px;
+    margin-bottom: 5px;
+    font-size: 11.5px;
+    font-weight: 600;
+    min-height: 16px;
+}
+.pd-sign-label {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--ink-soft);
+}
+.pd-sign-pos { font-size: 10px; color: var(--ink-soft); margin-top: 1px; }
+.pd-foot {
+    margin-top: 20px;
+    padding-top: 7px;
+    border-top: 1px solid var(--line);
+    font-size: 9px;
+    color: var(--ink-soft);
+    text-align: center;
+}
+.pd-watermark {
+    position: fixed;
+    top: 44%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-32deg);
+    font-family: 'Oswald', sans-serif;
+    font-size: 88px;
+    font-weight: 600;
+    letter-spacing: .1em;
+    color: rgba(28, 35, 33, .07);
+    pointer-events: none;
+    z-index: 0;
+    white-space: nowrap;
+}
+
+@media print {
+    /* Chrome and Edge repeat a fixed element on every printed page.
+       Firefox and Safari print it once, at the end. True repeating page
+       footers need paged-media support no browser implements for
+       arbitrary content, so this is as far as it goes honestly. */
+    .pd-foot {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: #fff;
+    }
+    .pd-name, .pd-doctitle { color: #1C2321 !important; }
+    .pd-rule { border-bottom-color: #1C2321 !important; }
+}

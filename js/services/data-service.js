@@ -574,6 +574,20 @@ const DataService = {
     async deleteSafetyRecord(id) {
         return await gasCall('deleteSafetyRecord', id);
     },
+
+    // ── v11 BATCH E: PRINT TEMPLATE ──
+    // The template is fetched once per session and cached by PrintDoc,
+    // because it is needed on every print and never changes mid-session
+    // unless the Super Admin edits it (which clears the cache).
+    async getPrintTemplate() {
+        return await gasCall('getPrintTemplate');
+    },
+    async savePrintTemplate(data) {
+        return await gasCall('savePrintTemplate', data);
+    },
+    async resetPrintTemplate() {
+        return await gasCall('resetPrintTemplate');
+    },
     async addDrawing(data) {
         return await gasCall('addDrawing', data);
     },

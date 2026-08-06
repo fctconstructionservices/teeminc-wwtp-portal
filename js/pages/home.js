@@ -105,7 +105,9 @@ const HomePage = {
                 { id: 'materials', label: 'Materials DB', sub: 'Master list & approval', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
                 { id: 'equipment', label: 'Tools & Equipment', sub: 'Equipment inventory', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
                 { id: 'manpower', label: 'Manpower DB', sub: 'Roles & trades · approval', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
-                { id: 'approvals', label: 'Approvals', sub: 'My requests & pending', roles: ['superadmin', 'admin', 'approver', 'request-only'] }
+                { id: 'approvals', label: 'Approvals', sub: 'My requests & pending', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
+                // v11 BATCH E: the letterhead every printed document carries
+                { id: 'print-template', label: 'Print Template', sub: 'Company letterhead · Super Admin', roles: ['superadmin'] }
             ];
 
             const userRole = user ? user.role : 'request-only';
@@ -162,7 +164,8 @@ const HomePage = {
                                 t.id === 'materials' ? Icon.package({ size: 18 }) :
                                 t.id === 'equipment' ? Icon.wrench({ size: 18 }) :
                                 t.id === 'manpower' ? Icon.users({ size: 18 }) :
-                                t.id === 'approvals' ? Icon.checkCircle({ size: 18, color: 'currentColor' }) : '';
+                                t.id === 'approvals' ? Icon.checkCircle({ size: 18, color: 'currentColor' }) :
+                                t.id === 'print-template' ? Icon.printer({ size: 18 }) : '';
                 ticketHtml += `
                     <button class="ticket ${safetyClass} ${approvalClass}" onclick="App.navigate('${t.id}')" style="${borderStyle}">
                         <div class="ico" style="${iconBg}">${iconEl}</div>

@@ -109,7 +109,7 @@ const PrintModal = {
                     }))}
                 </div>` : ''}
                 <div class="print-actions">
-                    <button class="btn-primary" onclick="window.print()">${Icon.printer({size:14})} Print</button>
+                    <button class="btn-primary" onclick="PrintDoc.print()">${Icon.printer({size:14})} Print</button>
                     <button class="btn-ghost" onclick="PrintModal.close()">Close</button>
                 </div>`;
         return html;
@@ -198,7 +198,7 @@ const MatPrintModal = {
                     </div>
                 </div>
                 <div class="print-actions">
-                    <button class="btn-primary" onclick="window.print()">${Icon.printer({size:14})} Print</button>
+                    <button class="btn-primary" onclick="PrintDoc.print()">${Icon.printer({size:14})} Print</button>
                     <button class="btn-ghost" onclick="MatPrintModal.close()">Close</button>
                 </div>`;
     }
@@ -261,7 +261,7 @@ const EquipPrintModal = {
                     </div>
                 </div>
                 <div class="print-actions">
-                    <button class="btn-primary" onclick="window.print()">${Icon.printer({size:14})} Print</button>
+                    <button class="btn-primary" onclick="PrintDoc.print()">${Icon.printer({size:14})} Print</button>
                     <button class="btn-ghost" onclick="EquipPrintModal.close()">Close</button>
                 </div>`;
     }
@@ -337,7 +337,7 @@ const SOWBreakdownModal = {
                 </div>
 
                 <div class="print-actions">
-                    <button class="btn-primary" onclick="window.print()">${Icon.printer({size:14})} Print</button>
+                    <button class="btn-primary" onclick="PrintDoc.print()">${Icon.printer({size:14})} Print</button>
                     <button class="btn-ghost" onclick="SOWBreakdownModal.close()">Close</button>
                 </div>`;
         return html;

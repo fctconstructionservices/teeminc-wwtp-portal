@@ -369,6 +369,32 @@
     </section>
 
     <!-- ════════════════════════════════════════════ -->
+    <!--  PRINT TEMPLATE  (v11 BATCH E, Super Admin) -->
+    <!-- ════════════════════════════════════════════ -->
+    <section id="page-print-template" class="page" aria-label="Print Template">
+        <div class="wrap">
+            <div class="topbar">
+                <div class="mark">F</div>
+                <div class="brand">
+                    <div class="name">Print Template</div>
+                    <div class="sub">Company letterhead on every printed document</div>
+                </div>
+                <div class="spacer"></div>
+                <button class="hamburger" onclick="toggleMenu()"></button>
+                <div class="actions" id="topActionsPrintTemplate">
+                    <button class="theme-toggle" onclick="App.toggleTheme()"></button>
+                    <button onclick="App.navigate('home')">Back</button>
+                </div>
+            </div>
+            <div class="crumb"><button onclick="App.navigate('home')">Home</button> / Print Template</div>
+
+            <div id="printTemplateContent">
+                <div class="loading-overlay"><div class="loader"></div><p>Loading print template...</p></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
     <!--  REQUEST CASH ADVANCE                       -->
     <!-- ════════════════════════════════════════════ -->
     <section id="page-request" class="page" aria-label="Request Cash Advance">
@@ -729,6 +755,7 @@
     <script src="js/core/auth.js"></script>
     <script src="js/core/ui.js"></script>
     <script src="js/core/modals.js"></script>
+    <script src="js/core/print-doc.js"></script>
     <script src="js/services/data-service.js"></script>
     <script src="js/pages/home.js"></script>
     <script src="js/pages/project/project-core.js"></script>
@@ -745,6 +772,8 @@
     <script src="js/pages/project/project-variations.js"></script>
     <script src="js/pages/project/project-siteops.js"></script>
     <script src="js/pages/approvals.js"></script>
+    <!-- v11 BATCH E: PrintDoc must load BEFORE any page that prints -->
+    <script src="js/pages/print-template.js"></script>
     <script src="js/pages/finance.js"></script>
     <script src="js/pages/portfolio.js"></script>
     <script src="js/pages/materials.js"></script>

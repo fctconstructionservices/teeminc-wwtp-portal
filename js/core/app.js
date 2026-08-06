@@ -55,6 +55,16 @@ const App = {
             }
         }
 
+        // ─── PRINT TEMPLATE: Super Admin only ─────────────────
+        // This is the company's identity on documents that go to
+        // clients, so it is guarded here and again on the server in
+        // savePrintTemplate().
+        if (page === 'print-template' && !this.isSuperAdmin()) {
+            UI.toast('Access denied. Super Admin only.', 'error');
+            setTimeout(() => this.navigate('home'), 800);
+            return;
+        }
+
         // ─── RECORD CASH: Approvers only ──────────────────────
         if (page === 'record-cash' && !this.isApprover()) {
             UI.toast('Access denied. Approvers only.', 'error');
@@ -94,6 +104,7 @@ const App = {
         if (page === 'equipment') await EquipmentPage.load();
         if (page === 'manpower') await ManpowerPage.load();
         if (page === 'approvals') await ApprovalsPage.load();
+        if (page === 'print-template') await PrintTemplatePage.load();
         if (page === 'release-cash') {
             setTimeout(loadReleaseDropdown, 100);
         }

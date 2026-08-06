@@ -249,6 +249,14 @@ const API_ACTIONS = {
   updateSafetyRecord: updateSafetyRecord,
   deleteSafetyRecord: deleteSafetyRecord,          // v11 BATCH D
   getSafetyRecords: getSafetyRecords,
+
+  // ── v11 BATCH E: PRINT TEMPLATE ──
+  // getPrintTemplate is readable by any logged-in user because the
+  // letterhead has to render for whoever hits Print; the two write
+  // actions enforce Super Admin inside the service.
+  getPrintTemplate: getPrintTemplate,
+  savePrintTemplate: savePrintTemplate,
+  resetPrintTemplate: resetPrintTemplate,
   addDrawing: addDrawing,
   deleteDrawing: deleteDrawing,
   getDrawings: getDrawings,
