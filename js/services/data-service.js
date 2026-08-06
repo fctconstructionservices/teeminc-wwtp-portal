@@ -591,6 +591,32 @@ const DataService = {
     async resetPrintTemplate() {
         return await gasCall('resetPrintTemplate');
     },
+
+    // ── v11 BATCH F1: KNOWLEDGE BASE / LESSONS LEARNED ──
+    async getLessons(projectId) {
+        return await gasCall('getLessons', projectId || '');
+    },
+    async addLesson(data) {
+        return await gasCall('addLesson', data);
+    },
+    async updateLesson(id, data) {
+        return await gasCall('updateLesson', id, data);
+    },
+    async deleteLesson(id) {
+        return await gasCall('deleteLesson', id);
+    },
+    // Generating and saving are deliberately separate calls: an
+    // auto-written record that lands in the knowledge base unreviewed is
+    // how a knowledge base fills with noise.
+    async generateProjectRetrospective(projectId) {
+        return await gasCall('generateProjectRetrospective', projectId);
+    },
+    async saveProjectRetrospective(projectId, edits) {
+        return await gasCall('saveProjectRetrospective', projectId, edits || {});
+    },
+    async getRetrospectiveCandidates() {
+        return await gasCall('getRetrospectiveCandidates');
+    },
     async addDrawing(data) {
         return await gasCall('addDrawing', data);
     },

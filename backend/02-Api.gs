@@ -257,6 +257,15 @@ const API_ACTIONS = {
   getPrintTemplate: getPrintTemplate,
   savePrintTemplate: savePrintTemplate,
   resetPrintTemplate: resetPrintTemplate,
+
+  // ── v11 BATCH F1: KNOWLEDGE BASE / LESSONS LEARNED ──
+  getLessons: getLessons,
+  addLesson: addLesson,
+  updateLesson: updateLesson,
+  deleteLesson: deleteLesson,
+  generateProjectRetrospective: generateProjectRetrospective,
+  saveProjectRetrospective: saveProjectRetrospective,
+  getRetrospectiveCandidates: getRetrospectiveCandidates,
   addDrawing: addDrawing,
   deleteDrawing: deleteDrawing,
   getDrawings: getDrawings,

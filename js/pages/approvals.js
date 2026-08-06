@@ -572,12 +572,32 @@ const ApprovalsPage = {
         const statusLabel = statusType === 'pending' ? 'Pending' : statusType === 'approved' ? 'Approved' : 'Rejected';
         const statusCls = statusType === 'pending' ? 'pending' : statusType === 'approved' ? 'approved' : 'rejected';
 
-        const iconFor = t => ({
-            CashAdvance: Icon.wallet, Liquidation: Icon.receipt, Estimate: Icon.ruler,
-            Material: Icon.package, Equipment: Icon.wrench, DailyRecord: Icon.clipboardList,
-            IncomingCash: Icon.incoming, CashRelease: Icon.outgoing, Manpower: Icon.users,
-            OTRequest: Icon.timer, Billing: Icon.spreadsheet
-        }[t] || Icon.fileText)({size:16});
+        // v11 HOTFIX: "this._svg is not a function".
+        //
+        // Every Icon method is `name(o) { return this._svg(...) }`, so it
+        // depends on `this` being the Icon object. The previous version of
+        // this map stored METHOD REFERENCES (`Icon.wallet`) and then called
+        // the plucked function — `({...}[t] || Icon.fileText)({size:16})` —
+        // which invokes it with `this` undefined. `this._svg` is then not a
+        // function and the whole My Requests tab throws, taking the
+        // Approvals page down with it.
+        //
+        // Storing the icon NAME and calling `Icon[name](...)` keeps the
+        // method attached to its object, so `this` is correct. Any icon
+        // name that does not exist falls back to fileText rather than
+        // throwing, so a future typo degrades to a generic icon instead of
+        // breaking the page.
+        const ICON_BY_TYPE = {
+            CashAdvance: 'wallet', Liquidation: 'receipt', Estimate: 'ruler',
+            Material: 'package', Equipment: 'wrench', DailyRecord: 'clipboardList',
+            IncomingCash: 'incoming', CashRelease: 'outgoing', Manpower: 'users',
+            OTRequest: 'timer', Billing: 'spreadsheet'
+        };
+        const iconFor = t => {
+            const name = ICON_BY_TYPE[t];
+            const fn = (name && typeof Icon[name] === 'function') ? name : 'fileText';
+            return Icon[fn]({ size: 16 });
+        };
 
         let html = `<div class="section-head"><h3>My ${statusLabel} Requests</h3><div class="rule"></div>
             ${requests.length ? `<span class="badge">${requests.length}</span>` : ''}</div>`;

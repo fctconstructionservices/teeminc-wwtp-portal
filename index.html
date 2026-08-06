@@ -270,74 +270,66 @@
     <!-- ════════════════════════════════════════════ -->
     <!--  MATERIALS DATABASE PAGE                   -->
     <!-- ════════════════════════════════════════════ -->
-    <section id="page-materials" class="page" aria-label="Materials Database">
+    <!-- ════════════════════════════════════════════ -->
+    <!--  KNOWLEDGE BASE CENTER  (v11 BATCH F1)      -->
+    <!--                                             -->
+    <!--  The Materials, Equipment and Manpower       -->
+    <!--  databases used to be three separate         -->
+    <!--  top-level pages with three near-identical   -->
+    <!--  shells. They are master data, so they now   -->
+    <!--  live under one roof together with Lessons   -->
+    <!--  Learned.                                    -->
+    <!--                                             -->
+    <!--  The CONTENT containers keep their original  -->
+    <!--  ids (materialsContent, equipmentContent,    -->
+    <!--  manpowerContent). MaterialsPage,            -->
+    <!--  EquipmentPage and ManpowerPage therefore    -->
+    <!--  need no changes at all — they still render  -->
+    <!--  into exactly the element they always did.   -->
+    <!-- ════════════════════════════════════════════ -->
+    <section id="page-knowledge" class="page" aria-label="Knowledge Base Center">
         <div class="wrap">
             <div class="topbar">
                 <div class="mark">F</div>
                 <div class="brand">
-                    <div class="name">Materials Database</div>
-                    <div class="sub">Master list · Search · Approval</div>
+                    <div class="name">Knowledge Base</div>
+                    <div class="sub" id="kbSub">Master data · Lessons learned</div>
                 </div>
                 <div class="spacer"></div>
                 <button class="hamburger" onclick="toggleMenu()"></button>
-                <div class="actions" id="topActionsMaterials">
+                <div class="actions" id="topActionsKnowledge">
                     <button class="theme-toggle" onclick="App.toggleTheme()"></button>
                     <button onclick="App.navigate('home')">Back</button>
                 </div>
             </div>
-            <div class="crumb"><button onclick="App.navigate('home')">Home</button> / Materials Database</div>
-            <div id="materialsContent">
-                <div class="loading-overlay"><div class="loader"></div><p>Loading materials...</p></div>
-            </div>
-        </div>
-    </section>
+            <div class="crumb"><button onclick="App.navigate('home')">Home</button> / Knowledge Base / <span id="kbCrumb">Materials</span></div>
 
-    <!-- ════════════════════════════════════════════ -->
-    <!--  EQUIPMENT DATABASE PAGE                   -->
-    <!-- ════════════════════════════════════════════ -->
-    <section id="page-equipment" class="page" aria-label="Tools & Equipment Database">
-        <div class="wrap">
-            <div class="topbar">
-                <div class="mark">F</div>
-                <div class="brand">
-                    <div class="name">Tools & Equipment Database</div>
-                    <div class="sub">Equipment inventory · Search · Approval</div>
-                </div>
-                <div class="spacer"></div>
-                <button class="hamburger" onclick="toggleMenu()"></button>
-                <div class="actions" id="topActionsEquipment">
-                    <button class="theme-toggle" onclick="App.toggleTheme()"></button>
-                    <button onclick="App.navigate('home')">Back</button>
-                </div>
+            <div class="kb-tabs">
+                <button class="active" data-kb="materials" onclick="KnowledgeBasePage.switchTab('materials')">Materials</button>
+                <button data-kb="equipment" onclick="KnowledgeBasePage.switchTab('equipment')">Tools &amp; Equipment</button>
+                <button data-kb="manpower" onclick="KnowledgeBasePage.switchTab('manpower')">Manpower</button>
+                <button data-kb="lessons" onclick="KnowledgeBasePage.switchTab('lessons')">Lessons Learned</button>
             </div>
-            <div class="crumb"><button onclick="App.navigate('home')">Home</button> / Tools & Equipment</div>
-            <div id="equipmentContent">
-                <div class="loading-overlay"><div class="loader"></div><p>Loading equipment...</p></div>
-            </div>
-        </div>
-    </section>
 
-    <!-- ════════════════════════════════════════════ -->
-    <!--  MANPOWER DATABASE PAGE (v3)               -->
-    <!-- ════════════════════════════════════════════ -->
-    <section id="page-manpower" class="page" aria-label="Manpower Database">
-        <div class="wrap">
-            <div class="topbar">
-                <div class="mark">F</div>
-                <div class="brand">
-                    <div class="name">Manpower Database</div>
-                    <div class="sub">Roles & trades · Search · Approval</div>
-                </div>
-                <div class="spacer"></div>
-                <button class="hamburger" onclick="toggleMenu()"></button>
-                <div class="actions" id="topActionsManpower">
-                    <button class="theme-toggle" onclick="App.toggleTheme()"></button>
-                    <button onclick="App.navigate('home')">Back</button>
+            <div id="kb-tab-materials" class="kb-tab-content active">
+                <div id="materialsContent">
+                    <div class="loading-overlay"><div class="loader"></div><p>Loading materials...</p></div>
                 </div>
             </div>
-            <div class="crumb"><button onclick="App.navigate('home')">Home</button> / Manpower</div>
-            <div id="manpowerContent">
-                <div class="loading-overlay"><div class="loader"></div><p>Loading manpower...</p></div>
+            <div id="kb-tab-equipment" class="kb-tab-content">
+                <div id="equipmentContent">
+                    <div class="loading-overlay"><div class="loader"></div><p>Loading equipment...</p></div>
+                </div>
+            </div>
+            <div id="kb-tab-manpower" class="kb-tab-content">
+                <div id="manpowerContent">
+                    <div class="loading-overlay"><div class="loader"></div><p>Loading manpower...</p></div>
+                </div>
+            </div>
+            <div id="kb-tab-lessons" class="kb-tab-content">
+                <div id="lessonsContent">
+                    <div class="loading-overlay"><div class="loader"></div><p>Loading lessons learned...</p></div>
+                </div>
             </div>
         </div>
     </section>
@@ -775,6 +767,7 @@
     <script src="js/pages/approvals.js"></script>
     <!-- v11 BATCH E: PrintDoc must load BEFORE any page that prints -->
     <script src="js/pages/print-template.js"></script>
+    <script src="js/pages/knowledge-base.js"></script>
     <script src="js/pages/finance.js"></script>
     <script src="js/pages/portfolio.js"></script>
     <script src="js/pages/materials.js"></script>

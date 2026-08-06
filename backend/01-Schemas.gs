@@ -169,6 +169,17 @@ const SCHEMAS = {
   // from a single field into an object without another schema change.
   Settings: ['key', 'value', 'updatedBy', 'updatedAt'],
 
+  // ── v11 BATCH F1: LESSONS LEARNED ──
+  // The knowledge that normally leaves with the site team. `source` is
+  // 'auto' for a generated project retrospective or 'manual' for one
+  // somebody wrote. The three JSON columns hold the computed metrics,
+  // the findings and the suggestions, so the retrospective can grow new
+  // fields without another schema change.
+  LessonsLearned: ['id', 'projectId', 'projectName', 'source', 'category', 'title',
+    'whatHappened', 'rootCause', 'impact', 'recommendation',
+    'metricsJSON', 'findingsJSON', 'suggestionsJSON',
+    'capturedBy', 'capturedAt', 'updatedAt'],
+
   SafetyRecords: ['id', 'projectId', 'recordType', 'recordDate', 'description',
     'severity', 'personsInvolved', 'actionTaken', 'image', 'attachmentsJSON',
     'status', 'reportedBy', 'createdAt', 'updatedAt'],
