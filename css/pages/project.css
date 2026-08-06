@@ -403,3 +403,74 @@
     color: rgba(255, 255, 255, .6);
     font-size: 13px;
 }
+
+/* ================================================================
+   v11 BATCH E2 — REPORT GENERATOR (project-reports.js)
+   The section picker. The printed report itself is styled inline by
+   PrintDoc.documentHTML(), because it opens in a new window that cannot
+   reach this stylesheet.
+   ================================================================ */
+
+.rp-picker {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 14px;
+    margin-bottom: 18px;
+}
+.rp-group {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 12px 14px;
+}
+.rp-group-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-family: 'Oswald', sans-serif;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--blueprint);
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 7px;
+    margin-bottom: 8px;
+}
+.rp-opt {
+    display: flex;
+    gap: 9px;
+    align-items: flex-start;
+    padding: 6px 0;
+    cursor: pointer;
+    border-bottom: 1px dotted var(--line);
+}
+.rp-opt:last-child { border-bottom: none; }
+.rp-opt input { width: auto; margin-top: 2px; flex-shrink: 0; }
+.rp-opt span { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.rp-opt b { font-size: 12.5px; font-weight: 600; }
+/* The sub-line explains what actually lands in the report, so a person
+   ticking a box knows what they are asking for. */
+.rp-opt em {
+    font-style: normal;
+    font-size: 10.5px;
+    color: var(--ink-soft);
+    line-height: 1.4;
+}
+.rp-opt:hover b { color: var(--blueprint); }
+
+.rp-actions {
+    display: flex;
+    gap: 14px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    padding: 14px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--blueprint-tint);
+}
+
+@media (max-width: 620px) {
+    .rp-actions { flex-direction: column; align-items: stretch; }
+    .rp-actions .field { max-width: none !important; }
+}
