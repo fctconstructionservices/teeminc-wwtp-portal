@@ -162,29 +162,50 @@ function createBilling(projectId, currentPct, period) {
   logActivity_('Progress billing ' + billingNo + ' (₱' + fmtMoney_(net) + ' net' +
     (recoup > 0 ? ', less ₱' + fmtMoney_(recoup) + ' DP recoupment' : '') +
     ') generated for ' + projectId + ' — for approval', 'blue', id);
-  return { success: true, id: id, billingNo: billingNo, net: net, dpRecoupment: recoup };
+  // v11 BATCH A: Super Admin bypass — billing is immediately approved
+  // and ready to send/collect.
+  var autoApproved = autoApproveIfSuper_(id, 'Billing');
+  return { success: true, id: id, billingNo: billingNo, net: net, dpRecoupment: recoup, autoApproved: autoApproved };
 }
 
 /**
  * dpLedger_ (v10) - The downpayment position of a project:
- *   { pct, advance, recouped, outstanding }
- * advance   = the approved/paid Downpayment billing's gross
+ *   { pct, advance, recouped, outstanding, pendingAdvance }
+ * advance   = the APPROVED or PAID Downpayment billing's gross
  * recouped  = sum of dpRecoupment across non-rejected progress billings
  * The ledger is derived, never stored, so it cannot drift.
+ *
+ * v11 BATCH A FIX: `advance` used to count ANY downpayment billing that
+ * was not Rejected — including one still sitting Pending approval. That
+ * meant progress billings started deducting recoupment against money the
+ * client had not agreed to advance yet, quietly under-billing the client.
+ * Only an Approved or Paid downpayment is real. A still-pending one is
+ * reported separately as `pendingAdvance` so the Billings tab can show
+ * it without it affecting any arithmetic. Nothing is lost by waiting:
+ * once the DP is approved, `outstanding` rises and the following
+ * progress billings recoup the difference automatically.
  */
 function dpLedger_(projectId, proj) {
   proj = proj || readAll_('Projects').find(function (p) { return p.id === projectId; }) || {};
   var pct = parseFloat(proj.downpaymentPct);
   if (isNaN(pct) || pct < 0 || pct > 0.6) pct = 0;
   var bills = readAll_('Billings').filter(function (b) {
-    return b.projectId === projectId && b.status !== 'Rejected';
+    return b.projectId === projectId && String(b.status) !== 'Rejected';
   });
-  var advance = bills.filter(function (b) { return b.billingType === 'Downpayment'; })
+  var isDP = function (b) { return b.billingType === 'Downpayment'; };
+  var live = function (b) {
+    var s = String(b.status || '').toLowerCase();
+    return s === 'approved' || s === 'paid';
+  };
+  var advance = bills.filter(function (b) { return isDP(b) && live(b); })
+    .reduce(function (s, b) { return s + (parseFloat(b.grossAmount) || 0); }, 0);
+  var pendingAdvance = bills.filter(function (b) { return isDP(b) && !live(b); })
     .reduce(function (s, b) { return s + (parseFloat(b.grossAmount) || 0); }, 0);
   var recouped = bills.reduce(function (s, b) { return s + (parseFloat(b.dpRecoupment) || 0); }, 0);
   return {
     pct: pct,
     advance: Math.round(advance * 100) / 100,
+    pendingAdvance: Math.round(pendingAdvance * 100) / 100,
     recouped: Math.round(recouped * 100) / 100,
     outstanding: Math.round(Math.max(0, advance - recouped) * 100) / 100
   };
@@ -250,7 +271,9 @@ function createDownpaymentBilling(projectId, period) {
   });
   logActivity_('Downpayment DP-0001 (' + (dp.pct * 100).toFixed(1) + '% = ₱' +
     fmtMoney_(gross) + ') recorded for ' + projectId + ' — for approval', 'blue', id);
-  return { success: true, id: id, billingNo: 'DP-0001', net: gross };
+  // v11 BATCH A: Super Admin bypass.
+  var autoApproved = autoApproveIfSuper_(id, 'Billing');
+  return { success: true, id: id, billingNo: 'DP-0001', net: gross, autoApproved: autoApproved };
 }
 
 /**

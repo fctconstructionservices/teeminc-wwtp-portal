@@ -17,7 +17,9 @@ function requestEquipment(data) {
     status: 'pending', requestedBy: currentUserEmail_(), createdAt: new Date()   // v6.1: lowercase, consistent with approved/rejected
   });
   logActivity_('Equipment "' + data.name + '" requested by ' + currentUserName_(), 'blue');
-  return { success: true, id: id };
+  // v11 BATCH A: Super Admin bypass.
+  var autoApproved = autoApproveIfSuper_(id, 'Equipment');
+  return { success: true, id: id, autoApproved: autoApproved };
 }
 function approveEquipment(id) {
   requireApprover_('approving equipment');   // v7.0

@@ -58,7 +58,9 @@ function requestOT(data) {
     updatedAt: new Date()
   });
   logActivity_('OT request ' + id + ' filed for ' + otDate + ' (' + data.otStart + '–' + data.otEnd + ')', 'g', id);
-  return { success: true, id: id };
+  // v11 BATCH A: Super Admin bypass — OT fields unlock immediately.
+  var autoApproved = autoApproveIfSuper_(id, 'OTRequest');
+  return { success: true, id: id, autoApproved: autoApproved };
 }
 
 /** getOTRequests - All OT requests for a project (sanitized dates). */

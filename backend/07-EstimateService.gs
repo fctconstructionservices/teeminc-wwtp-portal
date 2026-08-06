@@ -107,7 +107,10 @@ function submitEstimatesForApproval(projectId, sowId) {
   if (!g) throw new Error('Estimate group not found');
   updateRow_('EstimateGroups', 'id', g.id, { status: 'pending', submittedBy: currentUserEmail_() });
   logActivity_('Estimate for ' + sowId + ' submitted for approval by ' + currentUserName_(), 'g');
-  return { success: true };
+  // v11 BATCH A: Super Admin bypass. Routed through the approval engine
+  // so the estimate total is still written back to the SOW budget.
+  var autoApproved = autoApproveIfSuper_(g.id, 'Estimate');
+  return { success: true, autoApproved: autoApproved };
 }
 
 function approveEstimates(projectId, sowId) {

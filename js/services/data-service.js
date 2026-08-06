@@ -350,19 +350,22 @@ const DataService = {
 
     async _fetchPendingApprovals() {
         const data = await gasCall('getPendingApprovals') || {};
-        const requests = [...(data.cashAdvances || []), ...(data.releases || []), ...(data.liquidations || [])];
-        return {
-            requests: requests,
-            cashAdvances: data.cashAdvances || [],
-            releases: data.releases || [],
-            incomingCash: data.incomingCash || [],   // v3
-            liquidations: data.liquidations || [],
-            materials: data.materials || [],
-            equipment: data.equipment || [],
-            manpower: data.manpower || [],           // v3
-            estimates: data.estimates || [],
-            dailyRecords: data.dailyRecords || []
-        };
+        // v11 BATCH A: this used to be a hand-maintained WHITELIST, and
+        // `otRequests` was never added to it — so the backend returned
+        // pending OT requests correctly and this function threw them
+        // away, leaving the Overtime section of the inbox permanently
+        // empty. Billings would have hit the same wall. Every key the
+        // backend sends is now passed through, and the known array keys
+        // are defaulted so callers can index them without guarding.
+        const KEYS = ['cashAdvances', 'releases', 'incomingCash', 'liquidations',
+            'materials', 'equipment', 'manpower', 'estimates', 'billings',
+            'dailyRecords', 'otRequests'];
+        const out = Object.assign({}, data);
+        KEYS.forEach(k => { out[k] = data[k] || []; });
+        // legacy convenience key: the cash-money subset, kept because
+        // older call sites still read it.
+        out.requests = [...out.cashAdvances, ...out.releases, ...out.liquidations];
+        return out;
     },
     async getMyPendingRequests() {
         return await gasCall('getMyPendingRequests');

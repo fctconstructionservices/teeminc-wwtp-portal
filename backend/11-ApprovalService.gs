@@ -5,13 +5,30 @@
  *
  * decideItem_() enforces, per request type: self-approval ban,
  * status guards, one-vote-per-approver (Approvals sheet), and the
- * "all admins/approvers except the requestor" consensus rule for
- * cash advances. forceApprove/forceReject are superadmin-only
- * overrides that reuse the same engine.
+ * "all admins except the requestor" consensus rule.
  *
  * SCALABILITY: To make a NEW request type approvable, add one
  * `if (type === '...')` block in decideItem_() and include it in
  * getPendingApprovals()/getMy*Requests().
+ *
+ * ── v11 BATCH A CHANGES ──────────────────────────────────────
+ * 1. SUPER ADMIN BYPASS. autoApproveIfSuper_() finalizes a request
+ *    the instant a super admin files it, so the super admin never
+ *    waits on anybody. decideItem_() also now checks isForce BEFORE
+ *    the self-approval guard — previously the guard ran first, so a
+ *    super admin literally could not force-approve their own request
+ *    even though the UI showed the button.
+ * 2. getRequestById() gained the EstimateGroups and Billings lookups
+ *    it never had. Those two types appear in the pending inbox, so
+ *    clicking one always returned null -> "Request not found."
+ * 3. Billings now appear in the approvals inbox and in every
+ *    My Requests tab, instead of only inside the project's own
+ *    Billings tab.
+ * 4. getMyPendingRequests() no longer leaks OTHER people's pending
+ *    estimates into your own "My Requests" list (the estimates
+ *    filter had no email condition at all).
+ * 5. Status comparisons are case-insensitive everywhere, so legacy
+ *    'Approved' rows stop disappearing from the Approved tab.
  */
 
 // ============================================================
@@ -23,11 +40,13 @@ function getPendingApprovals() {
   // (approval badge), so it was the most frequent multi-read call.
   readMany_(['Users', 'Approvals', 'CashAdvanceRequests', 'CashRelease',
     'IncomingCashRequests', 'Liquidations', 'Materials', 'Equipment',
-    'Manpower', 'DailyRecords', 'EstimateGroups', 'OTRequests']);
+    'Manpower', 'DailyRecords', 'EstimateGroups', 'OTRequests', 'Billings',
+    'Projects', 'EstimateMaterials', 'EstimateLabor', 'EstimateEquipment',
+    'EstimateIndirect']);
 
   const userEmail = currentUserEmail_().toLowerCase();
-  const userRecord = readAll_('Users').find(function (u) { 
-    return u.email.toLowerCase() === userEmail; 
+  const userRecord = readAll_('Users').find(function (u) {
+    return u.email.toLowerCase() === userEmail;
   });
   const isAdmin = userRecord && (userRecord.role === 'admin' || userRecord.role === 'superadmin');
   const isSuper = userRecord && userRecord.role === 'superadmin';
@@ -47,16 +66,16 @@ function getPendingApprovals() {
 
   // Cash Advances
   const cashAdvances = readAll_('CashAdvanceRequests').filter(function (r) {
-    return r.status === 'Pending' && r.requestorEmail.toLowerCase() !== userEmail;
+    return low_(r.status) === 'pending' && low_(r.requestorEmail) !== userEmail;
   }).map(function (r) {
-    return { id: r.id, type: 'CashAdvance', projectId: r.projectId, requestor: r.requestor, requestorEmail: r.requestorEmail, amount: r.amount, description: r.description, status: r.status, createdAt: r.createdAt };
+    return { id: r.id, type: 'CashAdvance', projectId: r.projectId, requestor: r.requestor, requestorEmail: r.requestorEmail, amount: r.amount, description: r.description, scope: r.scope, status: r.status, createdAt: r.createdAt, attachmentsJSON: r.attachmentsJSON };
   });
 
   // Cash Releases (For Review) - Admin only
   let releases = [];
   if (isAdmin && userRecord.role !== 'superadmin') {
     releases = readAll_('CashRelease').filter(function (r) {
-      return r.status === 'For Review' && r.releasedBy && r.releasedBy.toLowerCase() !== userEmail
+      return r.status === 'For Review' && r.releasedBy && low_(r.releasedBy) !== userEmail
         && (function () {
           // v4 per-admin visibility: hide releases this admin already reviewed.
           var rv = [];
@@ -64,70 +83,91 @@ function getPendingApprovals() {
           return rv.indexOf(userEmail) === -1;
         })();
     }).map(function (r) {
-      return { 
-        id: r.id, 
-        type: 'CashRelease', 
-        projectId: r.projectId, 
-        requestor: r.requestor, 
-        requestorEmail: r.requestorEmail, 
-        amount: r.amount, 
-        description: r.description, 
-        status: r.status, 
+      return {
+        id: r.id,
+        type: 'CashRelease',
+        projectId: r.projectId,
+        requestor: r.requestor,
+        requestorEmail: r.requestorEmail,
+        amount: r.amount,
+        description: r.description,
+        status: r.status,
         createdAt: r.createdAt,
         releasedBy: r.releasedBy,
-        reviewedByJSON: r.reviewedByJSON || '[]'
+        reviewedByJSON: r.reviewedByJSON || '[]',
+        attachmentsJSON: r.attachmentsJSON
       };
     });
   }
 
   // Liquidations
   const liquidations = readAll_('Liquidations').filter(function (l) {
-    return l.status === 'Pending' && l.requestorEmail.toLowerCase() !== userEmail;
+    return low_(l.status) === 'pending' && low_(l.requestorEmail) !== userEmail;
   }).map(function (l) {
-    return { id: l.id, type: 'Liquidation', projectId: l.projectId, requestor: l.requestor, requestorEmail: l.requestorEmail, amount: l.amount, description: l.description, status: l.status, createdAt: l.createdAt };
+    return { id: l.id, type: 'Liquidation', projectId: l.projectId, requestor: l.requestor, requestorEmail: l.requestorEmail, amount: l.amount, description: l.description, status: l.status, createdAt: l.createdAt, attachmentsJSON: l.attachmentsJSON };
   });
 
   // v3: Incoming Cash requests now appear in the approvals inbox
   const incomingCash = readAll_('IncomingCashRequests').filter(function (r) {
-    return r.status === 'Pending' && r.requestorEmail && r.requestorEmail.toLowerCase() !== userEmail;
+    return low_(r.status) === 'pending' && r.requestorEmail && low_(r.requestorEmail) !== userEmail;
   }).map(function (r) {
-    return { id: r.id, type: 'IncomingCash', projectId: r.projectId, requestor: r.requestor, requestorEmail: r.requestorEmail, amount: r.amount, description: r.description, paymentMethod: r.paymentMethod, reference: r.reference, status: r.status, createdAt: r.createdAt };
+    return { id: r.id, type: 'IncomingCash', projectId: r.projectId, requestor: r.requestor, requestorEmail: r.requestorEmail, amount: r.amount, description: r.description, paymentMethod: r.paymentMethod, reference: r.reference, status: r.status, createdAt: r.createdAt, attachmentsJSON: r.attachmentsJSON };
   });
 
   // Materials, Equipment, DailyRecords, Estimates
-  const materials = readAll_('Materials').filter(function (m) { 
-    return low_(m.status) === 'pending' && m.requestedBy && m.requestedBy.toLowerCase() !== userEmail; 
-  });
-  const equipment = readAll_('Equipment').filter(function (e) { 
-    return low_(e.status) === 'pending' && e.requestedBy && e.requestedBy.toLowerCase() !== userEmail; 
-  });
-  const dailyRecords = liveDailyRecords_().filter(function (d) { 
-    return d.status === 'pending' && d.createdBy && d.createdBy.toLowerCase() !== userEmail; 
-  });
+  const materials = readAll_('Materials').filter(function (m) {
+    return low_(m.status) === 'pending' && m.requestedBy && low_(m.requestedBy) !== userEmail;
+  }).map(function (m) { m.type = 'Material'; return m; });
+  const equipment = readAll_('Equipment').filter(function (e) {
+    return low_(e.status) === 'pending' && e.requestedBy && low_(e.requestedBy) !== userEmail;
+  }).map(function (e) { e.type = 'Equipment'; return e; });
+  const dailyRecords = liveDailyRecords_().filter(function (d) {
+    return low_(d.status) === 'pending' && d.createdBy && low_(d.createdBy) !== userEmail;
+  }).map(function (d) { d.type = 'DailyRecord'; return d; });
   // v5 (item 13): exclude the submitter — same rule as every other type.
-  const estimates = readAll_('EstimateGroups').filter(function (g) { 
-    return g.status === 'pending' &&
-      String(g.submittedBy || '').toLowerCase() !== userEmail; 
+  const estimates = readAll_('EstimateGroups').filter(function (g) {
+    return low_(g.status) === 'pending' && low_(g.submittedBy) !== userEmail;
+  }).map(function (g) {
+    g.type = 'Estimate';
+    g.estimateTotal = estimateGroupTotal_(g.id);
+    return g;
   });
 
   // v3: pending manpower role requests (same flow as materials)
   const manpower = readAll_('Manpower').filter(function (m) {
-    return low_(m.status) === 'pending' && m.requestedBy && m.requestedBy.toLowerCase() !== userEmail;
-  });
+    return low_(m.status) === 'pending' && m.requestedBy && low_(m.requestedBy) !== userEmail;
+  }).map(function (m) { m.type = 'Manpower'; return m; });
 
-  // v10: attach parsed attachments to every pending item so the list can
-  // show a paperclip count and the modal can render them immediately.
-  [cashAdvances, releases, incomingCash, liquidations, materials, equipment].forEach(function (arr) {
-    (arr || []).forEach(function (r) { r.attachments = attachmentsOf_(r); });
+  // ── v11 BATCH A: BILLINGS IN THE INBOX ──
+  // Billings were created with status 'Pending' and had a full
+  // 'Billing' case in resolveApprovalItem_/finalizeDecision_, but they
+  // were never listed here. The only Approve button in the whole system
+  // lived inside the project's Billings tab, so there was no badge, no
+  // notification, and a downpayment could sit unapproved forever while
+  // looking like the workflow was broken.
+  const projectNames_ = {};
+  readAll_('Projects').forEach(function (p) { projectNames_[p.id] = p.name; });
+  const billings = readAll_('Billings').filter(function (b) {
+    return low_(b.status) === 'pending' && low_(b.submittedBy) !== userEmail;
+  }).map(function (b) {
+    b.type = 'Billing';
+    b.projectName = projectNames_[b.projectId] || b.projectId;
+    return b;
   });
 
   // v9: pending OVERTIME requests (multi-sig like everything else)
   const otRequests = readAll_('OTRequests').filter(function (o) {
-    return o.status === 'Pending' && o.requestedBy && o.requestedBy.toLowerCase() !== userEmail;
+    return low_(o.status) === 'pending' && o.requestedBy && low_(o.requestedBy) !== userEmail;
   }).map(function (o) {
     o.type = 'OTRequest';
     o.sowIds = safeParse_(o.sowIdsJSON, []);
     return o;
+  });
+
+  // v10: attach parsed attachments to every pending item so the list can
+  // show a paperclip count and the modal can render them immediately.
+  [cashAdvances, releases, incomingCash, liquidations, materials, equipment, dailyRecords].forEach(function (arr) {
+    (arr || []).forEach(function (r) { r.attachments = attachmentsOf_(r); });
   });
 
   // v9 (item 7): sanitize EVERY outbound date so the dashboard never
@@ -142,127 +182,102 @@ function getPendingApprovals() {
     manpower: notMine_(manpower),
     dailyRecords: notMine_(dailyRecords),
     estimates: notMine_(estimates),
+    billings: notMine_(billings),
     otRequests: notMine_(otRequests)
   });
 }
 
-function getMyPendingRequests() {
+/**
+ * myRequests_ (v11) - One filter used by all three "My Requests" tabs.
+ * `want` is 'pending' | 'approved' | 'rejected'; every comparison is
+ * lowercased so legacy rows written as 'Pending'/'Approved' behave the
+ * same as rows written as 'pending'/'approved'.
+ */
+function myRequests_(want) {
+  readMany_(['CashAdvanceRequests', 'CashRelease', 'IncomingCashRequests',
+    'Liquidations', 'Materials', 'Equipment', 'Manpower', 'DailyRecords',
+    'EstimateGroups', 'OTRequests', 'Billings']);
+
   const email = currentUserEmail_().toLowerCase();
-  const cashAdvances = readAll_('CashAdvanceRequests').filter(function (r) { 
-    return r.requestorEmail && r.requestorEmail.toLowerCase() === email && r.status === 'Pending'; 
-  }).map(function(r) { r.type = 'CashAdvance'; return r; });
-  
-  const releases = readAll_('CashRelease').filter(function (r) { 
-    return r.requestorEmail && r.requestorEmail.toLowerCase() === email && r.status === 'Pending'; 
-  }).map(function(r) { r.type = 'CashRelease'; return r; });
-  
-  const incoming = readAll_('IncomingCashRequests').filter(function (r) { 
-    return r.requestorEmail && r.requestorEmail.toLowerCase() === email && r.status === 'Pending'; 
-  }).map(function(r) { r.type = 'IncomingCash'; return r; });
-  
-  const liquidations = readAll_('Liquidations').filter(function (l) { 
-    return l.requestorEmail && l.requestorEmail.toLowerCase() === email && l.status === 'Pending'; 
-  }).map(function(l) { l.type = 'Liquidation'; return l; });
-  
-  const materials = readAll_('Materials').filter(function (m) { 
-    return m.requestedBy && m.requestedBy.toLowerCase() === email && low_(m.status) === 'pending'; 
-  }).map(function(m) { m.type = 'Material'; return m; });
-  
-  const equipment = readAll_('Equipment').filter(function (e) { 
-    return e.requestedBy && e.requestedBy.toLowerCase() === email && low_(e.status) === 'pending'; 
-  }).map(function(e) { e.type = 'Equipment'; return e; });
-  
-  const dailyRecords = liveDailyRecords_().filter(function (d) { 
-    return d.createdBy && d.createdBy.toLowerCase() === email && d.status === 'pending'; 
-  }).map(function(d) { d.type = 'DailyRecord'; return d; });
-  
-  const estimates = readAll_('EstimateGroups').filter(function (g) { 
-    return g.status === 'pending'; 
-  }).map(function(g) { g.type = 'Estimate'; return g; });
+  const is_ = function (v) { return low_(v) === want; };
+  const mine_ = function (v) { return low_(v) === email; };
 
-  const manpower = readAll_('Manpower').filter(function (m) {
-    return m.requestedBy && m.requestedBy.toLowerCase() === email && low_(m.status) === 'pending';
-  }).map(function(m) { m.type = 'Manpower'; return m; });
+  const pick = function (sheet, type, ownerField, statusField) {
+    statusField = statusField || 'status';
+    return readAll_(sheet).filter(function (r) {
+      return mine_(r[ownerField]) && is_(r[statusField]);
+    }).map(function (r) { r.type = type; return r; });
+  };
 
-  const ot = readAll_('OTRequests').filter(function (o) {
-    return o.requestedBy && o.requestedBy.toLowerCase() === email && o.status === 'Pending';
-  }).map(function(o) { o.type = 'OTRequest'; return o; });
+  const out = [].concat(
+    pick('CashAdvanceRequests', 'CashAdvance', 'requestorEmail'),
+    pick('IncomingCashRequests', 'IncomingCash', 'requestorEmail'),
+    pick('Liquidations', 'Liquidation', 'requestorEmail'),
+    pick('Materials', 'Material', 'requestedBy'),
+    pick('Equipment', 'Equipment', 'requestedBy'),
+    pick('Manpower', 'Manpower', 'requestedBy'),
+    pick('DailyRecords', 'DailyRecord', 'createdBy'),
+    pick('OTRequests', 'OTRequest', 'requestedBy'),
+    // ── v11 BATCH A FIX ──
+    // The old getMyPendingRequests() filtered estimates on status ALONE
+    // (`g.status === 'pending'`), with no email condition, so every user
+    // saw every other user's pending estimates listed as their own
+    // request. submittedBy is the correct owner column.
+    pick('EstimateGroups', 'Estimate', 'submittedBy'),
+    pick('Billings', 'Billing', 'submittedBy')
+  );
 
-  return sanitizeDatesDeep_([].concat(cashAdvances, releases, incoming, liquidations, materials, equipment, manpower, dailyRecords, estimates, ot));
+  // CashRelease uses 'For Review' rather than 'Pending' for its live state.
+  if (want === 'pending') {
+    readAll_('CashRelease').filter(function (r) {
+      return mine_(r.requestorEmail) && ['pending', 'for review'].indexOf(low_(r.status)) > -1;
+    }).forEach(function (r) { r.type = 'CashRelease'; out.push(r); });
+  }
+
+  out.forEach(function (r) {
+    r.attachments = attachmentsOf_(r);
+    if (r.type === 'OTRequest') r.sowIds = safeParse_(r.sowIdsJSON, []);
+  });
+  return sanitizeDatesDeep_(out);
 }
 
-function getMyApprovedRequests() {
-  const email = currentUserEmail_().toLowerCase();
-  const cashAdvances = readAll_('CashAdvanceRequests').filter(function (r) { 
-    return r.requestorEmail && r.requestorEmail.toLowerCase() === email && r.status === 'Approved'; 
-  }).map(function(r) { r.type = 'CashAdvance'; return r; });
-  
-  const incoming = readAll_('IncomingCashRequests').filter(function (r) { 
-    return r.requestorEmail && r.requestorEmail.toLowerCase() === email && r.status === 'Approved'; 
-  }).map(function(r) { r.type = 'IncomingCash'; return r; });
-  
-  const liquidations = readAll_('Liquidations').filter(function (l) { 
-    return l.requestorEmail && l.requestorEmail.toLowerCase() === email && l.status === 'Approved'; 
-  }).map(function(l) { l.type = 'Liquidation'; return l; });
-  
-  const materials = readAll_('Materials').filter(function (m) { 
-    return m.requestedBy && m.requestedBy.toLowerCase() === email && m.status === 'approved'; 
-  }).map(function(m) { m.type = 'Material'; return m; });
-  
-  const equipment = readAll_('Equipment').filter(function (e) { 
-    return e.requestedBy && e.requestedBy.toLowerCase() === email && e.status === 'approved'; 
-  }).map(function(e) { e.type = 'Equipment'; return e; });
-  
-  const dailyRecords = liveDailyRecords_().filter(function (d) { 
-    return d.createdBy && d.createdBy.toLowerCase() === email && d.status === 'approved'; 
-  }).map(function(d) { d.type = 'DailyRecord'; return d; });
+function getMyPendingRequests() { return myRequests_('pending'); }
+function getMyApprovedRequests() { return myRequests_('approved'); }
+function getMyRejectedRequests() { return myRequests_('rejected'); }
 
-  const manpower = readAll_('Manpower').filter(function (m) {
-    return m.requestedBy && m.requestedBy.toLowerCase() === email && m.status === 'approved';
-  }).map(function(m) { m.type = 'Manpower'; return m; });
-  
-  const ot = readAll_('OTRequests').filter(function (o) {
-    return o.requestedBy && o.requestedBy.toLowerCase() === email && o.status === 'Approved';
-  }).map(function(o) { o.type = 'OTRequest'; return o; });
-
-  return sanitizeDatesDeep_([].concat(cashAdvances, incoming, liquidations, materials, equipment, manpower, dailyRecords, ot));
+/**
+ * estimateGroupTotal_ (v11) - Sum of every line item in an estimate
+ * group. Used so the approvals inbox and the detail modal can show the
+ * amount an approver is actually signing off on.
+ */
+function estimateGroupTotal_(groupId) {
+  var total = 0;
+  ['EstimateMaterials', 'EstimateLabor', 'EstimateEquipment'].forEach(function (sheet) {
+    readAll_(sheet).forEach(function (r) {
+      if (String(r.groupId) === String(groupId)) total += parseFloat(r.cost) || 0;
+    });
+  });
+  readAll_('EstimateIndirect').forEach(function (r) {
+    if (String(r.groupId) === String(groupId)) total += parseFloat(r.amount) || 0;
+  });
+  return Math.round(total * 100) / 100;
 }
 
-function getMyRejectedRequests() {
-  const email = currentUserEmail_().toLowerCase();
-  const cashAdvances = readAll_('CashAdvanceRequests').filter(function (r) { 
-    return r.requestorEmail && r.requestorEmail.toLowerCase() === email && r.status === 'Rejected'; 
-  }).map(function(r) { r.type = 'CashAdvance'; return r; });
-  
-  const incoming = readAll_('IncomingCashRequests').filter(function (r) { 
-    return r.requestorEmail && r.requestorEmail.toLowerCase() === email && r.status === 'Rejected'; 
-  }).map(function(r) { r.type = 'IncomingCash'; return r; });
-  
-  const liquidations = readAll_('Liquidations').filter(function (l) { 
-    return l.requestorEmail && l.requestorEmail.toLowerCase() === email && l.status === 'Rejected'; 
-  }).map(function(l) { l.type = 'Liquidation'; return l; });
-  
-  const materials = readAll_('Materials').filter(function (m) { 
-    return m.requestedBy && m.requestedBy.toLowerCase() === email && m.status === 'rejected'; 
-  }).map(function(m) { m.type = 'Material'; return m; });
-  
-  const equipment = readAll_('Equipment').filter(function (e) { 
-    return e.requestedBy && e.requestedBy.toLowerCase() === email && e.status === 'rejected'; 
-  }).map(function(e) { e.type = 'Equipment'; return e; });
-  
-  const dailyRecords = liveDailyRecords_().filter(function (d) { 
-    return d.createdBy && d.createdBy.toLowerCase() === email && d.status === 'rejected'; 
-  }).map(function(d) { d.type = 'DailyRecord'; return d; });
-
-  const manpower = readAll_('Manpower').filter(function (m) {
-    return m.requestedBy && m.requestedBy.toLowerCase() === email && m.status === 'rejected';
-  }).map(function(m) { m.type = 'Manpower'; return m; });
-  
-  const ot = readAll_('OTRequests').filter(function (o) {
-    return o.requestedBy && o.requestedBy.toLowerCase() === email && o.status === 'Rejected';
-  }).map(function(o) { o.type = 'OTRequest'; return o; });
-
-  return sanitizeDatesDeep_([].concat(cashAdvances, incoming, liquidations, materials, equipment, manpower, dailyRecords, ot));
+/**
+ * estimateGroupLines_ (v11) - The four line-item arrays of a group, so
+ * the approval modal can show WHAT is being approved without needing
+ * the Estimates tab to have been opened first.
+ */
+function estimateGroupLines_(groupId) {
+  var of_ = function (sheet) {
+    return readAll_(sheet).filter(function (r) { return String(r.groupId) === String(groupId); });
+  };
+  return {
+    materials: of_('EstimateMaterials'),
+    labor: of_('EstimateLabor'),
+    equipment: of_('EstimateEquipment'),
+    indirect: of_('EstimateIndirect')
+  };
 }
 
 function getRequestById(id) {
@@ -270,6 +285,12 @@ function getRequestById(id) {
   // its approve/reject buttons need it — raw rows have no such field,
   // which rendered as "undefined" and broke type-dependent rendering)
   // and passed through sanitizeDatesDeep_ (clean dates/times).
+  //
+  // ── v11 BATCH A FIX ──
+  // EstimateGroups and Billings were MISSING from this table. Both types
+  // are listed in getPendingApprovals(), so clicking either one in the
+  // inbox called getRequestById(), fell off the end of the loop, and
+  // returned null — which the frontend reported as "Request not found."
   var lookups = [
     ['CashAdvanceRequests', 'CashAdvance'],
     ['CashRelease', 'CashRelease'],
@@ -279,13 +300,37 @@ function getRequestById(id) {
     ['Equipment', 'Equipment'],
     ['DailyRecords', 'DailyRecord'],
     ['Manpower', 'Manpower'],
-    ['OTRequests', 'OTRequest']
+    ['OTRequests', 'OTRequest'],
+    ['EstimateGroups', 'Estimate'],
+    ['Billings', 'Billing']
   ];
   for (var i = 0; i < lookups.length; i++) {
     var req = readAll_(lookups[i][0]).find(function (r) { return r.id === id; });
     if (req) {
       req.type = lookups[i][1];
       if (req.type === 'OTRequest') req.sowIds = safeParse_(req.sowIdsJSON, []);
+      if (req.type === 'Estimate') {
+        req.lines = estimateGroupLines_(req.id);
+        req.amount = estimateGroupTotal_(req.id);
+        req.scope = req.sowId;
+        req.description = req.sowDescription;
+        req.requestor = req.submittedBy;
+      }
+      if (req.type === 'Billing') {
+        req.amount = parseFloat(req.netAmount) || 0;
+        req.requestor = req.submittedBy;
+        req.description = (req.billingType || 'Progress') + ' billing ' +
+          (req.billingNo || '') + ' — ' + (req.period || '');
+      }
+      if (req.type === 'DailyRecord') {
+        req.requestor = req.createdBy;
+        req.description = req.remarks || req.notes || '';
+      }
+      // project display name, so the modal never shows a bare id
+      if (req.projectId) {
+        var pr = readAll_('Projects').find(function (p) { return p.id === req.projectId; });
+        if (pr) req.projectName = pr.name;
+      }
       // v10 ATTACHMENT FIX: the row carries attachmentsJSON (a STRING);
       // the detail modal looked for a parsed `attachments` ARRAY, so
       // uploaded receipts and photos never rendered anywhere. Parse it
@@ -331,6 +376,54 @@ function rejectItem(id, type) {
 }
 
 /**
+ * ── SUPER ADMIN BYPASS (v11 BATCH A) ─────────────────────────
+ *
+ * autoApproveIfSuper_ - Called by every "submit/request" function
+ * immediately after the row is written. If a SUPER ADMIN filed it, the
+ * request is finalized on the spot: no pending state, no waiting on the
+ * other admins, no entry in anybody's inbox.
+ *
+ * WHY IT ROUTES THROUGH finalizeDecision_ INSTEAD OF JUST SETTING
+ * status = 'Approved': approval is never only a status change. A cash
+ * advance approval also creates the CashRelease row; an estimate
+ * approval writes the total back into the SOW budget. Setting the
+ * status directly would leave those side effects undone and silently
+ * corrupt the downstream numbers. Reusing the engine keeps the super
+ * admin path and the normal path byte-for-byte identical in effect.
+ *
+ * A signature row is still written to the Approvals sheet so the audit
+ * trail shows WHO approved it and that it was an auto-approval.
+ *
+ * Returns true if it auto-approved, false otherwise. Never throws — a
+ * failure here must not lose the request the user just filed.
+ */
+function autoApproveIfSuper_(id, type) {
+  try {
+    if (currentUserRole_() !== 'superadmin') return false;
+    var meta = resolveApprovalItem_(id, type);
+    if (!meta.found || !meta.isPending) return false;
+
+    appendRow_('Approvals', {
+      requestId: id,
+      approver: currentUserEmail_().toLowerCase(),
+      decision: 'Approved',
+      timestamp: new Date(),
+      remarks: 'Auto-approved on submission (Super Admin)'
+    });
+    finalizeDecision_(id, type, 'Approved', meta);
+    logActivity_(type + ' ' + id + ' auto-approved — filed by Super Admin ' +
+      currentUserName_(), 'g', id);
+    return true;
+  } catch (e) {
+    // The row is already saved; leaving it Pending is recoverable,
+    // throwing here would make the user think the submission failed.
+    logActivity_('Super Admin auto-approval of ' + type + ' ' + id +
+      ' failed: ' + e.message + ' — left pending', 'a', id);
+    return false;
+  }
+}
+
+/**
  * ── APPROVAL ENGINE (v4: multi-signature for ALL types) ──
  *
  * MODEL (mirrors Cash Release, generalized to every type):
@@ -355,7 +448,7 @@ function decideItem_(id, type, decision, isForce) {
   if (type === 'Estimate') {
     const groups = readAll_('EstimateGroups');
     if (!groups.some(function (g) { return g.id === id; })) {
-      const bySow = groups.find(function (g) { return g.sowId === id && g.status === 'pending'; })
+      const bySow = groups.find(function (g) { return g.sowId === id && low_(g.status) === 'pending'; })
         || groups.find(function (g) { return g.sowId === id; });
       if (bySow) id = bySow.id;
     }
@@ -364,6 +457,18 @@ function decideItem_(id, type, decision, isForce) {
   const meta = resolveApprovalItem_(id, type);
   if (!meta.found) throw new Error(meta.msg || 'Request not found.');
   if (!meta.isPending) throw new Error(meta.notPendingMsg || 'Request is not pending.');
+
+  // ── v11 BATCH A FIX: ORDER OF THESE TWO BLOCKS ──
+  // The self-approval guard used to sit ABOVE the isForce branch, so it
+  // ran first and threw for the super admin too. The UI showed "Force
+  // Approve" on the super admin's own request and the server then
+  // refused it — the exact "wala nang approval dapat" complaint.
+  // A force decision is by definition an override, so it is checked
+  // first. The guard still applies to every normal admin.
+  if (isForce) {
+    return finalizeDecision_(id, type, decision, meta);
+  }
+
   if (meta.submitter && meta.submitter === approver) {
     throw new Error('Self-approval is not allowed.');
   }
@@ -371,11 +476,6 @@ function decideItem_(id, type, decision, isForce) {
   // Cash Release keeps its own dedicated review flow (reviewedByJSON).
   if (type === 'CashRelease') {
     return reviewRelease(id, approver);
-  }
-
-  // Super Admin force: finalize immediately, no signature tracking.
-  if (isForce) {
-    return finalizeDecision_(id, type, decision, meta);
   }
 
   // Normal admin path — cannot sign twice.
@@ -404,26 +504,27 @@ function decideItem_(id, type, decision, isForce) {
 /**
  * resolveApprovalItem_ - Uniform lookup for any approvable type.
  * Returns { found, isPending, submitter (lowercased email) }.
+ * v11: every isPending test is now case-insensitive.
  */
 function resolveApprovalItem_(id, type) {
-  var r, subField;
+  var r;
   switch (type) {
     case 'CashAdvance':
       r = readAll_('CashAdvanceRequests').find(function (x) { return x.id === id; });
-      return r ? { found: true, isPending: r.status === 'Pending', submitter: low_(r.requestorEmail), obj: r }
+      return r ? { found: true, isPending: low_(r.status) === 'pending', submitter: low_(r.requestorEmail), obj: r }
                : { found: false, msg: 'Cash advance request not found.' };
     case 'CashRelease':
       r = readAll_('CashRelease').find(function (x) { return x.id === id; });
-      return r ? { found: true, isPending: r.status === 'For Review', submitter: low_(r.releasedBy), obj: r }
+      return r ? { found: true, isPending: low_(r.status) === 'for review', submitter: low_(r.releasedBy), obj: r }
                : { found: false, msg: 'Cash release record not found.' };
     case 'IncomingCash':
     case 'Incoming Cash':
       r = readAll_('IncomingCashRequests').find(function (x) { return x.id === id; });
-      return r ? { found: true, isPending: r.status === 'Pending', submitter: low_(r.requestorEmail), obj: r }
+      return r ? { found: true, isPending: low_(r.status) === 'pending', submitter: low_(r.requestorEmail), obj: r }
                : { found: false, msg: 'Incoming cash request not found.' };
     case 'Liquidation':
       r = readAll_('Liquidations').find(function (x) { return x.id === id; });
-      return r ? { found: true, isPending: r.status === 'Pending', submitter: low_(r.requestorEmail), obj: r }
+      return r ? { found: true, isPending: low_(r.status) === 'pending', submitter: low_(r.requestorEmail), obj: r }
                : { found: false, msg: 'Liquidation record not found.' };
     // v6.1: pending checks are case-insensitive — requestMaterial and
     // friends now write lowercase 'pending' (matching 'approved' /
@@ -442,20 +543,20 @@ function resolveApprovalItem_(id, type) {
                : { found: false, msg: 'Manpower role not found.' };
     case 'DailyRecord':
       r = readAll_('DailyRecords').find(function (x) { return x.id === id; });
-      return r ? { found: true, isPending: r.status === 'pending', submitter: low_(r.createdBy), obj: r }
+      return r ? { found: true, isPending: low_(r.status) === 'pending', submitter: low_(r.createdBy), obj: r }
                : { found: false, msg: 'Daily record not found.' };
     case 'Estimate':
       r = readAll_('EstimateGroups').find(function (x) { return x.id === id; });
-      return r ? { found: true, isPending: r.status === 'pending', submitter: low_(r.submittedBy), obj: r }
+      return r ? { found: true, isPending: low_(r.status) === 'pending', submitter: low_(r.submittedBy), obj: r }
                : { found: false, msg: 'Estimate group not found.' };
     case 'Billing':
       r = readAll_('Billings').find(function (x) { return x.id === id; });
-      return r ? { found: true, isPending: r.status === 'Pending', submitter: low_(r.submittedBy), obj: r }
+      return r ? { found: true, isPending: low_(r.status) === 'pending', submitter: low_(r.submittedBy), obj: r }
                : { found: false, msg: 'Billing not found.' };
     case 'OTRequest':
       // v9: overtime authorization for a project/date (multi-sig)
       r = readAll_('OTRequests').find(function (x) { return x.id === id; });
-      return r ? { found: true, isPending: r.status === 'Pending', submitter: low_(r.requestedBy), obj: r }
+      return r ? { found: true, isPending: low_(r.status) === 'pending', submitter: low_(r.requestedBy), obj: r }
                : { found: false, msg: 'OT request not found.' };
     default:
       return { found: false, msg: 'Invalid type for approval: ' + type };
@@ -563,22 +664,10 @@ function allSignersApproved_(id, submitterEmail) {
 
 function forceApprove(id, type) {
   requireSuperAdmin_('force approval');   // v7.0
-  const user = readAll_('Users').find(function (u) { 
-    return String(u.email).toLowerCase() === currentUserEmail_().toLowerCase(); 
-  });
-  if (!user || user.role !== 'superadmin') {
-    throw new Error('Only the Super Admin can force-approve.');
-  }
   return decideItem_(id, type, 'Approved', true);
 }
 
 function forceReject(id, type) {
   requireSuperAdmin_('force rejection');   // v7.0
-  const user = readAll_('Users').find(function (u) { 
-    return String(u.email).toLowerCase() === currentUserEmail_().toLowerCase(); 
-  });
-  if (!user || user.role !== 'superadmin') {
-    throw new Error('Only the Super Admin can force-reject.');
-  }
   return decideItem_(id, type, 'Rejected', true);
 }

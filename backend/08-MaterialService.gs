@@ -22,7 +22,9 @@ function requestMaterial(data) {
     status: 'pending', requestedBy: currentUserEmail_(), createdAt: new Date()
   });
   logActivity_('Material Database Update Request: "' + data.name + '" requested by ' + currentUserName_(), 'blue');
-  return { success: true, id: id };
+  // v11 BATCH A: Super Admin bypass.
+  var autoApproved = autoApproveIfSuper_(id, 'Material');
+  return { success: true, id: id, autoApproved: autoApproved };
 }
 function approveMaterial(id) {
   requireApprover_('approving a material');   // v7.0
