@@ -1,0 +1,481 @@
+// ================================================================
+//  pages/purchase-requests.js — Purchase Requests (v11 BATCH G1)
+//
+//  Every purchase now starts here. The PR is the control point: it is
+//  where spend is stopped, before any money moves.
+//
+//  THE BUDGET CHECK is the reason this belongs inside the board rather
+//  than being bought. The system already knows the approved materials
+//  estimate for every SOW item, so a request can be measured against it
+//  while it can still be changed. No off-the-shelf procurement package
+//  knows your DUPA.
+//
+//  It measures against COMMITTED spend, not just spent — a PR that is
+//  approved but undelivered has cost nothing yet, but the money is
+//  promised. Checking only actual spend would let three individually
+//  affordable requests be approved that together blow the line. That is
+//  the classic way procurement overruns happen quietly.
+//
+//  And it WARNS rather than BLOCKS. Sites genuinely do need to overspend
+//  sometimes, and a system that refuses gets worked around — someone
+//  codes the purchase to whichever SOW item still has budget, and the
+//  cost data ends up worse than if it had been allowed through.
+//
+//  The check runs SERVER-SIDE (checkPrBudget) so the warning shown here
+//  and the one the approvers see cannot disagree.
+// ================================================================
+
+const PurchaseRequestsPage = {
+
+    _all: [],
+    _projects: [],
+    _sow: [],
+    _materials: [],
+    _suppliers: [],
+    _filter: 'open',
+    _lines: [],
+    _budgetTimer: null,
+
+    async load() {
+        const box = document.getElementById('purchaseRequestsContent');
+        if (!box) return;
+        UI.showLoading(box);
+        try {
+            const [prs, home, suppliers] = await Promise.all([
+                DataService.getPurchaseRequests(),
+                DataService.getHomeData(),
+                DataService.getSuppliers().catch(() => [])
+            ]);
+            this._all = prs || [];
+            this._projects = ((home && home.projects) || [])
+                .filter(p => String(p.status || '').toLowerCase() === 'ongoing');
+            this._suppliers = suppliers || [];
+            this._render();
+        } catch (err) {
+            UI.toast('Could not load purchase requests: ' + (err.message || err), 'error');
+        }
+    },
+
+    _esc(v) {
+        return String(v == null ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    },
+    _date(v) {
+        if (!v) return '—';
+        const d = new Date(v);
+        return isNaN(d) ? String(v) : d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    },
+    _get(id) { return this._all.find(p => p.id === id); },
+
+    _filtered() {
+        const open = ['draft', 'pending', 'approved'];
+        if (this._filter === 'all') return this._all;
+        if (this._filter === 'open') return this._all.filter(p => open.includes(String(p.status).toLowerCase()));
+        return this._all.filter(p => String(p.status).toLowerCase() === this._filter);
+    },
+
+    _render() {
+        const box = document.getElementById('purchaseRequestsContent');
+        const e = this._esc.bind(this);
+        const n = st => this._all.filter(p => String(p.status).toLowerCase() === st).length;
+        const open = n('draft') + n('pending') + n('approved');
+        const pendingValue = this._all
+            .filter(p => String(p.status).toLowerCase() === 'pending')
+            .reduce((s, p) => s + (parseFloat(p.totalAmount) || 0), 0);
+        const overCount = this._all.filter(p =>
+            p.budgetState === 'over' && ['pending', 'approved'].includes(String(p.status).toLowerCase())).length;
+
+        const list = this._filtered();
+
+        box.innerHTML = `
+            <div class="section-head"><h2>Purchase Requests</h2><div class="rule"></div>
+                <span class="badge">${open} open</span>
+                <button class="btn-sm primary" style="margin-left:8px;" onclick="PurchaseRequestsPage.openForm()">
+                    ${Icon.plus({size:12})} New request
+                </button>
+            </div>
+            <p class="data-source-note" style="margin-bottom:14px;">
+                Every purchase starts here. Cash advances still exist for payroll, fuel, permits and
+                incidentals — but buying goods goes through a request so it can be checked against the
+                estimate before the money moves.
+            </p>
+
+            <div class="kpi-strip pr-strip" style="margin-bottom:16px;">
+                <div class="kpi-card"><div class="k-label">Awaiting approval</div><div class="k-val">${n('pending')}</div>
+                    <div class="k-sub">${this._peso(pendingValue)} requested</div></div>
+                <div class="kpi-card good"><div class="k-label">Approved</div><div class="k-val">${n('approved')}</div>
+                    <div class="k-sub">ready to order or buy</div></div>
+                <div class="kpi-card ${overCount ? 'warn' : ''}"><div class="k-label">Over estimate</div>
+                    <div class="k-val">${overCount}</div>
+                    <div class="k-sub">${overCount ? 'need a VO or a reason' : 'none'}</div></div>
+                <div class="kpi-card"><div class="k-label">Drafts</div><div class="k-val">${n('draft')}</div>
+                    <div class="k-sub">not yet submitted</div></div>
+            </div>
+
+            <div class="status-tabs" style="margin-bottom:14px;">
+                <button class="${this._filter === 'open' ? 'active' : ''}" onclick="PurchaseRequestsPage.setFilter('open')">Open (${open})</button>
+                ${['draft','pending','approved','rejected','ordered','cancelled'].map(s =>
+                    `<button class="${this._filter === s ? 'active' : ''}" onclick="PurchaseRequestsPage.setFilter('${s}')">${s[0].toUpperCase()+s.slice(1)} (${n(s)})</button>`).join('')}
+                <button class="${this._filter === 'all' ? 'active' : ''}" onclick="PurchaseRequestsPage.setFilter('all')">All (${this._all.length})</button>
+            </div>
+
+            ${list.length
+                ? `<div class="pr-grid">${list.map(p => this._card(p)).join('')}</div>`
+                : `<div class="empty"><p>${this._all.length
+                    ? 'No requests with this status.'
+                    : 'No purchase requests yet. Raise one to start buying against a scope item.'}</p></div>`}`;
+    },
+
+    _peso(v) { return '₱' + fmtMoney(parseFloat(v) || 0); },
+    setFilter(f) { this._filter = f; this._render(); },
+
+    _card(p) {
+        const e = this._esc.bind(this);
+        const st = String(p.status).toLowerCase();
+        const user = App.getUser() || {};
+        const isMine = String(p.requestorEmail || '').toLowerCase() === String(user.email || '').toLowerCase();
+
+        const bs = { ok: '', near: 'near', over: 'over', 'no-estimate': 'none' }[p.budgetState] || '';
+        const bLabel = { ok: 'Within estimate', near: 'Close to estimate',
+                         over: 'Over estimate', 'no-estimate': 'No estimate to check' }[p.budgetState] || '';
+
+        let actions = '';
+        if (st === 'draft' && isMine) {
+            actions = `<button class="btn-sm primary" onclick="PurchaseRequestsPage.submitDraft('${e(p.id)}')">Submit</button>
+                <button class="btn-sm" onclick="PurchaseRequestsPage.openForm('${e(p.id)}')">${Icon.pencil({size:12})}</button>`;
+        } else if (st === 'pending') {
+            actions = `<span class="pr-note">Awaiting approval</span>`;
+        } else if (st === 'approved') {
+            actions = p.route === 'cash'
+                ? `<span class="pr-note">Cash advance ${e(p.cashAdvanceId || '')} created</span>`
+                : `<button class="btn-sm" disabled style="opacity:.55;cursor:not-allowed;" title="Purchase orders arrive in the next batch">Raise PO</button>`;
+        }
+        if (['draft', 'pending', 'approved'].includes(st) && isMine) {
+            actions += `<button class="btn-sm danger" onclick="PurchaseRequestsPage.cancel('${e(p.id)}')">Cancel</button>`;
+        }
+
+        return `
+            <article class="pr-card ${st}">
+                <header>
+                    <div><span class="pr-num">${e(p.id)}</span>
+                        <span class="pr-route">${p.route === 'cash' ? 'Cash' : 'Purchase order'}</span></div>
+                    <span class="pr-status ${st}">${e(p.status)}</span>
+                </header>
+                <h3>${e(p.title)}</h3>
+                <p class="pr-meta">${e(p.projectName || p.projectId)} · <b>${e(p.sowId)}</b>
+                    · ${p.lineCount} item${p.lineCount === 1 ? '' : 's'}
+                    ${p.dateNeeded ? ' · needed ' + this._date(p.dateNeeded) : ''}</p>
+                <div class="pr-amt">${this._peso(p.totalAmount)}</div>
+                ${bLabel ? `<div class="pr-budget ${bs}">${bs === 'over' ? Icon.warning({size:11}) : ''} ${bLabel}</div>` : ''}
+                <p class="pr-just">${e(p.justification)}</p>
+                <div class="pr-actions">
+                    <button class="btn-sm" onclick="PurchaseRequestsPage.view('${e(p.id)}')">Open</button>
+                    ${actions}
+                </div>
+            </article>`;
+    },
+
+    view(id) {
+        const p = this._get(id);
+        if (!p) return;
+        const e = this._esc.bind(this);
+        document.getElementById('prViewModal')?.remove();
+        const modal = document.createElement('div');
+        modal.className = 'print-modal-overlay open';
+        modal.id = 'prViewModal';
+        modal.innerHTML = `
+            <div class="print-modal-content" style="max-width:680px;">
+                <button class="close-modal" onclick="document.getElementById('prViewModal').remove()">${Icon.close({size:18})}</button>
+                <div class="print-header"><h2>${e(p.id)} — ${e(p.title)}</h2>
+                    <div class="print-meta">${e(p.projectName || p.projectId)} · ${e(p.sowId)} ·
+                        ${e(p.status)} · ${p.route === 'cash' ? 'Cash purchase' : 'Purchase order'}</div></div>
+
+                ${p.budgetMessage ? `<div class="pr-budget-box ${p.budgetState}">
+                    <b>${{ok:'Within the estimate',near:'Close to the estimate',
+                          over:'Over the estimate','no-estimate':'No estimate to check against'}[p.budgetState] || ''}</b>
+                    <p>${e(p.budgetMessage)}</p>
+                </div>` : ''}
+
+                <div class="print-section"><div class="ps-title">Items</div>
+                    <table class="ps-table">
+                        <thead><tr><th>Item</th><th>Unit</th><th class="amt">Qty</th>
+                            <th class="amt">Unit price</th><th class="amt">Amount</th></tr></thead>
+                        <tbody>${(p.lines || []).map(l => `<tr>
+                            <td>${e(l.itemName)}${l.notes ? `<div class="muted">${e(l.notes)}</div>` : ''}</td>
+                            <td>${e(l.unit)}</td>
+                            <td class="amt">${fmtMoney(l.qty)}</td>
+                            <td class="amt">${this._peso(l.rate)}</td>
+                            <td class="amt">${this._peso(l.amount)}</td></tr>`).join('')}</tbody>
+                        <tfoot><tr><td colspan="4">Total</td>
+                            <td class="amt">${this._peso(p.totalAmount)}</td></tr></tfoot>
+                    </table>
+                </div>
+
+                <div class="print-section"><div class="ps-title">Justification</div>
+                    <p style="font-size:12.5px;white-space:pre-wrap;">${e(p.justification)}</p></div>
+
+                <div class="print-section"><div class="ps-title">Details</div>
+                    <div class="db-form-grid" style="font-size:12px;">
+                        <div>Requested by<br><b>${e(p.requestor)}</b></div>
+                        <div>Raised<br><b>${this._date(p.createdAt)}</b></div>
+                        <div>Needed by<br><b>${this._date(p.dateNeeded)}</b></div>
+                        <div>Deliver to<br><b>${e(p.deliverTo) || '—'}</b></div>
+                    </div></div>
+
+                <div class="print-actions">
+                    <button class="btn-sm" onclick="PrintDoc.print({title:'Purchase Request ${e(p.id)}'})">${Icon.printer({size:12})} Print</button>
+                    <button class="btn-ghost" onclick="document.getElementById('prViewModal').remove()">Close</button>
+                </div>
+            </div>`;
+        document.body.appendChild(modal);
+    },
+
+    // ─── the form ───────────────────────────────────────────────
+
+    async openForm(editId) {
+        const e = this._esc.bind(this);
+        const existing = editId ? this._get(editId) : null;
+        this._lines = existing && existing.lines && existing.lines.length
+            ? existing.lines.map(l => ({ itemName: l.itemName, unit: l.unit, qty: l.qty, rate: l.rate, notes: l.notes }))
+            : [{ itemName: '', unit: '', qty: 1, rate: 0, notes: '' }];
+
+        document.getElementById('prFormModal')?.remove();
+        const modal = document.createElement('div');
+        modal.className = 'print-modal-overlay open';
+        modal.id = 'prFormModal';
+        modal.innerHTML = `
+            <div class="print-modal-content" style="max-width:760px;">
+                <button class="close-modal" onclick="document.getElementById('prFormModal').remove()">${Icon.close({size:18})}</button>
+                <div class="print-header"><h2>${existing ? 'Edit ' + e(existing.id) : 'New Purchase Request'}</h2>
+                    <div class="print-meta">Checked against the estimate before it goes for approval</div></div>
+
+                <div class="print-section"><div class="ps-title">What and where</div>
+                    <div class="db-form-grid">
+                        <div class="field"><label>Project *</label>
+                            <select id="pr-project" onchange="PurchaseRequestsPage.loadSow()">
+                                <option value="">— select —</option>
+                                ${this._projects.map(p => `<option value="${e(p.id)}" ${existing && existing.projectId === p.id ? 'selected' : ''}>${e(p.name)}</option>`).join('')}
+                            </select></div>
+                        <div class="field"><label>Charge to SOW item *</label>
+                            <select id="pr-sow" onchange="PurchaseRequestsPage.recalc()"><option value="">— select a project first —</option></select>
+                            <p class="pr-hint">Every peso traces back to a scope item. This is what makes the budget check possible.</p></div>
+                        <div class="field"><label>Needed on site by</label>
+                            <input type="date" id="pr-needed" value="${e(existing ? existing.dateNeeded : '')}" /></div>
+                        <div class="field"><label>Deliver to</label>
+                            <input type="text" id="pr-deliver" value="${e(existing ? existing.deliverTo : '')}" /></div>
+                    </div>
+                    <div class="field"><label>Title *</label>
+                        <input type="text" id="pr-title" value="${e(existing ? existing.title : '')}" placeholder="e.g. Geotextile for NF2 cell" /></div>
+                    <div class="field"><label>Justification *</label>
+                        <textarea id="pr-just" rows="2" placeholder="Why is this needed now? Approvers read this first.">${e(existing ? existing.justification : '')}</textarea></div>
+                </div>
+
+                <div class="print-section"><div class="ps-title">Items</div>
+                    <div style="overflow-x:auto;"><table class="ps-table pr-lines">
+                        <thead><tr><th style="min-width:180px;">Item</th><th style="width:80px;">Unit</th>
+                            <th class="amt" style="width:90px;">Qty</th><th class="amt" style="width:110px;">Unit price</th>
+                            <th class="amt" style="width:120px;">Amount</th><th style="width:40px;"></th></tr></thead>
+                        <tbody id="pr-lines"></tbody>
+                        <tfoot><tr><td colspan="4">Total</td><td class="amt" id="pr-total">₱0.00</td><td></td></tr></tfoot>
+                    </table></div>
+                    <button class="btn-sm" style="margin-top:8px;" onclick="PurchaseRequestsPage.addLine()">+ Add item</button>
+                    <div id="pr-budget"></div>
+                </div>
+
+                <div class="print-section"><div class="ps-title">How will this be paid</div>
+                    <div class="pr-route-pick">
+                        <label><input type="radio" name="prroute" value="po" ${!existing || existing.route !== 'cash' ? 'checked' : ''} onchange="PurchaseRequestsPage.setRoute()" />
+                            <span><b>Purchase order</b><em>Credit from a supplier. Produces a PO to send out and a payable dated from their terms.</em></span></label>
+                        <label><input type="radio" name="prroute" value="cash" ${existing && existing.route === 'cash' ? 'checked' : ''} onchange="PurchaseRequestsPage.setRoute()" />
+                            <span><b>Cash advance</b><em>Spot purchase paid on the day. The cash advance is created for you — you will not re-type any of this.</em></span></label>
+                    </div>
+                    <div class="field" id="pr-supp-box" style="margin-top:10px;">
+                        <label>Preferred supplier (optional)</label>
+                        <select id="pr-supplier">
+                            <option value="">— decide later —</option>
+                            ${this._suppliers.filter(s => s.status !== 'inactive').map(s =>
+                                `<option value="${e(s.id)}" ${existing && existing.preferredSupplierId === s.id ? 'selected' : ''}>${e(s.name)} — ${e(s.termsLabel)}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="print-actions">
+                    <button class="btn-primary" onclick="PurchaseRequestsPage.submit('${e(editId || '')}', false)">
+                        ${existing ? 'Save and submit' : 'Submit for approval'}</button>
+                    <button class="btn-sm" onclick="PurchaseRequestsPage.submit('${e(editId || '')}', true)">Save as draft</button>
+                    <button class="btn-ghost" onclick="document.getElementById('prFormModal').remove()">Cancel</button>
+                </div>
+            </div>`;
+        document.body.appendChild(modal);
+        this._renderLines();
+        this.setRoute();
+        if (existing) await this.loadSow(existing.sowId);
+    },
+
+    async loadSow(preselect) {
+        const pid = document.getElementById('pr-project')?.value;
+        const sel = document.getElementById('pr-sow');
+        if (!sel) return;
+        if (!pid) { sel.innerHTML = '<option value="">— select a project first —</option>'; return; }
+        sel.innerHTML = '<option value="">Loading...</option>';
+        try {
+            const data = await DataService.getProjectData(pid);
+            this._sow = (data && data.sowItems || []).filter(s => !s.isMilestone);
+            sel.innerHTML = '<option value="">— select —</option>' + this._sow.map(s =>
+                `<option value="${this._esc(s.id)}" ${preselect === s.id ? 'selected' : ''}>${this._esc(s.id)} — ${this._esc(s.description || '')}</option>`).join('');
+            this.recalc();
+        } catch (err) {
+            sel.innerHTML = '<option value="">Could not load SOW items</option>';
+        }
+    },
+
+    _renderLines() {
+        const tb = document.getElementById('pr-lines');
+        if (!tb) return;
+        const e = this._esc.bind(this);
+        tb.innerHTML = this._lines.map((l, i) => `
+            <tr>
+                <td><input type="text" value="${e(l.itemName)}" placeholder="Material or service"
+                    oninput="PurchaseRequestsPage.setLine(${i},'itemName',this.value)" /></td>
+                <td><input type="text" value="${e(l.unit)}" placeholder="pc"
+                    oninput="PurchaseRequestsPage.setLine(${i},'unit',this.value)" /></td>
+                <td class="amt"><input type="number" min="0" step="any" value="${l.qty}"
+                    oninput="PurchaseRequestsPage.setLine(${i},'qty',this.value)" /></td>
+                <td class="amt"><input type="number" min="0" step="any" value="${l.rate}"
+                    oninput="PurchaseRequestsPage.setLine(${i},'rate',this.value)" /></td>
+                <td class="amt pr-line-amt">${this._peso((parseFloat(l.qty)||0)*(parseFloat(l.rate)||0))}</td>
+                <td><button class="btn-sm danger" title="Remove" onclick="PurchaseRequestsPage.delLine(${i})">${Icon.close({size:11})}</button></td>
+            </tr>`).join('');
+        this.recalc();
+    },
+
+    setLine(i, field, v) {
+        if (!this._lines[i]) return;
+        this._lines[i][field] = (field === 'qty' || field === 'rate') ? v : v;
+        // Only the amount cell and the budget check need to move — a full
+        // re-render here would steal focus from the field being typed in.
+        const row = document.querySelectorAll('#pr-lines tr')[i];
+        if (row) {
+            row.querySelector('.pr-line-amt').textContent =
+                this._peso((parseFloat(this._lines[i].qty) || 0) * (parseFloat(this._lines[i].rate) || 0));
+        }
+        this.recalc();
+    },
+
+    addLine() { this._lines.push({ itemName: '', unit: '', qty: 1, rate: 0, notes: '' }); this._renderLines(); },
+    delLine(i) {
+        if (this._lines.length <= 1) { UI.toast('A request needs at least one item.', 'error'); return; }
+        this._lines.splice(i, 1);
+        this._renderLines();
+    },
+
+    _total() {
+        return this._lines.reduce((s, l) =>
+            s + (parseFloat(l.qty) || 0) * (parseFloat(l.rate) || 0), 0);
+    },
+
+    /**
+     * recalc - updates the total, then asks the SERVER for the budget
+     * verdict. Debounced, because it fires on every keystroke in a
+     * quantity field and each call reads four sheets.
+     */
+    recalc() {
+        const total = this._total();
+        const el = document.getElementById('pr-total');
+        if (el) el.textContent = this._peso(total);
+
+        clearTimeout(this._budgetTimer);
+        this._budgetTimer = setTimeout(() => this._checkBudget(total), 400);
+    },
+
+    async _checkBudget(total) {
+        const box = document.getElementById('pr-budget');
+        if (!box) return;
+        const pid = document.getElementById('pr-project')?.value;
+        const sow = document.getElementById('pr-sow')?.value;
+        if (!pid || !sow || total <= 0) { box.innerHTML = ''; return; }
+        try {
+            const b = await DataService.checkPrBudget(pid, sow, total);
+            const title = { ok: 'Within the estimate', near: 'Close to the estimate',
+                            over: 'Over the estimate for ' + sow,
+                            'no-estimate': 'No estimate to check against' }[b.state] || '';
+            const pct = b.budget > 0 ? Math.min(100, Math.round(b.committed / b.budget * 100)) : 0;
+            const pctThis = b.budget > 0 ? Math.min(100 - pct, Math.round(b.requested / b.budget * 100)) : 0;
+            box.innerHTML = `
+                <div class="pr-budget-box ${b.state}">
+                    <b>${b.state === 'over' ? Icon.warning({size:12}) + ' ' : ''}${title}</b>
+                    <p>${this._esc(b.message)}</p>
+                    ${b.budget > 0 ? `
+                        <div class="pr-bar"><div class="pr-bar-used" style="width:${pct}%"></div>
+                            <div class="pr-bar-this" style="left:${pct}%;width:${pctThis}%"></div></div>
+                        <div class="pr-bar-nums">
+                            <span>Committed ${this._peso(b.committed)} · this request ${this._peso(b.requested)}</span>
+                            <span>Estimated ${this._peso(b.budget)}</span>
+                        </div>` : ''}
+                </div>`;
+        } catch (err) { box.innerHTML = ''; }
+    },
+
+    setRoute() {
+        const cash = document.querySelector('input[name="prroute"]:checked')?.value === 'cash';
+        const box = document.getElementById('pr-supp-box');
+        if (box) box.style.display = cash ? 'none' : 'block';
+    },
+
+    async submit(editId, asDraft) {
+        const v = id => (document.getElementById(id)?.value || '').trim();
+        const payload = {
+            projectId: v('pr-project'), sowId: v('pr-sow'), title: v('pr-title'),
+            justification: v('pr-just'), dateNeeded: v('pr-needed'), deliverTo: v('pr-deliver'),
+            route: document.querySelector('input[name="prroute"]:checked')?.value || 'po',
+            preferredSupplierId: v('pr-supplier'),
+            status: asDraft ? 'draft' : 'pending',
+            lines: this._lines.filter(l => String(l.itemName).trim() && (parseFloat(l.qty) || 0) > 0)
+        };
+        if (!payload.projectId) { UI.toast('Select a project.', 'error'); return; }
+        if (!payload.sowId) { UI.toast('Select the SOW item this is charged to.', 'error'); return; }
+        if (!payload.title) { UI.toast('Give the request a title.', 'error'); return; }
+        if (!payload.justification) { UI.toast('A justification is required — approvers read it first.', 'error'); return; }
+        if (!payload.lines.length) { UI.toast('Add at least one item with a quantity.', 'error'); return; }
+
+        try {
+            if (editId) {
+                await DataService.updatePurchaseRequest(editId, payload);
+                if (!asDraft) await DataService.submitDraftPurchaseRequest(editId);
+                UI.toast(`${editId} ${asDraft ? 'saved' : 'submitted'}.`, 'success');
+            } else {
+                const res = await DataService.submitPurchaseRequest(payload);
+                UI.toast(asDraft
+                    ? `${res.id} saved as a draft.`
+                    : res.autoApproved
+                        ? `${res.id} submitted and auto-approved.`
+                        : `${res.id} submitted for approval.`, 'success');
+                if (res.budget && res.budget.state === 'over') {
+                    UI.toast('Note: this request is over the materials estimate for that SOW item.', 'error');
+                }
+            }
+            document.getElementById('prFormModal')?.remove();
+            await this.load();
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
+
+    async submitDraft(id) {
+        try {
+            const res = await DataService.submitDraftPurchaseRequest(id);
+            UI.toast(res.autoApproved ? `${id} submitted and auto-approved.` : `${id} submitted for approval.`, 'success');
+            await this.load();
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
+
+    async cancel(id) {
+        const ok = await Confirm.open(`Cancel ${id}?`,
+            'The request will be closed and cannot be ordered against. It stays on record.');
+        if (!ok) return;
+        try {
+            await DataService.cancelPurchaseRequest(id, '');
+            UI.toast(`${id} cancelled.`, 'success');
+            await this.load();
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    }
+};

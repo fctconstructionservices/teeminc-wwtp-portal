@@ -42,6 +42,7 @@ const KnowledgeBasePage = {
         materials: { label: 'Materials',   sub: 'Master list · Search · Approval' },
         equipment: { label: 'Tools & Equipment', sub: 'Equipment inventory · Search · Approval' },
         manpower:  { label: 'Manpower',    sub: 'Roles & trades · Personnel' },
+        suppliers: { label: 'Suppliers', sub: 'Contacts · Payment terms · Balances' },
         lessons:   { label: 'Lessons Learned', sub: 'Project retrospectives · Plan vs actual' }
     },
 
@@ -80,6 +81,7 @@ const KnowledgeBasePage = {
             if (tab === 'materials') await MaterialsPage.load();
             else if (tab === 'equipment') await EquipmentPage.load();
             else if (tab === 'manpower') await ManpowerPage.load();
+            else if (tab === 'suppliers') await this.loadSuppliers();
             else if (tab === 'lessons') await this.loadLessons();
         } catch (err) {
             // Let the tab be retried rather than staying permanently blank.
@@ -454,6 +456,138 @@ const KnowledgeBasePage = {
             document.getElementById('addLessonModal')?.remove();
             UI.toast('Lesson saved.', 'success');
             await this.loadLessons();
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
+
+    // ─── SUPPLIERS (v11 BATCH G1) ───────────────────────────────
+    // Master data, so it belongs here beside Materials and Equipment.
+    // The column that matters is payment terms: it is what sets the due
+    // date on every payable.
+
+    _suppliers: [],
+
+    async loadSuppliers() {
+        const box = document.getElementById('suppliersContent');
+        if (!box) return;
+        UI.showLoading(box);
+        this._suppliers = await DataService.getSuppliers();
+        this._renderSuppliers();
+    },
+
+    _renderSuppliers() {
+        const box = document.getElementById('suppliersContent');
+        if (!box) return;
+        const e = this._esc.bind(this);
+        const list = this._suppliers || [];
+        const owed = list.reduce((s, x) => s + (parseFloat(x.outstanding) || 0), 0);
+
+        box.innerHTML = `
+            <div class="section-head"><h2>Suppliers</h2><div class="rule"></div>
+                <span class="badge">${list.length} supplier${list.length === 1 ? '' : 's'}</span>
+                <button class="btn-sm primary" style="margin-left:8px;" onclick="KnowledgeBasePage.openSupplierModal()">
+                    ${Icon.plus({size:12})} Add supplier
+                </button>
+            </div>
+            <p class="data-source-note" style="margin-bottom:14px;">
+                Payment terms live here. Every payable's due date is computed from them, so getting the
+                terms right on this page is what makes the payables list mean anything.
+            </p>
+            ${list.length ? `<div class="scroll-x"><table class="kb-supp-table">
+                <thead><tr><th>Supplier</th><th>Contact</th><th>Terms</th><th>TIN</th>
+                    <th>VAT</th><th class="amt">Outstanding</th><th></th></tr></thead>
+                <tbody>${list.map(s => `<tr class="${s.status === 'inactive' ? 'is-inactive' : ''}">
+                    <td><b>${e(s.name)}</b>${s.category ? `<div class="muted">${e(s.category)}</div>` : ''}
+                        ${s.status === 'inactive' ? '<span class="stamp">Inactive</span>' : ''}</td>
+                    <td>${e(s.contactPerson) || '—'}<div class="muted">${e(s.contactNumber)}</div></td>
+                    <td>${e(s.termsLabel)}</td>
+                    <td class="mono">${e(s.tin) || '—'}</td>
+                    <td>${s.vatRegistered ? 'VAT' : 'Non-VAT'}</td>
+                    <td class="amt">${s.outstanding ? '₱' + fmtMoney(s.outstanding) : '—'}</td>
+                    <td><button class="btn-sm" onclick="KnowledgeBasePage.openSupplierModal('${e(s.id)}')">${Icon.pencil({size:12})}</button>
+                        ${(App.getUser() || {}).role === 'superadmin'
+                            ? `<button class="btn-sm danger" onclick="KnowledgeBasePage.deleteSupplier('${e(s.id)}')">${Icon.trash({size:12})}</button>` : ''}</td>
+                </tr>`).join('')}</tbody>
+                ${owed ? `<tfoot><tr><td colspan="5">Total outstanding</td>
+                    <td class="amt">₱${fmtMoney(owed)}</td><td></td></tr></tfoot>` : ''}
+            </table></div>`
+            : '<div class="empty"><p>No suppliers yet. Add the ones you buy from — their payment terms are what make the payables list work.</p></div>'}`;
+    },
+
+    openSupplierModal(id) {
+        const s = id ? (this._suppliers || []).find(x => x.id === id) : null;
+        const e = this._esc.bind(this);
+        const TERMS = [0, 7, 15, 30, 45, 60, 90];
+        document.getElementById('suppModal')?.remove();
+        const modal = document.createElement('div');
+        modal.className = 'print-modal-overlay open';
+        modal.id = 'suppModal';
+        modal.innerHTML = `
+            <div class="print-modal-content" style="max-width:560px;">
+                <button class="close-modal" onclick="document.getElementById('suppModal').remove()">${Icon.close({size:18})}</button>
+                <div class="print-header"><h2>${s ? 'Edit supplier' : 'Add supplier'}</h2>
+                    <div class="print-meta">${s ? e(s.name) : 'Payment terms set every due date'}</div></div>
+                <div class="field"><label>Name *</label><input type="text" id="sp-name" value="${e(s ? s.name : '')}" /></div>
+                <div class="db-form-grid">
+                    <div class="field"><label>Contact person</label><input type="text" id="sp-person" value="${e(s ? s.contactPerson : '')}" /></div>
+                    <div class="field"><label>Contact number</label><input type="text" id="sp-number" value="${e(s ? s.contactNumber : '')}" /></div>
+                    <div class="field"><label>Email</label><input type="text" id="sp-email" value="${e(s ? s.email : '')}" /></div>
+                    <div class="field"><label>TIN</label><input type="text" id="sp-tin" value="${e(s ? s.tin : '')}" /></div>
+                    <div class="field"><label>Payment terms *</label>
+                        <select id="sp-terms">${TERMS.map(t =>
+                            `<option value="${t}" ${s && parseInt(s.termsDays,10) === t ? 'selected' : (!s && t === 30 ? 'selected' : '')}>${t === 0 ? 'Cash on delivery' : t + ' days from delivery'}</option>`).join('')}</select>
+                        <p style="font-size:11px;color:var(--ink-soft);margin-top:4px;">This sets the due date on every payable from this supplier.</p></div>
+                    <div class="field"><label>Category</label><input type="text" id="sp-cat" value="${e(s ? s.category : '')}" placeholder="e.g. Aggregates, Geosynthetics" /></div>
+                </div>
+                <div class="field"><label>Address</label><input type="text" id="sp-address" value="${e(s ? s.address : '')}" /></div>
+                <div style="display:flex;gap:18px;flex-wrap:wrap;margin:6px 0 10px;">
+                    <label style="display:flex;gap:6px;align-items:center;font-size:12px;">
+                        <input type="checkbox" id="sp-vat" ${!s || s.vatRegistered ? 'checked' : ''} style="width:auto;" /> VAT-registered</label>
+                    <label style="display:flex;gap:6px;align-items:center;font-size:12px;">
+                        <input type="checkbox" id="sp-incl" ${!s || s.pricesIncludeVat ? 'checked' : ''} style="width:auto;" /> Prices include VAT</label>
+                    ${s ? `<label style="display:flex;gap:6px;align-items:center;font-size:12px;">
+                        <input type="checkbox" id="sp-inactive" ${s.status === 'inactive' ? 'checked' : ''} style="width:auto;" /> Inactive</label>` : ''}
+                </div>
+                <div class="field"><label>Notes</label><textarea id="sp-notes" rows="2">${e(s ? s.notes : '')}</textarea></div>
+                <div class="print-actions">
+                    <button class="btn-primary" onclick="KnowledgeBasePage.saveSupplier('${e(id || '')}')">Save</button>
+                    <button class="btn-ghost" onclick="document.getElementById('suppModal').remove()">Cancel</button>
+                </div>
+            </div>`;
+        document.body.appendChild(modal);
+        setTimeout(() => document.getElementById('sp-name')?.focus(), 50);
+    },
+
+    async saveSupplier(id) {
+        const v = x => (document.getElementById(x)?.value || '').trim();
+        const c = x => !!document.getElementById(x)?.checked;
+        if (!v('sp-name')) { UI.toast('Supplier name is required.', 'error'); return; }
+        const data = {
+            name: v('sp-name'), contactPerson: v('sp-person'), contactNumber: v('sp-number'),
+            email: v('sp-email'), tin: v('sp-tin'), termsDays: v('sp-terms'),
+            category: v('sp-cat'), address: v('sp-address'), notes: v('sp-notes'),
+            vatRegistered: c('sp-vat'), pricesIncludeVat: c('sp-incl')
+        };
+        if (id) data.status = c('sp-inactive') ? 'inactive' : 'active';
+        try {
+            if (id) await DataService.updateSupplier(id, data);
+            else await DataService.addSupplier(data);
+            document.getElementById('suppModal')?.remove();
+            UI.toast('Supplier saved.', 'success');
+            await this.loadSuppliers();
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
+
+    async deleteSupplier(id) {
+        const s = (this._suppliers || []).find(x => x.id === id);
+        const ok = await Confirm.open(`Delete ${s ? s.name : id}?`,
+            'If this supplier has purchase orders or invoices they will be deactivated instead of deleted — an unpaid invoice pointing at a supplier who no longer exists is a debt you cannot chase.');
+        if (!ok) return;
+        try {
+            const res = await DataService.deleteSupplier(id);
+            UI.toast(res.deactivated
+                ? `Deactivated — ${res.references} record(s) still reference this supplier.`
+                : 'Supplier deleted.', 'success');
+            await this.loadSuppliers();
         } catch (err) { UI.toast('' + err.message, 'error'); }
     },
 

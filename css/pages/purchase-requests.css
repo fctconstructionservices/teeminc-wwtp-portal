@@ -1,0 +1,233 @@
+/* ================================================================
+   pages/purchase-requests.css — Purchase Requests (v11 BATCH G1)
+
+   The budget check is the visual centrepiece and is styled to be
+   impossible to miss when it turns amber or red — it is the one moment
+   an overrun can still be stopped.
+   ================================================================ */
+
+#purchaseRequestsContent .kpi-strip { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 1000px) {
+    #purchaseRequestsContent .kpi-strip { grid-template-columns: repeat(2, 1fr); }
+}
+
+.pr-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+    gap: 14px;
+}
+
+.pr-card {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--ink-soft);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 14px 16px;
+}
+.pr-card.pending { border-left-color: var(--amber); }
+.pr-card.approved { border-left-color: var(--green); }
+.pr-card.rejected,
+.pr-card.cancelled { border-left-color: var(--red); opacity: .75; }
+.pr-card.ordered { border-left-color: var(--blueprint); }
+
+.pr-card header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 5px;
+}
+.pr-num {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--blueprint);
+}
+.pr-route {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--ink-soft);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 1px 7px;
+    margin-left: 6px;
+}
+.pr-status {
+    font-family: 'Oswald', sans-serif;
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    padding: 2px 9px;
+    border-radius: 999px;
+    background: var(--bg);
+    color: var(--ink-soft);
+    border: 1px solid var(--line);
+    white-space: nowrap;
+}
+.pr-status.pending { background: var(--amber); color: #fff; border-color: var(--amber); }
+.pr-status.approved { background: var(--green); color: #fff; border-color: var(--green); }
+.pr-status.rejected,
+.pr-status.cancelled { background: var(--red); color: #fff; border-color: var(--red); }
+
+.pr-card h3 {
+    font-family: 'Oswald', sans-serif;
+    font-size: 14.5px;
+    font-weight: 500;
+    margin: 0 0 3px;
+    line-height: 1.25;
+}
+.pr-meta { font-size: 11px; color: var(--ink-soft); margin: 0 0 8px; }
+.pr-amt {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+.pr-just {
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+    margin: 8px 0 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.pr-note { font-size: 10.5px; color: var(--ink-soft); align-self: center; }
+.pr-actions {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+    padding-top: 10px;
+    margin-top: 8px;
+    border-top: 1px dotted var(--line);
+}
+
+/* The budget verdict, on the card */
+.pr-budget {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--green);
+    color: var(--green);
+}
+.pr-budget.near { border-color: var(--amber); color: var(--amber); }
+.pr-budget.over { border-color: var(--red); color: var(--red); font-weight: 600; }
+.pr-budget.none { border-color: var(--line); color: var(--ink-soft); }
+
+/* The budget verdict, in the form and the detail modal. This is the one
+   moment an overrun can still be stopped, so it is deliberately loud. */
+.pr-budget-box {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--green);
+    background: rgba(47, 122, 70, .07);
+    border-radius: var(--radius);
+    padding: 11px 14px;
+    margin: 12px 0 0;
+    font-size: 12.5px;
+    line-height: 1.55;
+}
+.pr-budget-box.near { border-left-color: var(--amber); background: rgba(194, 134, 15, .08); }
+.pr-budget-box.over { border-left-color: var(--red); background: rgba(178, 58, 46, .08); }
+.pr-budget-box.no-estimate { border-left-color: var(--ink-soft); background: var(--bg); }
+.pr-budget-box b { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.pr-budget-box p { margin: 0; }
+
+.pr-bar {
+    height: 7px;
+    border-radius: 4px;
+    background: var(--line);
+    overflow: hidden;
+    margin: 9px 0 5px;
+    position: relative;
+}
+.pr-bar-used {
+    height: 100%;
+    background: var(--ink-soft);
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+.pr-bar-this { height: 100%; position: absolute; top: 0; background: var(--blueprint); }
+.pr-budget-box.near .pr-bar-this { background: var(--amber); }
+.pr-budget-box.over .pr-bar-this { background: var(--red); }
+.pr-bar-nums {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--ink-soft);
+}
+
+.pr-hint { font-size: 11px; color: var(--ink-soft); margin-top: 4px; line-height: 1.45; }
+.pr-lines input { width: 100%; padding: 4px 6px; font-size: 12px; }
+
+.pr-route-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pr-route-pick label {
+    display: block;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 11px 13px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+.pr-route-pick label:hover { border-color: var(--blueprint); }
+.pr-route-pick input { display: none; }
+.pr-route-pick label:has(input:checked) {
+    border-color: var(--blueprint);
+    background: var(--blueprint-tint);
+}
+.pr-route-pick b {
+    display: block;
+    font-family: 'Oswald', sans-serif;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    margin-bottom: 3px;
+}
+.pr-route-pick em {
+    font-style: normal;
+    font-size: 11px;
+    color: var(--ink-soft);
+    line-height: 1.45;
+}
+
+/* Suppliers table, in the Knowledge Base */
+.kb-supp-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.kb-supp-table th {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--blueprint);
+    text-align: left;
+    padding: 8px 9px;
+    background: var(--blueprint-tint);
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+}
+.kb-supp-table th.amt, .kb-supp-table td.amt { text-align: right; }
+.kb-supp-table td { padding: 7px 9px; border-bottom: 1px solid var(--line); }
+.kb-supp-table td.amt, .kb-supp-table td.mono {
+    font-family: 'IBM Plex Mono', monospace;
+    font-variant-numeric: tabular-nums;
+}
+.kb-supp-table tfoot td { font-weight: 700; background: var(--bg); }
+.kb-supp-table tr.is-inactive { opacity: .55; }
+.kb-supp-table .muted { font-size: 10.5px; color: var(--ink-soft); }
+.scroll-x { overflow-x: auto; }
+
+@media (max-width: 620px) {
+    .pr-grid { grid-template-columns: 1fr; }
+    .pr-route-pick { grid-template-columns: 1fr; }
+    #purchaseRequestsContent .kpi-strip { grid-template-columns: repeat(2, 1fr); }
+}
