@@ -120,6 +120,7 @@ const App = {
         // each database lazily on first open, so switching to it to read
         // a lesson no longer pulls three full catalogues over the wire.
         if (page === 'knowledge') await KnowledgeBasePage.load(this._kbTab || 'materials');
+        if (page === 'quotations') await QuotationsPage.load();   // v11 BATCH F2
         if (page === 'approvals') await ApprovalsPage.load();
         if (page === 'print-template') await PrintTemplatePage.load();
         if (page === 'release-cash') {

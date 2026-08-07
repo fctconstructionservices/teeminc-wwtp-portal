@@ -428,7 +428,9 @@ function getFinanceData() {
   readMany_(['Projects', 'IncomingCashRequests', 'CashRelease', 'SOWItems',
     'CashAdvanceRequests', 'Liquidations']);   // SOWItems: v6.6 forecast
 
-  const projects = readAll_('Projects');
+  // v11 BATCH F2: a quotation would otherwise sit in the cashflow
+  // forecast at zero and drag every projection down.
+  const projects = readAll_('Projects').filter(isLiveProject_);
   const allIncoming = readAll_('IncomingCashRequests');
   const allReleases = readAll_('CashRelease');
   const sowItems = readAll_('SOWItems');

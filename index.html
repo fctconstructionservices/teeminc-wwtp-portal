@@ -271,6 +271,38 @@
     <!--  MATERIALS DATABASE PAGE                   -->
     <!-- ════════════════════════════════════════════ -->
     <!-- ════════════════════════════════════════════ -->
+    <!--  QUOTATIONS  (v11 BATCH F2)                 -->
+    <!--                                             -->
+    <!--  A quotation is a Projects row with status  -->
+    <!--  'Quotation', so the SOW Budget, Estimates  -->
+    <!--  and Timeline tabs price it directly. This  -->
+    <!--  page is the commercial wrapper: number,    -->
+    <!--  revision, price, margin and decision.      -->
+    <!-- ════════════════════════════════════════════ -->
+    <section id="page-quotations" class="page" aria-label="Quotations">
+        <div class="wrap">
+            <div class="topbar">
+                <div class="mark">F</div>
+                <div class="brand">
+                    <div class="name">Quotations</div>
+                    <div class="sub">Bids in progress · Revisions · Award</div>
+                </div>
+                <div class="spacer"></div>
+                <button class="hamburger" onclick="toggleMenu()"></button>
+                <div class="actions" id="topActionsQuotations">
+                    <button class="theme-toggle" onclick="App.toggleTheme()"></button>
+                    <button onclick="App.navigate('home')">Back</button>
+                </div>
+            </div>
+            <div class="crumb"><button onclick="App.navigate('home')">Home</button> / Quotations</div>
+
+            <div id="quotationsContent">
+                <div class="loading-overlay"><div class="loader"></div><p>Loading quotations...</p></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
     <!--  KNOWLEDGE BASE CENTER  (v11 BATCH F1)      -->
     <!--                                             -->
     <!--  The Materials, Equipment and Manpower       -->
@@ -768,6 +800,7 @@
     <!-- v11 BATCH E: PrintDoc must load BEFORE any page that prints -->
     <script src="js/pages/print-template.js"></script>
     <script src="js/pages/knowledge-base.js"></script>
+    <script src="js/pages/quotations.js"></script>
     <script src="js/pages/finance.js"></script>
     <script src="js/pages/portfolio.js"></script>
     <script src="js/pages/materials.js"></script>

@@ -25,7 +25,9 @@ function getPortfolioData() {
     'CashRelease', 'IncomingCashRequests', 'CashAdvanceRequests',
     'Billings', 'VariationOrders', 'ClientLists']);
 
-  var projects = readAll_('Projects');
+  // v11 BATCH F2: quotations and lost bids live in the Projects sheet
+  // but are not projects — see isLiveProject_() in 28-QuotationService.
+  var projects = readAll_('Projects').filter(isLiveProject_);
   var clients = readAll_('ClientLists');
   var clientById = {};
   clients.forEach(function (c) { clientById[c.id] = c.name || c.clientName || ''; });

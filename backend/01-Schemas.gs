@@ -175,6 +175,19 @@ const SCHEMAS = {
   // somebody wrote. The three JSON columns hold the computed metrics,
   // the findings and the suggestions, so the retrospective can grow new
   // fields without another schema change.
+  // ── v11 BATCH F2: QUOTATIONS ──
+  // A quotation owns a Projects row with status 'Quotation' (see
+  // 28-QuotationService.gs), so `projectId` is the id that row — and the
+  // eventual awarded project — carries. Everything priced during
+  // tendering is therefore already the project's on award; nothing is
+  // copied. Revisions are SNAPSHOTS of the priced position, not forks.
+  Quotations: ['id', 'projectId', 'clientId', 'clientName', 'title', 'status',
+    'revision', 'quotedValue', 'validUntil', 'scopeNotes', 'exclusions',
+    'preparedBy', 'sentDate', 'decisionDate', 'decisionNote',
+    'createdAt', 'updatedAt'],
+  QuotationRevisions: ['id', 'quotationId', 'revision', 'quotedValue', 'estimatedCost',
+    'sowCount', 'snapshotJSON', 'note', 'createdBy', 'createdAt'],
+
   LessonsLearned: ['id', 'projectId', 'projectName', 'source', 'category', 'title',
     'whatHappened', 'rootCause', 'impact', 'recommendation',
     'metricsJSON', 'findingsJSON', 'suggestionsJSON',

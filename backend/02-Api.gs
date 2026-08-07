@@ -266,6 +266,17 @@ const API_ACTIONS = {
   generateProjectRetrospective: generateProjectRetrospective,
   saveProjectRetrospective: saveProjectRetrospective,
   getRetrospectiveCandidates: getRetrospectiveCandidates,
+
+  // ── v11 BATCH F2: QUOTATIONS ──
+  getQuotations: getQuotations,
+  createQuotation: createQuotation,
+  updateQuotation: updateQuotation,
+  setQuotationStatus: setQuotationStatus,
+  reviseQuotation: reviseQuotation,
+  getQuotationRevisions: getQuotationRevisions,
+  awardQuotation: awardQuotation,
+  loseQuotation: loseQuotation,
+  deleteQuotation: deleteQuotation,
   addDrawing: addDrawing,
   deleteDrawing: deleteDrawing,
   getDrawings: getDrawings,

@@ -24,8 +24,15 @@ function search(query) {
 
   readAll_('Projects').forEach(function (p) {
     if (!hit_(p.id, p.name, p.location)) return;
+    // v11 BATCH F2: quotations and lost bids are NOT filtered out here.
+    // Search is the one place you actively want to find an old bid —
+    // "what did we quote this client last year" is the question. They
+    // are labelled instead, so the result is never mistaken for a live
+    // project.
+    var isQuote = !isLiveProject_(p);
     results.push({
-      type: 'Project', id: p.id, label: p.name,
+      type: isQuote ? (String(p.status).toLowerCase() === 'lost' ? 'Lost Bid' : 'Quotation') : 'Project',
+      id: p.id, label: p.name,
       status: p.status || '', projectId: p.id,
       detail: { 'Project ID': p.id, 'Name': p.name, 'Status': p.status || '—',
         'Location': p.location || '—', 'Start': fmtDate_(p.startDate), 'End': fmtDate_(p.endDate) }

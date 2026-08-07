@@ -532,6 +532,8 @@ function getRetrospectiveCandidates() {
   });
 
   return readAll_('Projects').filter(function (p) {
+    // v11 BATCH F2: a quotation has no life cycle to look back on.
+    if (!isLiveProject_(p)) return false;
     if (done[p.id]) return false;
     if (low_(p.status) === 'completed') return true;
     var items = sow.filter(function (s) { return s.projectId === p.id; });

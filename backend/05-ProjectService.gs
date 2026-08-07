@@ -19,7 +19,9 @@ function getHomeData() {
   readMany_(['Projects', 'CashAdvanceRequests', 'CashRelease',
     'IncomingCashRequests', 'Liquidations', 'ActivityLog']);
 
-  const projects = readAll_('Projects').map(function (p) {
+  // v11 BATCH F2: quotations and lost bids live in the Projects sheet
+  // but are not projects — see isLiveProject_() in 28-QuotationService.
+  const projects = readAll_('Projects').filter(isLiveProject_).map(function (p) {
     p.editors = projectEditors_(p);   // v6.6: card avatars
     const revenue = getTotalIncomingCashForProject(p.id);
     const expenses = getTotalReleasedCashForProject(p.id);

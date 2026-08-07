@@ -32,8 +32,8 @@ function setDateNeededMin() {
 }
 
 /**
- * loadProjectsDropdown - Punoan ang project dropdown ng ongoing projects lang
- * PURPOSE: I-filter ang projects para Ongoing lang ang lumabas sa dropdown
+ * loadProjectsDropdown - Fills the project dropdown with ongoing projects only.
+ * PURPOSE: Filter the list so only Ongoing projects appear in the dropdown.
  */
 async function loadProjectsDropdown() {
     // v7.0.2: guard at the source. This also runs from DOMContentLoaded,
@@ -93,7 +93,7 @@ async function loadProjectsDropdown() {
 }
 
 /**
- * loadIncomingProjectsDropdown - Punoan ang incoming cash project dropdown
+ * loadIncomingProjectsDropdown - Fills the incoming cash project dropdown.
  * PURPOSE: Same as loadProjectsDropdown but for record-cash form
  */
 async function loadIncomingProjectsDropdown() {
@@ -144,7 +144,7 @@ async function loadIncomingProjectsDropdown() {
 }
 
 /**
- * loadSOWItemsForRequest - Punoan ang SOW dropdown base sa napiling project
+ * loadSOWItemsForRequest - Fills the SOW dropdown for the selected project.
  * PURPOSE: Loads the selected project's SOW items into the scope-of-work dropdown
  */
 async function loadSOWItemsForRequest() {

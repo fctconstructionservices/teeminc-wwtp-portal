@@ -93,7 +93,10 @@ function availableAt_(loc, itemType) {
 
 /** getTransferOptions - locations + available items, for the modal. */
 function getTransferOptions(fromLoc, itemType) {
-  var projects = readAll_('Projects').filter(function (p) { return p.status !== 'Archived'; });
+  // v11 BATCH F2: you cannot transfer stock to a job you have not won.
+  var projects = readAll_('Projects').filter(function (p) {
+    return p.status !== 'Archived' && isLiveProject_(p);
+  });
   var locations = projects.map(function (p) { return { id: p.id, label: p.name + ' (' + p.id + ')', isWarehouse: false }; });
   locations.push({ id: WAREHOUSE_LOC, label: 'Warehouse', isWarehouse: true });
 

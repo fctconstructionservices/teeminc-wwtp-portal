@@ -617,6 +617,37 @@ const DataService = {
     async getRetrospectiveCandidates() {
         return await gasCall('getRetrospectiveCandidates');
     },
+
+    // ── v11 BATCH F2: QUOTATIONS ──
+    // A quotation owns a Projects row with status 'Quotation', so the SOW
+    // and Estimates tools price it directly and awarding copies nothing.
+    async getQuotations() {
+        return await gasCall('getQuotations');
+    },
+    async createQuotation(data) {
+        return await gasCall('createQuotation', data);
+    },
+    async updateQuotation(id, data) {
+        return await gasCall('updateQuotation', id, data);
+    },
+    async setQuotationStatus(id, status) {
+        return await gasCall('setQuotationStatus', id, status);
+    },
+    async reviseQuotation(id, note) {
+        return await gasCall('reviseQuotation', id, note || '');
+    },
+    async getQuotationRevisions(id) {
+        return await gasCall('getQuotationRevisions', id);
+    },
+    async awardQuotation(id, data) {
+        return await gasCall('awardQuotation', id, data || {});
+    },
+    async loseQuotation(id, data) {
+        return await gasCall('loseQuotation', id, data || {});
+    },
+    async deleteQuotation(id) {
+        return await gasCall('deleteQuotation', id);
+    },
     async addDrawing(data) {
         return await gasCall('addDrawing', data);
     },
