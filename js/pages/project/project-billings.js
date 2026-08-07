@@ -371,6 +371,11 @@ Object.assign(ProjectPage, {
             }
         </style>
         <div class="swa-sheet">
+            <!-- v11 BATCH E: company letterhead. Injected as markup rather
+                 than through PrintDoc.print(), because this overlay has its
+                 own A4-landscape print rules and its own signature row —
+                 so signatures are suppressed to avoid a duplicate. -->
+            <div id="swaLetterhead"></div>
             <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:12px;">
                 <div>
                     <div><b>Project:</b> ${p.name || ''}</div>
@@ -423,17 +428,43 @@ Object.assign(ProjectPage, {
                 <div class="s"><div class="line">Noted by</div></div>
             </div>
             <div class="swa-noprint" style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">
-                <button class="btn-primary" onclick="window.print()">Print (A4 Landscape)</button>
+                <button class="btn-primary" onclick="ProjectPage.printSWA()">Print (A4 Landscape)</button>
                 <button class="btn-ghost" onclick="ProjectPage.closeSWA()">Close</button>
             </div>
         </div>`;
         overlay.addEventListener('click', e => { if (e.target === overlay) this.closeSWA(); });
+        // fill the letterhead once the template is available; the sheet
+        // renders immediately either way, so a slow fetch never blocks it
+        PrintDoc.load().then(() => {
+            const slot = document.getElementById('swaLetterhead');
+            if (slot) slot.innerHTML = PrintDoc.watermarkHTML() + PrintDoc.letterheadHTML({
+                title: 'Statement of Work Accomplishment',
+                meta: `${b.billingNo || ''} · ${b.period || ''}`
+            });
+        });
         document.body.appendChild(overlay);
     },
 
     closeSWA() {
         const el = document.getElementById('swaModal');
         if (el) el.remove();
+    },
+
+    /**
+     * printSWA (v11 BATCH E) - Ensures the letterhead is present before
+     * printing. The sheet renders as soon as the modal opens and fills
+     * its letterhead asynchronously, so hitting Print within the first
+     * moment could otherwise produce a page with an empty header.
+     */
+    async printSWA() {
+        await PrintDoc.load();
+        const slot = document.getElementById('swaLetterhead');
+        if (slot && !slot.innerHTML.trim()) {
+            slot.innerHTML = PrintDoc.watermarkHTML() + PrintDoc.letterheadHTML({
+                title: 'Statement of Work Accomplishment'
+            });
+        }
+        window.print();
     }
 
 });
@@ -479,7 +510,7 @@ Object.assign(ProjectPage, {
      * exportBillingsExcel (v9 — item 1) - DETAILED billing export: one
      * worksheet PER BILLING containing its full SWA table (Item No,
      * Description, Amount, Wt%, Previous, This Billing, To Date) plus
-     * the gross/retention/net summary — hindi na yung register summary.
+     * the gross/retention/net summary — not the register summary.
      */
     exportBillingsExcel() {
         if (typeof XLSX === 'undefined') { UI.toast('Excel library not loaded — refresh the page and try again.', 'error'); return; }

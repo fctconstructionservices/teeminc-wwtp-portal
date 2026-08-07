@@ -96,7 +96,53 @@ const ProjectPage = {
             document.getElementById('proj-status').textContent = p.status || '—';
             document.getElementById('proj-crumb').textContent = p.name || '—';
 
-            const pendingTotal = (p.requests || []).filter(r => r.status === 'Pending' || r.status === 'Pending Approval' || r.status === 'Approved for Release').reduce((s, r) => s + (r.amount || 0), 0);
+            // ── v11 BATCH A: PROJECT SNAPSHOT COST KPIs ──
+            // These two cards were DEAD. They both read `p.requests`, a
+            // key getProjectData() has never returned — it sends
+            // cashAdvanceRequests / cashReleases / liquidations. So the
+            // Requests count always rendered 0 and Pending/Unliquidated
+            // always rendered PHP 0, on every project, for everyone.
+            //
+            // They are also now two separate figures, because they mean
+            // different things and were misleading when summed:
+            //
+            //   PENDING REQUEST COST — money REQUESTED but not yet
+            //     approved. Not out of the company account. It is
+            //     exposure: what this project is about to cost you.
+            //
+            //   UNLIQUIDATED COST — money already RELEASED to the site
+            //     against a reviewed release, minus whatever has since
+            //     been liquidated with approved receipts. This IS out of
+            //     the account and unaccounted for. It is a collection
+            //     problem, not a budget problem.
+            const cashAdvances = p.cashAdvanceRequests || [];
+            const cashReleases = p.cashReleases || [];
+            const liquidations = p.liquidations || [];
+            const lc = v => String(v || '').toLowerCase();
+
+            const pendingRequests = cashAdvances.filter(r => lc(r.status) === 'pending');
+            const pendingRequestCost = pendingRequests
+                .reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+
+            // Approved liquidations, totalled per source cash advance.
+            const liquidatedByCA = {};
+            liquidations
+                .filter(l => lc(l.status) === 'approved')
+                .forEach(l => {
+                    const k = l.cashAdvanceId;
+                    if (k) liquidatedByCA[k] = (liquidatedByCA[k] || 0) + (parseFloat(l.amount) || 0);
+                });
+
+            // 'Reviewed' is the state where the cash has actually left.
+            const unliquidatedCost = cashReleases
+                .filter(r => lc(r.status) === 'reviewed')
+                .reduce((s, r) => {
+                    const released = parseFloat(r.amount) || 0;
+                    const settled = liquidatedByCA[r.originalRequestId] || 0;
+                    return s + Math.max(0, released - settled);
+                }, 0);
+
+            const requestCount = cashAdvances.length + cashReleases.length + liquidations.length;
 
             // v6.6: per-project editors — chips + Manage (superadmin),
             // view-only banner for everyone who isn't assigned.
@@ -121,12 +167,16 @@ const ProjectPage = {
             ${editorsRow}
             ${viewOnlyBanner}
             <div class="section-head"><h2>Project Snapshot</h2><div class="rule"></div></div>
-            <div class="kpi-strip kpi-strip-5">
+            <div class="kpi-strip kpi-strip-6">
                 <div class="kpi-card good"><div class="k-label">Revenue</div><div class="k-val mono">₱${fmtMoney((p.revenue || 0))}</div></div>
                 <div class="kpi-card"><div class="k-label">Expenses</div><div class="k-val mono">₱${fmtMoney((p.expenses || 0))}</div></div>
                 <div class="kpi-card good"><div class="k-label">Cash Position</div><div class="k-val mono">₱${fmtMoney((p.cashPosition || 0))}</div></div>
-                <div class="kpi-card"><div class="k-label">Requests</div><div class="k-val">${(p.requests || []).length}</div></div>
-                <div class="kpi-card warn"><div class="k-label">Pending / Unliquidated</div><div class="k-val mono">₱${fmtMoney(pendingTotal)}</div></div>
+                <div class="kpi-card"><div class="k-label">Requests</div><div class="k-val">${requestCount}</div>
+                    <div class="k-sub">${pendingRequests.length} awaiting approval</div></div>
+                <div class="kpi-card warn"><div class="k-label">Pending Request Cost</div><div class="k-val mono">₱${fmtMoney(pendingRequestCost)}</div>
+                    <div class="k-sub">requested, not yet approved</div></div>
+                <div class="kpi-card warn"><div class="k-label">Unliquidated Cost</div><div class="k-val mono">₱${fmtMoney(unliquidatedCost)}</div>
+                    <div class="k-sub">released, receipts outstanding</div></div>
             </div>
 
             <div class="project-tabs">
@@ -143,6 +193,7 @@ const ProjectPage = {
                 <button data-tab="punchlist" onclick="ProjectPage.switchTab('punchlist')">${Icon.punchlist({size:13})} Punchlist</button>
                 <button data-tab="safety" onclick="ProjectPage.switchTab('safety')">${Icon.safety({size:13})} Safety</button>
                 <button data-tab="drawings" onclick="ProjectPage.switchTab('drawings')">${Icon.drawing({size:13})} Drawings</button>
+                <button data-tab="reports" onclick="ProjectPage.switchTab('reports')">${Icon.fileText({size:13})} Reports</button>
             </div>
 
             <div id="proj-tab-overview" class="project-tab-content active"></div>
@@ -158,6 +209,7 @@ const ProjectPage = {
             <div id="proj-tab-punchlist" class="project-tab-content"></div>
             <div id="proj-tab-safety" class="project-tab-content"></div>
             <div id="proj-tab-drawings" class="project-tab-content"></div>
+            <div id="proj-tab-reports" class="project-tab-content"></div>
 
             <div class="data-source-note">Estimates are grouped by SOW with draft / pending / approved states.</div>`;
 
@@ -265,6 +317,10 @@ const ProjectPage = {
             this.renderEstimates(this._data);
             setTimeout(() => this.renderSOWBudget(this._data), 100);
         }
+        // v11 BATCH E2: rendered on demand rather than with the rest of
+        // the project, because the picker is cheap to build and there is
+        // no reason to pay for it on every project open.
+        if (tab === 'reports' && this._data) this.renderReports(this._data);
     },
 
     // ─── SHOW ADD PROJECT MODAL ──────────────────────────────
@@ -501,7 +557,7 @@ const ProjectPage = {
     /**
      * renderOverview - Renders the overview tab.
      * v8: Requests-by-Status, Incoming Cash graph, and the two tables
-     * (Cash Advance Requests / Incoming Cash) were removed — walang
+     * (Cash Advance Requests / Incoming Cash) were removed — no
      * data na pumapasok doon and the Finance page already covers cash
      * detail. Cashflow and the S-curve now have Monthly/Weekly views.
      */

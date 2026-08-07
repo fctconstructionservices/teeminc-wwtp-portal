@@ -157,9 +157,45 @@ const SCHEMAS = {
 
   // v9 NEW: SAFETY records — toolbox talks, inspections, incidents,
   // near-misses, violations per project.
+  // v11 BATCH D: `attachmentsJSON` added. `image` is KEPT so existing
+  // rows keep rendering — addSafetyRecord no longer writes it, and
+  // attachmentsOf_() folds any legacy single image into the gallery, so
+  // old and new records display identically with no migration.
+  // ── v11 BATCH E: SETTINGS ──
+  // A plain key/value store for system-wide configuration. The first
+  // consumer is the print template (company letterhead, logo, signature
+  // blocks) so every printed document carries FCTC's identity instead of
+  // a bare browser page. Values are JSON strings, so a setting can grow
+  // from a single field into an object without another schema change.
+  Settings: ['key', 'value', 'updatedBy', 'updatedAt'],
+
+  // ── v11 BATCH F1: LESSONS LEARNED ──
+  // The knowledge that normally leaves with the site team. `source` is
+  // 'auto' for a generated project retrospective or 'manual' for one
+  // somebody wrote. The three JSON columns hold the computed metrics,
+  // the findings and the suggestions, so the retrospective can grow new
+  // fields without another schema change.
+  // ── v11 BATCH F2: QUOTATIONS ──
+  // A quotation owns a Projects row with status 'Quotation' (see
+  // 28-QuotationService.gs), so `projectId` is the id that row — and the
+  // eventual awarded project — carries. Everything priced during
+  // tendering is therefore already the project's on award; nothing is
+  // copied. Revisions are SNAPSHOTS of the priced position, not forks.
+  Quotations: ['id', 'projectId', 'clientId', 'clientName', 'title', 'status',
+    'revision', 'quotedValue', 'validUntil', 'scopeNotes', 'exclusions',
+    'preparedBy', 'sentDate', 'decisionDate', 'decisionNote',
+    'createdAt', 'updatedAt'],
+  QuotationRevisions: ['id', 'quotationId', 'revision', 'quotedValue', 'estimatedCost',
+    'sowCount', 'snapshotJSON', 'note', 'createdBy', 'createdAt'],
+
+  LessonsLearned: ['id', 'projectId', 'projectName', 'source', 'category', 'title',
+    'whatHappened', 'rootCause', 'impact', 'recommendation',
+    'metricsJSON', 'findingsJSON', 'suggestionsJSON',
+    'capturedBy', 'capturedAt', 'updatedAt'],
+
   SafetyRecords: ['id', 'projectId', 'recordType', 'recordDate', 'description',
-    'severity', 'personsInvolved', 'actionTaken', 'image', 'status',
-    'reportedBy', 'createdAt', 'updatedAt'],
+    'severity', 'personsInvolved', 'actionTaken', 'image', 'attachmentsJSON',
+    'status', 'reportedBy', 'createdAt', 'updatedAt'],
 
   // v9 NEW: DRAWING PLANS register — drawing files (PDF/image) uploaded
   // to Drive with revision control per project.

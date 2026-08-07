@@ -43,7 +43,9 @@ function requestManpower(data) {
     createdAt: new Date()
   });
   logActivity_('Manpower role "' + role + '" requested by ' + currentUserName_(), 'blue', id);
-  return { success: true, id: id };
+  // v11 BATCH A: Super Admin bypass.
+  var autoApproved = autoApproveIfSuper_(id, 'Manpower');
+  return { success: true, id: id, autoApproved: autoApproved };
 }
 
 function searchManpower(query) {

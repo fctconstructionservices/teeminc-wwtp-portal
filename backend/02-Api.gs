@@ -247,7 +247,36 @@ const API_ACTIONS = {
   getPunchlist: getPunchlist,
   addSafetyRecord: addSafetyRecord,
   updateSafetyRecord: updateSafetyRecord,
+  deleteSafetyRecord: deleteSafetyRecord,          // v11 BATCH D
   getSafetyRecords: getSafetyRecords,
+
+  // ── v11 BATCH E: PRINT TEMPLATE ──
+  // getPrintTemplate is readable by any logged-in user because the
+  // letterhead has to render for whoever hits Print; the two write
+  // actions enforce Super Admin inside the service.
+  getPrintTemplate: getPrintTemplate,
+  savePrintTemplate: savePrintTemplate,
+  resetPrintTemplate: resetPrintTemplate,
+
+  // ── v11 BATCH F1: KNOWLEDGE BASE / LESSONS LEARNED ──
+  getLessons: getLessons,
+  addLesson: addLesson,
+  updateLesson: updateLesson,
+  deleteLesson: deleteLesson,
+  generateProjectRetrospective: generateProjectRetrospective,
+  saveProjectRetrospective: saveProjectRetrospective,
+  getRetrospectiveCandidates: getRetrospectiveCandidates,
+
+  // ── v11 BATCH F2: QUOTATIONS ──
+  getQuotations: getQuotations,
+  createQuotation: createQuotation,
+  updateQuotation: updateQuotation,
+  setQuotationStatus: setQuotationStatus,
+  reviseQuotation: reviseQuotation,
+  getQuotationRevisions: getQuotationRevisions,
+  awardQuotation: awardQuotation,
+  loseQuotation: loseQuotation,
+  deleteQuotation: deleteQuotation,
   addDrawing: addDrawing,
   deleteDrawing: deleteDrawing,
   getDrawings: getDrawings,

@@ -1,0 +1,206 @@
+/* ================================================================
+   pages/knowledge-base.css — Knowledge Base Center (v11 BATCH F1)
+
+   The tab shell around the Materials, Equipment and Manpower databases,
+   plus Lessons Learned. The three databases keep their own styling —
+   only their container moved, so nothing here touches them.
+   ================================================================ */
+
+.kb-tabs {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 16px;
+}
+.kb-tabs button {
+    font-family: 'Oswald', sans-serif;
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--ink-soft);
+    padding: 9px 14px;
+    cursor: pointer;
+    transition: var(--transition);
+    white-space: nowrap;
+}
+.kb-tabs button:hover { color: var(--ink); }
+.kb-tabs button.active {
+    color: var(--blueprint);
+    border-bottom-color: var(--blueprint);
+}
+.kb-tabs button:focus-visible { outline: 2px solid var(--safety); outline-offset: -2px; }
+
+.kb-tab-content { display: none; }
+.kb-tab-content.active { display: block; }
+
+/* ─── the waiting list ─────────────────────────────────────
+   Every firm intends to write lessons learned and almost none do,
+   because nobody remembers to. This says who is owed one. */
+.kb-waiting {
+    border: 1px solid var(--amber);
+    border-left: 3px solid var(--amber);
+    background: rgba(194, 134, 15, .07);
+    border-radius: var(--radius);
+    padding: 13px 15px;
+    margin-bottom: 18px;
+}
+.kb-waiting-head {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 13px;
+    color: var(--ink);
+    margin-bottom: 5px;
+}
+.kb-waiting p {
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    margin: 0 0 10px;
+    line-height: 1.5;
+}
+.kb-waiting-list { display: flex; flex-direction: column; gap: 6px; }
+.kb-waiting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 7px 10px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    font-size: 12.5px;
+}
+.kb-waiting-row em { font-style: normal; color: var(--ink-soft); font-size: 11px; }
+
+/* ─── lesson cards ─────────────────────────────────────────── */
+.kb-lessons {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 14px;
+}
+.kb-lesson {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 14px 16px;
+}
+.kb-lesson header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+.kb-lesson h3 {
+    font-family: 'Oswald', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    margin: 4px 0 3px;
+    line-height: 1.25;
+}
+.kb-lesson-meta { font-size: 10.5px; color: var(--ink-soft); margin: 0; }
+.kb-lesson-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.kb-lesson-rec {
+    font-size: 12px;
+    line-height: 1.5;
+    margin: 10px 0 0;
+    padding-top: 9px;
+    border-top: 1px dotted var(--line);
+}
+.kb-cat {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 8.5px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    color: var(--ink-soft);
+}
+.kb-cat.is-auto { border-color: var(--blueprint); color: var(--blueprint); }
+
+/* The three numbers a person actually wants first: did it finish late,
+   did it cost more, and how much attention does it need. */
+.kb-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-top: 11px;
+}
+.kb-metric {
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 7px 8px;
+    text-align: center;
+}
+.kb-metric span {
+    display: block;
+    font-size: 8.5px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--ink-soft);
+    margin-bottom: 2px;
+}
+.kb-metric b { font-family: 'IBM Plex Mono', monospace; font-size: 12px; }
+.kb-metric.good b { color: var(--green); }
+.kb-metric.bad b { color: var(--red); }
+
+/* ─── findings and suggestions in the modal ───────────────── */
+.kb-findings { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.6; }
+.kb-findings li { margin-bottom: 4px; }
+.kb-findings b {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--blueprint);
+    margin-right: 5px;
+}
+
+.kb-suggestions { list-style: none; margin: 0; padding: 0; }
+.kb-suggestions li {
+    border-left: 2px solid var(--line);
+    padding: 0 0 0 11px;
+    margin-bottom: 12px;
+}
+.kb-sug-head { display: flex; align-items: center; gap: 7px; margin-bottom: 3px; }
+.kb-sug-head b {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--ink-soft);
+}
+.kb-suggestions p { font-size: 12.5px; line-height: 1.55; margin: 0 0 4px; }
+/* The evidence line is what makes a suggestion checkable rather than
+   something to take on trust. */
+.kb-suggestions cite {
+    display: block;
+    font-style: normal;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--ink-soft);
+}
+.kb-prio {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 8.5px;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    padding: 2px 7px;
+    border-radius: 999px;
+    color: #fff;
+}
+.kb-prio.high { background: var(--red); }
+.kb-prio.medium { background: var(--amber); }
+.kb-prio.low { background: var(--ink-soft); }
+
+@media (max-width: 620px) {
+    .kb-metrics { grid-template-columns: repeat(2, 1fr); }
+    .kb-lessons { grid-template-columns: 1fr; }
+    .kb-tabs button { padding: 8px 10px; font-size: 10.5px; }
+}

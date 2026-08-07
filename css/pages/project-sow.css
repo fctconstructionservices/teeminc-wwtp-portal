@@ -75,167 +75,20 @@
 }
 
 /* ═══════════════════════════════════════════════ */
-/*  GANTT CHART STYLES                           */
+/*  GANTT CHART STYLES — MOVED                    */
 /* ═══════════════════════════════════════════════ */
-.gantt-wrapper {
-    overflow-x: auto;
-    padding: 10px 0 20px 0;
-    position: relative;
-}
-.gantt-container {
-    position: relative;
-    min-height: 240px;
-    background: var(--bg);
-    border-radius: var(--radius);
-    border: 1px solid var(--line);
-    padding: 10px 0 10px 0;
-    min-width: 800px;
-}
-.gantt-timeline {
-    display: flex;
-    border-bottom: 2px solid var(--line);
-    padding-bottom: 4px;
-    margin-bottom: 6px;
-    position: sticky;
-    top: 0;
-    background: var(--bg);
-    z-index: 5;
-    padding-left: 120px;
-    padding-right: 20px;
-}
-.gantt-timeline .gt-day {
-    flex: 1;
-    font-size: 9px;
-    text-align: center;
-    color: var(--ink-soft);
-    font-family: 'IBM Plex Mono', monospace;
-    border-left: 1px solid var(--line);
-    padding: 2px 0;
-    min-width: 30px;
-}
-.gantt-timeline .gt-day:first-child {
-    border-left: none;
-}
-.gantt-body {
-    position: relative;
-    min-height: 200px;
-}
-.gantt-row {
-    display: flex;
-    align-items: center;
-    height: 38px;
-    border-bottom: 1px dashed var(--line);
-    position: relative;
-}
-.gantt-row:last-child {
-    border-bottom: none;
-}
-.gantt-row-label {
-    width: 120px;
-    flex-shrink: 0;
-    font-size: 11px;
-    font-weight: 500;
-    padding-right: 10px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    color: var(--ink);
-}
-.gantt-row-track {
-    flex: 1;
-    height: 100%;
-    position: relative;
-    min-height: 38px;
-}
-.gantt-bar {
-    position: absolute;
-    top: 4px;
-    height: 30px;
-    border-radius: 6px;
-    background: var(--green);
-    color: #fff;
-    font-size: 9px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: grab;
-    z-index: 3;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, .15);
-    transition: box-shadow .15s;
-    font-weight: 600;
-    letter-spacing: .02em;
-    min-width: 20px;
-    padding: 0 4px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.gantt-bar:hover {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, .25);
-    z-index: 6;
-}
-.gantt-bar.warn {
-    background: var(--amber);
-}
-.gantt-bar.danger {
-    background: var(--red);
-}
-.gantt-bar .resize-handle {
-    position: absolute;
-    top: 0;
-    width: 12px;
-    height: 100%;
-    background: rgba(255, 255, 255, 0.3);
-    cursor: ew-resize;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 8px;
-    color: rgba(255, 255, 255, 0.7);
-    border-radius: 6px;
-}
-.gantt-bar .resize-handle.left {
-    left: 0;
-    border-radius: 6px 0 0 6px;
-}
-.gantt-bar .resize-handle.right {
-    right: 0;
-    border-radius: 0 6px 6px 0;
-}
-.gantt-bar .resize-handle:hover {
-    background: rgba(255, 255, 255, 0.5);
-}
-.gantt-legend {
-    display: flex;
-    gap: 16px;
-    margin-top: 10px;
-    font-size: 11px;
-    flex-wrap: wrap;
-}
-.gantt-legend .dot {
-    display: inline-block;
-    width: 14px;
-    height: 14px;
-    border-radius: 4px;
-    margin-right: 4px;
-    vertical-align: middle;
-}
-.gantt-tooltip {
-    position: absolute;
-    background: var(--ink);
-    color: #fff;
-    padding: 6px 12px;
-    border-radius: 6px;
-    font-size: 11px;
-    pointer-events: none;
-    z-index: 20;
-    opacity: 0;
-    transition: opacity .2s;
-    white-space: nowrap;
-}
-.gantt-tooltip.show {
-    opacity: 1;
-}
+/* v11 BATCH C: every .gantt-* rule that used to live here has been
+   removed. The Timeline is now styled solely by pages/gantt.css.
+
+   WHY: this file set `.gantt-timeline { padding-left: 120px }` while
+   gantt.css set `.gantt-row-label { width: 220px }` and reset the
+   padding to 0, and project-gantt.js computed a THIRD width (LABEL_W,
+   220-420px) and wrote it inline. Three files disagreeing about one
+   column is why the header never lined up with the rows.
+
+   The pane width is now a single custom property, --gt-lw, declared
+   once in gantt.css and read by the grid, the splitter and the today
+   line. Do not reintroduce a Gantt rule here. */
 
 /* ─── SOW BUDGET ENHANCEMENTS ─── */
 .sow-item {

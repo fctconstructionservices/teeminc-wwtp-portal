@@ -70,7 +70,9 @@ function submitCashAdvance(payload) {
   });
 
   logActivity_('Cash advance ₱' + payload.amount + ' requested by ' + currentUserName_() + projectName, 'blue', id);
-  return { success: true, requestId: id, fileUrl: fileUrl, fileName: fileName };
+  // v11 BATCH A: a Super Admin's own request needs nobody's signature.
+  var autoApproved = autoApproveIfSuper_(id, 'CashAdvance');
+  return { success: true, requestId: id, fileUrl: fileUrl, fileName: fileName, autoApproved: autoApproved };
 }
 
 function approveCashAdvance(id) {
@@ -226,7 +228,9 @@ function submitIncomingCash(payload) {
   });
 
   logActivity_('Incoming cash (funding) ₱' + payload.amount + ' recorded by ' + currentUserName_() + projectName + ' (pending approval)', 'blue', id);
-  return { success: true, requestId: id, fileUrl: fileUrl, fileName: fileName };
+  // v11 BATCH A: Super Admin bypass.
+  var autoApproved = autoApproveIfSuper_(id, 'IncomingCash');
+  return { success: true, requestId: id, fileUrl: fileUrl, fileName: fileName, autoApproved: autoApproved };
 }
 
 function approveIncomingCash(id) {
@@ -272,7 +276,10 @@ function submitLiquidation(payload) {
   });
 
   logActivity_('Liquidation ' + id + ' submitted (₱' + payload.amount + ' by ' + currentUserName_() + ')', 'blue', id);
-  return { success: true, id: id };
+  // v11 BATCH A: Super Admin bypass. Goes through the engine so the
+  // over-liquidation reimbursement logic in approveLiquidation() runs.
+  var autoApproved = autoApproveIfSuper_(id, 'Liquidation');
+  return { success: true, id: id, autoApproved: autoApproved };
 }
 
 function approveLiquidation(id) {
@@ -421,7 +428,9 @@ function getFinanceData() {
   readMany_(['Projects', 'IncomingCashRequests', 'CashRelease', 'SOWItems',
     'CashAdvanceRequests', 'Liquidations']);   // SOWItems: v6.6 forecast
 
-  const projects = readAll_('Projects');
+  // v11 BATCH F2: a quotation would otherwise sit in the cashflow
+  // forecast at zero and drag every projection down.
+  const projects = readAll_('Projects').filter(isLiveProject_);
   const allIncoming = readAll_('IncomingCashRequests');
   const allReleases = readAll_('CashRelease');
   const sowItems = readAll_('SOWItems');

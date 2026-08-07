@@ -467,7 +467,7 @@ Object.assign(ProjectPage, {
 
     /**
      * _renderAttendanceHTML (v9 — item 4) - ATTENDANCE MONITORING.
-     * Derived 100% from the Daily Site Records' manpower rows (walang
+     * Derived 100% from the Daily Site Records' manpower rows (no
      * separate encoding): a month matrix of personnel × days, showing
      * presence, and per-person totals (days present + OT hours). Only
      * rows tied to a Personnel entry appear; legacy role-only rows are
@@ -632,31 +632,78 @@ Object.assign(ProjectPage, {
             container.innerHTML = html;
             return;
         }
+        // ── v11 BATCH D: TABLE INSTEAD OF CARDS ──────────────────
+        // The list used to be one tall card per record showing only the
+        // date, the weather and a headcount. Everything that was
+        // actually entered — the SOW items worked on, the equipment, the
+        // materials, the issues, the photos — was invisible until you
+        // opened each record one at a time. On a project with sixty
+        // daily reports that is sixty clicks to answer "which days did
+        // we work on B.2".
+        //
+        // A table shows the same rows at a glance and lets you compare
+        // down a column, which is the whole point of a log. The counts
+        // are clickable summaries, not decoration: they tell you which
+        // record is worth opening.
+        const summarize = r => {
+            const mp = (r.manpower || []).reduce((s, m) => s + (parseInt(m.count) || 0), 0);
+            const eq = (r.equipment || []).length;
+            const sow = new Set((r.workAccomplished || []).map(w => w.scope).filter(Boolean));
+            const mat = (r.materialsDelivered || []).length + (r.materialsUsed || []).length;
+            const iss = (r.issues || []).length;
+            const pics = (r.photos || []).length +
+                (r.workAccomplished || []).filter(w => w.image).length;
+            return { mp, eq, sow, mat, iss, pics };
+        };
+        const cell = (n, title, icon) => n
+            ? `<span class="dr-chip" title="${title}">${icon} ${n}</span>`
+            : `<span class="dr-chip is-zero">—</span>`;
+
         html += `
             <div class="panel">
                 <div class="panel-head">
                     <h3>Site Daily Log</h3>
-                    <span class="mono" style="font-size:11px;color:var(--ink-soft)">${dailyRecords.length} entries</span>
+                    <span class="mono" style="font-size:11px;color:var(--ink-soft)">${dailyRecords.length} ${dailyRecords.length === 1 ? 'entry' : 'entries'}</span>
                 </div>
-                <div class="daily-log-scroll" style="max-height:400px;overflow-y:auto;padding:8px 16px;">
         `;
         if (dailyRecords.length === 0) {
-            html += `<div class="empty"><p>No daily records yet.</p></div>`;
+            html += `<div class="empty"><p>No daily records yet. Add one to start logging manpower, equipment and accomplishment against your SOW items.</p></div>`;
         } else {
-            const sorted = [...dailyRecords].sort((a,b) => new Date(b.date) - new Date(a.date));
-            sorted.forEach((r) => {
-                const totalManpower = r.manpower ? r.manpower.reduce((s, m) => s + (parseInt(m.count) || 0), 0) : 0;
-                const dateObj = new Date(r.date);
-                const formattedDate = dateObj.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
-                const day = dateObj.getDate();
+            const sorted = [...dailyRecords].sort((a, b) => new Date(b.date) - new Date(a.date));
+            html += `<div class="dr-table-wrap">
+                <table class="dr-table">
+                    <thead><tr>
+                        <th>Date</th>
+                        <th>Weather AM / PM</th>
+                        <th class="num" title="Total headcount across AM, PM and OT">Manpower</th>
+                        <th class="num" title="Equipment entries logged">Equipment</th>
+                        <th class="num" title="SOW items worked on that day">SOW</th>
+                        <th class="num" title="Materials delivered and used">Materials</th>
+                        <th class="num" title="Issues and delays raised">Issues</th>
+                        <th class="num" title="Photos attached">Photos</th>
+                        <th>Prepared by</th>
+                        <th>Status</th>
+                        <th></th>
+                    </tr></thead>
+                    <tbody>`;
 
-                const statusBadge = r.status === 'draft' ? 
+            sorted.forEach((r) => {
+                const sm = summarize(r);
+                const dateObj = new Date(r.date);
+                const valid = !isNaN(dateObj);
+                const weekday = valid ? dateObj.toLocaleDateString('en-US', { weekday: 'short' }) : '';
+                const pretty = valid
+                    ? dateObj.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+                    : (r.date || '—');
+                const isSunday = valid && dateObj.getDay() === 0;
+
+                const statusBadge = r.status === 'draft' ?
                     '<span class="stamp draft" style="transform:none;padding:1px 8px;font-size:9px;">Draft</span>' :
-                    r.status === 'pending' ? 
+                    r.status === 'pending' ?
                     '<span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">Pending</span>' :
-                    r.status === 'approved' ? 
+                    r.status === 'approved' ?
                     '<span class="stamp approved" style="transform:none;padding:1px 8px;font-size:9px;">Approved</span>' :
-                    r.status === 'rejected' ? 
+                    r.status === 'rejected' ?
                     '<span class="stamp rejected" style="transform:none;padding:1px 8px;font-size:9px;">Rejected</span>' : '';
 
                 let actionsHtml = '';
@@ -668,53 +715,64 @@ Object.assign(ProjectPage, {
                 if (r.status === 'draft') {
                     // v6.4: drafts are editable/deletable by their creator
                     // (super admin can also delete); frozen once submitted.
-                    // v6.6: at kailangang editor ka ng project.
+                    // v6.6: and you must be an editor on the project.
                     if (isCreator && this._canEdit !== false) {
                         actionsHtml = `
                             <button class="btn-sm primary" onclick="ProjectPage.submitDailyForApproval('${r.id}')">Submit</button>
-                            <button class="btn-sm" onclick="ProjectPage.editDailyRecord('${r.id}')">Edit</button>
-                            <button class="btn-sm danger" onclick="ProjectPage.deleteDailyRecordUI('${r.id}')">Delete</button>`;
+                            <button class="btn-sm" title="Edit this draft" onclick="ProjectPage.editDailyRecord('${r.id}')">${Icon.pencil({size:12})}</button>
+                            <button class="btn-sm danger" title="Delete this draft" onclick="ProjectPage.deleteDailyRecordUI('${r.id}')">${Icon.trash({size:12})}</button>`;
                     } else if (isSuperAdmin) {
-                        actionsHtml = `<button class="btn-sm danger" onclick="ProjectPage.deleteDailyRecordUI('${r.id}')">Delete</button>`;
+                        actionsHtml = `<button class="btn-sm danger" title="Delete this draft" onclick="ProjectPage.deleteDailyRecordUI('${r.id}')">${Icon.trash({size:12})}</button>`;
                     } else {
-                        actionsHtml = `<span style="font-size:10px;color:var(--ink-soft);">Draft (creator only)</span>`;
+                        actionsHtml = `<span class="dr-note">Creator only</span>`;
                     }
                 } else if (r.status === 'pending') {
                     if (isCreator) {
-                        actionsHtml = `<span style="font-size:10px;color:var(--ink-soft);">Waiting for approval</span>`;
+                        actionsHtml = `<span class="dr-note">Awaiting approval</span>`;
                     } else if (isSuperAdmin) {
                         actionsHtml = `
                             <button class="btn-sm success" onclick="ProjectPage.forceApproveDailyRecord('${r.id}')">Force Approve</button>
-                            <button class="btn-sm danger" onclick="ProjectPage.forceRejectDailyRecord('${r.id}')">Force Reject</button>
-                        `;
+                            <button class="btn-sm danger" onclick="ProjectPage.forceRejectDailyRecord('${r.id}')">Force Reject</button>`;
                     } else if (isApprover) {
                         actionsHtml = `
                             <button class="btn-sm success" onclick="ProjectPage.approveDailyRecord('${r.id}')">Approve</button>
-                            <button class="btn-sm danger" onclick="ProjectPage.rejectDailyRecord('${r.id}')">Reject</button>
-                        `;
+                            <button class="btn-sm danger" onclick="ProjectPage.rejectDailyRecord('${r.id}')">Reject</button>`;
                     }
                 }
 
+                // The whole row opens the record, so the magnifier button
+                // is no longer the only target — but the action buttons
+                // stop the click so they still do their own job.
                 html += `
-                    <div class="daily-record-item">
-                        <div class="dr-badge">${day}</div>
-                        <div class="dr-body">
-                            <div class="dr-title">${formattedDate} · ${r.weatherAM || '—'} / ${r.weatherPM || '—'}</div>
-                            <div class="dr-meta">
-                                <time>${r.date || '—'}</time>
-                                <span>${Icon.users({size:13})} ${totalManpower} people</span>
-                                ${statusBadge}
-                            </div>
-                        </div>
-                        <div class="dr-actions" style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
+                    <tr class="dr-row ${isSunday ? 'is-rest' : ''}" onclick="ProjectPage.viewRecordById('${r.id}')" title="Open ${r.date || 'this record'}">
+                        <td class="dr-date">
+                            <span class="wd">${weekday}</span>
+                            <span class="dt">${pretty}</span>
+                        </td>
+                        <td class="dr-weather">${r.weatherAM || '—'} / ${r.weatherPM || '—'}</td>
+                        <td class="num">${cell(sm.mp, 'Total headcount', Icon.users({size:11}))}</td>
+                        <td class="num">${cell(sm.eq, 'Equipment entries', Icon.wrench({size:11}))}</td>
+                        <td class="num">${sm.sow.size
+                            ? `<span class="dr-chip" title="SOW items worked on: ${Array.from(sm.sow).join(', ')}">${Icon.ruler({size:11})} ${sm.sow.size}</span>`
+                            : `<span class="dr-chip is-zero">—</span>`}</td>
+                        <td class="num">${cell(sm.mat, 'Materials delivered and used', Icon.package({size:11}))}</td>
+                        <td class="num">${sm.iss
+                            ? `<span class="dr-chip is-issue" title="Issues and delays raised">${Icon.warning({size:11})} ${sm.iss}</span>`
+                            : `<span class="dr-chip is-zero">—</span>`}</td>
+                        <td class="num">${cell(sm.pics, 'Photos attached', Icon.camera({size:11}))}</td>
+                        <td class="dr-by">${r.createdByName || r.createdBy || '—'}</td>
+                        <td>${statusBadge}</td>
+                        <td class="dr-actions" onclick="event.stopPropagation()">
                             ${actionsHtml}
-                            <button class="btn-sm" onclick="ProjectPage.viewRecordById('${r.id}')">${Icon.search({size:13})}</button>
-                        </div>
-                    </div>
-                `;
+                            <button class="btn-sm" title="Open full record" onclick="ProjectPage.viewRecordById('${r.id}')">${Icon.search({size:12})}</button>
+                        </td>
+                    </tr>`;
             });
+
+            html += `</tbody></table></div>
+                <div class="data-source-note">Counts summarise what is inside each record — headcount, equipment entries, SOW items worked on, materials moved, issues raised and photos. Click any row to open it. Sundays are shaded.</div>`;
         }
-        html += `</div></div>`;
+        html += `</div>`;   // v11: the scroll wrapper is inside the table block now
         container.innerHTML = html;
         this._dailyRecords = dailyRecords;
     },

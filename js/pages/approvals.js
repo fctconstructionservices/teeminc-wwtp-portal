@@ -3,8 +3,32 @@
 //
 //  PURPOSE: The approval center. Tabs for pending cash advances,
 //  cash releases in review (admins), liquidations, materials,
-//  equipment, daily records and estimates; the request detail
-//  modal; and the requester's own Pending/Approved/Rejected lists.
+//  equipment, manpower, OT, estimates, billings and daily records;
+//  the request detail modal; and the requester's own Pending /
+//  Approved / Rejected lists.
+//
+//  ── v11 BATCH A REWRITE ──────────────────────────────────────
+//  THE "NOT FOUND" BUG. Clicking a pending item used to hand off to
+//  whichever PAGE owned that record type:
+//      estimates    -> ProjectPage.openSOWBreakdown()
+//      daily records-> ProjectPage.viewRecordById()
+//      materials    -> MaterialsPage.viewMaterial()
+//      equipment    -> EquipmentPage.viewEquipment()
+//      manpower     -> (no handler at all)
+//  Every one of those reads a cache that page fills when YOU OPEN IT.
+//  From the Approvals page those caches are empty, so the handler hit
+//  its "not found" branch and closed the modal. On top of that, the
+//  fallback inside _loadDetails() read `pending.requests`, a key
+//  getPendingApprovals() has never returned, which threw a TypeError.
+//
+//  FIX: the inbox no longer delegates to other pages. Every row opens
+//  RequestDetailModal, which fetches its own record from the server via
+//  getRequestById() and renders a layout per type. It is now
+//  self-contained and works from a cold page load.
+//
+//  The nine near-identical section blocks in _renderPendingTab() were
+//  also collapsed into one data-driven renderer (SECTIONS below), so a
+//  new approvable type is a few lines instead of forty.
 // ================================================================
 
 /**
@@ -13,7 +37,7 @@
 const RequestDetailModal = {
     _currentId: null,
     _type: 'request',
-    
+
     open(id, type = 'request') {
         this._currentId = id;
         this._type = type;
@@ -24,40 +48,54 @@ const RequestDetailModal = {
         document.body.style.overflow = 'hidden';
         this._loadDetails(id, type);
     },
-    
+
     close() {
         document.getElementById('requestDetailModal').classList.remove('open');
         document.body.style.overflow = '';
     },
-    
+
     async _loadDetails(id, type) {
         const body = document.getElementById('requestDetailBody');
         try {
-            let data;
-            if (type === 'request') {
-                data = await DataService.getRequestById(id);
-                if (!data) {
-                    const pending = await DataService.getPendingApprovals(true);
-                    const found = pending.requests.find(r => r.id === id);
-                    if (found) data = found;
-                }
-            } else {
-                UI.toast('Details for this type not yet supported.', 'error');
-                this.close();
-                return;
-            }
+            // v11: single source of truth. getRequestById() now covers
+            // every approvable type including Estimates and Billings,
+            // which it previously did not, so the old broken fallback
+            // (pending.requests — a key that does not exist) is gone.
+            const data = await DataService.getRequestById(id);
             if (!data) {
-                UI.toast('Request not found.', 'error');
+                UI.toast(`Request ${id} could not be found on the server.`, 'error');
                 this.close();
                 return;
             }
             body.innerHTML = this._renderDetails(data);
         } catch (err) {
-            UI.toast('Error loading details.', 'error');
+            console.error('RequestDetailModal load error:', err);
+            UI.toast('Error loading details: ' + (err.message || err), 'error');
             this.close();
         }
     },
-    
+
+    /** Human label for a type code. */
+    _typeLabel(t) {
+        return ({
+            CashAdvance: 'Cash Advance Request',
+            CashRelease: 'Cash Release',
+            IncomingCash: 'Incoming Cash',
+            Liquidation: 'Liquidation',
+            Material: 'Material Database Request',
+            Equipment: 'Equipment Database Request',
+            Manpower: 'Manpower Role Request',
+            DailyRecord: 'Daily Site Record',
+            Estimate: 'SOW Estimate',
+            Billing: 'Billing',
+            OTRequest: 'Overtime Request'
+        })[t] || t || 'Request';
+    },
+
+    _row(label, value, full) {
+        return `<div class="dg-item${full ? ' full' : ''}"><span class="dg-label">${label}</span><span class="dg-value">${value || '—'}</span></div>`;
+    },
+
     _renderDetails(data) {
         const user = App.currentUser;
         const isSuperAdmin = user && user.role === 'superadmin';
@@ -70,19 +108,25 @@ const RequestDetailModal = {
         const submitterEmail = data.requestorEmail || data.requestedBy || data.submittedBy || data.createdBy || '';
         const isRequestor = user && submitterEmail &&
             user.email.toLowerCase() === String(submitterEmail).toLowerCase();
-        const statusCls = data.status === 'Approved' ? 'approved' : data.status === 'Pending' ? 'pending' : data.status === 'Reviewing' ? 'pending' : 'rejected';
-        
+        const st = String(data.status || '').toLowerCase();
+        const statusCls = st === 'approved' || st === 'paid' ? 'approved'
+            : (st === 'pending' || st === 'reviewing' || st === 'for review') ? 'pending'
+            : 'rejected';
+        const isPending = st === 'pending' || st === 'for review';
+
         // v10: real thumbnails + lightbox instead of text links, so an
-        // approver can read the receipt without leaving the modal. Falls
-        // back to attachmentsJSON when the backend has not parsed it.
+        // approver can read the receipt without leaving the modal.
         const attachmentsHtml = AttachmentGallery.render(
             (data.attachments && data.attachments.length) ? data.attachments : data.attachmentsJSON,
             'Attachments'
         );
-        
+
         let actionButtons = '';
-        if (data.status === 'Pending') {
+        if (isPending) {
             if (isSuperAdmin) {
+                // v11: the super admin may force-decide ANYTHING, including
+                // a request they filed themselves. The backend guard that
+                // used to block this has been reordered to match.
                 actionButtons = `
                     <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${data.id}','${data.type}', true)">Force Approve</button>
                     <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${data.id}','${data.type}', true)">Force Reject</button>
@@ -92,15 +136,19 @@ const RequestDetailModal = {
                     <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${data.id}','${data.type}', true)">Approve</button>
                     <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${data.id}','${data.type}', true)">Reject</button>
                 `;
+            } else if (isRequestor) {
+                actionButtons = `<span style="font-size:11px;color:var(--ink-soft);">You filed this request — it needs another admin's approval.</span>`;
             }
         }
-        
-        // v9.2: the detail grid mirrors the fields of the FORM that
-        // created the request. OT requests get their own layout (OT
-        // Date / Start / End / Affected SOW / Reason) instead of the
-        // cash-request fields (requestor/amount) that rendered as
-        // "undefined" for them.
+
+        const project = data.projectName || data.projectId || '—';
+        const R = this._row.bind(this);
         let detailsHtml;
+
+        // ── per-type layouts ──────────────────────────────────────
+        // Each layout mirrors the FORM that created the request, so an
+        // approver sees the same fields the requester filled in rather
+        // than a generic amount/description grid full of "undefined".
         if (data.type === 'OTRequest') {
             const sowIds = Array.isArray(data.sowIds) && data.sowIds.length
                 ? data.sowIds
@@ -108,42 +156,145 @@ const RequestDetailModal = {
             detailsHtml = `
             <div class="print-section"><div class="ps-title">${Icon.timer({size:13})} Overtime Request Details</div>
                 <div class="detail-grid">
-                    <div class="dg-item"><span class="dg-label">Requested By</span><span class="dg-value">${data.requestedBy || '—'}</span></div>
-                    <div class="dg-item"><span class="dg-label">Project</span><span class="dg-value">${data.projectId || '—'}</span></div>
-                    <div class="dg-item"><span class="dg-label">OT Date</span><span class="dg-value">${data.otDate || '—'}</span></div>
-                    <div class="dg-item"><span class="dg-label">OT Time</span><span class="dg-value">${data.otStart || '—'} – ${data.otEnd || '—'}</span></div>
-                    <div class="dg-item full"><span class="dg-label">Affected SOW</span><span class="dg-value">${sowIds.length ? sowIds.join(', ') : '—'}</span></div>
-                    <div class="dg-item full"><span class="dg-label">Reason for OT</span><span class="dg-value">${data.reason || '—'}</span></div>
+                    ${R('Requested By', data.requestedBy)}
+                    ${R('Project', project)}
+                    ${R('OT Date', data.otDate)}
+                    ${R('OT Time', `${data.otStart || '—'} – ${data.otEnd || '—'}`)}
+                    ${R('Affected SOW', sowIds.length ? sowIds.join(', ') : '—', true)}
+                    ${R('Reason for OT', data.reason, true)}
                 </div>
                 ${attachmentsHtml}
                 <div class="data-source-note" style="margin-top:10px;">Once all admins approve, the OT in and out fields open on the Daily Site Record for ${data.otDate || 'this date'} on this project.</div>
             </div>`;
-        } else {
+
+        } else if (data.type === 'Estimate') {
+            // v11: estimates are now viewable straight from the inbox.
+            // Previously this needed the Estimates tab of the right
+            // project to have been opened first, which is why clicking
+            // one from Approvals always failed.
+            const L = data.lines || {};
+            const table = (title, rows, cols) => {
+                if (!rows || !rows.length) return '';
+                return `<div class="ps-subtitle" style="margin-top:10px;font-size:11px;font-weight:700;">${title}</div>
+                <table class="mini-table" style="width:100%;font-size:11.5px;margin-top:4px;">
+                    <thead><tr>${cols.map(c => `<th style="text-align:${c[2] || 'left'}">${c[0]}</th>`).join('')}</tr></thead>
+                    <tbody>${rows.map(r => `<tr>${cols.map(c => {
+                        const v = r[c[1]];
+                        const num = c[2] === 'right';
+                        return `<td style="text-align:${c[2] || 'left'}">${num ? fmtMoney(parseFloat(v) || 0) : (v || '—')}</td>`;
+                    }).join('')}</tr>`).join('')}</tbody>
+                </table>`;
+            };
             detailsHtml = `
-            <div class="print-section"><div class="ps-title">Request Details</div>
+            <div class="print-section"><div class="ps-title">${Icon.ruler({size:13})} Estimate for ${data.sowId || ''}</div>
                 <div class="detail-grid">
-                    <div class="dg-item"><span class="dg-label">Requestor</span><span class="dg-value">${data.requestor || data.requestedBy || data.submittedBy || '—'}</span></div>
-                    <div class="dg-item"><span class="dg-label">Project</span><span class="dg-value">${data.project || data.projectId || '—'}</span></div>
-                    <div class="dg-item"><span class="dg-label">Amount</span><span class="dg-value">₱${fmtMoney((data.amount || 0))}</span></div>
-                    <div class="dg-item"><span class="dg-label">Scope of Work</span><span class="dg-value">${data.scope || '—'}</span></div>
-                    <div class="dg-item full"><span class="dg-label">Description</span><span class="dg-value">${data.description || '—'}</span></div>
+                    ${R('Submitted By', data.submittedBy)}
+                    ${R('Project', project)}
+                    ${R('SOW Item', data.sowId)}
+                    ${R('Estimate Total', '₱' + fmtMoney(data.amount || 0))}
+                    ${R('Description', data.sowDescription, true)}
+                </div>
+                ${table('Materials', L.materials, [['Item','materialName'],['Description','desc'],['Qty','qty','right'],['Rate','rate','right'],['Cost','cost','right']])}
+                ${table('Labor', L.labor, [['Role','role'],['Description','desc'],['Qty','qty','right'],['Duration','duration','right'],['Rate','rate','right'],['Cost','cost','right']])}
+                ${table('Equipment', L.equipment, [['Item','equipName'],['Description','desc'],['Qty','qty','right'],['Duration','duration','right'],['Rate','rate','right'],['Cost','cost','right']])}
+                ${table('Indirect Costs', L.indirect, [['Description','desc'],['Type','type'],['Amount','amount','right']])}
+                <div class="data-source-note" style="margin-top:10px;">Approving this estimate writes its total back to the SOW budget, following that item's budget mode.</div>
+            </div>`;
+
+        } else if (data.type === 'Billing') {
+            const gross = parseFloat(data.grossAmount) || 0;
+            const ret = parseFloat(data.retentionAmount) || 0;
+            const dpr = parseFloat(data.dpRecoupment) || 0;
+            const net = parseFloat(data.netAmount) || 0;
+            detailsHtml = `
+            <div class="print-section"><div class="ps-title">${Icon.receipt({size:13})} ${data.billingType || 'Progress'} Billing ${data.billingNo || ''}</div>
+                <div class="detail-grid">
+                    ${R('Submitted By', data.submittedBy)}
+                    ${R('Project', project)}
+                    ${R('Period', data.period)}
+                    ${R('Accomplishment', `${data.prevPct || 0}% → ${data.currentPct || 0}%`)}
+                    ${R('Gross Amount', '₱' + fmtMoney(gross))}
+                    ${R('Less Retention', '₱' + fmtMoney(ret))}
+                    ${R('Less DP Recoupment', '₱' + fmtMoney(dpr))}
+                    ${R('NET PAYABLE', '<b>₱' + fmtMoney(net) + '</b>')}
+                </div>
+                ${attachmentsHtml}
+                <div class="data-source-note" style="margin-top:10px;">Approving releases this billing for sending and collection. It is not revenue until it is marked Paid.</div>
+            </div>`;
+
+        } else if (data.type === 'Material' || data.type === 'Equipment') {
+            detailsHtml = `
+            <div class="print-section"><div class="ps-title">${data.type === 'Material' ? Icon.package({size:13}) : Icon.wrench({size:13})} ${this._typeLabel(data.type)}</div>
+                <div class="detail-grid">
+                    ${R('Requested By', data.requestedBy)}
+                    ${R('Name', data.name)}
+                    ${R('Brand', data.brand)}
+                    ${R('Category', data.category)}
+                    ${R('Unit', data.unit)}
+                    ${R('Rate', '₱' + fmtMoney(parseFloat(data.rate) || 0))}
+                    ${R('Supplier', data.supplier)}
+                    ${R('Code', data.code)}
+                    ${R('Description', data.desc, true)}
+                    ${R('Notes', data.notes, true)}
+                </div>
+                ${attachmentsHtml}
+            </div>`;
+
+        } else if (data.type === 'Manpower') {
+            detailsHtml = `
+            <div class="print-section"><div class="ps-title">${Icon.users({size:13})} Manpower Role Request</div>
+                <div class="detail-grid">
+                    ${R('Requested By', data.requestedBy)}
+                    ${R('Role / Trade', data.role)}
+                    ${R('Classification', data.classification)}
+                    ${R('Code', data.code)}
+                    ${R('Notes', data.notes, true)}
+                </div>
+            </div>`;
+
+        } else if (data.type === 'DailyRecord') {
+            detailsHtml = `
+            <div class="print-section"><div class="ps-title">${Icon.clipboardList({size:13})} Daily Site Record</div>
+                <div class="detail-grid">
+                    ${R('Prepared By', data.createdBy)}
+                    ${R('Project', project)}
+                    ${R('Date', data.date)}
+                    ${R('Weather AM / PM', `${data.weatherAM || '—'} / ${data.weatherPM || '—'}`)}
+                    ${R('Remarks', data.remarks, true)}
+                </div>
+                ${attachmentsHtml}
+                <div class="data-source-note" style="margin-top:10px;">Open the project's Daily Records tab for the full manpower, equipment and accomplishment breakdown.</div>
+            </div>`;
+
+        } else {
+            // Cash Advance / Incoming Cash / Liquidation / Cash Release
+            detailsHtml = `
+            <div class="print-section"><div class="ps-title">${this._typeLabel(data.type)}</div>
+                <div class="detail-grid">
+                    ${R('Requestor', data.requestor || data.requestedBy || data.submittedBy)}
+                    ${R('Project', project)}
+                    ${R('Amount', '₱' + fmtMoney(parseFloat(data.amount) || 0))}
+                    ${R('Scope of Work', data.scope)}
+                    ${data.paymentMethod ? R('Payment Method', data.paymentMethod) : ''}
+                    ${data.reference ? R('Reference', data.reference) : ''}
+                    ${data.dateNeeded ? R('Date Needed', data.dateNeeded) : ''}
+                    ${R('Description', data.description, true)}
                 </div>
                 ${attachmentsHtml}
             </div>`;
         }
 
-        let html = `
+        return `
         <div class="print-header">
-            <h2>${data.id} — ${data.type === 'OTRequest' ? 'Overtime Request' : (data.type || 'Request')}</h2>
+            <h2>${data.id} — ${this._typeLabel(data.type)}</h2>
             <div class="print-meta">${data.createdAt || new Date().toLocaleDateString()} · <span class="stamp ${statusCls}">${data.status}</span></div>
         </div>
         ${detailsHtml}
         <div class="print-actions">
-            <button class="btn-primary" onclick="window.print()">${Icon.printer({size:14})} Print</button>
+            <button class="btn-primary" onclick="PrintDoc.print()">${Icon.printer({size:14})} Print</button>
             ${actionButtons}
             <button class="btn-ghost" onclick="RequestDetailModal.close()">Close</button>
         </div>`;
-        return html;
     }
 };
 
@@ -154,7 +305,100 @@ const RequestDetailModal = {
 const ApprovalsPage = {
     _loaded: false,
     _currentTab: 'pending',
-    _myRequestsById: {},
+
+    /**
+     * SECTIONS - one entry per approvable type in the pending inbox.
+     *   key    : the array key returned by getPendingApprovals()
+     *   type   : the type string the backend approval engine expects
+     *   title  : section heading
+     *   icon   : icon factory
+     *   line1  : (item) => main title text
+     *   line2  : (item) => array of small meta chips
+     * Adding a new approvable type is now three lines here rather than a
+     * copy-pasted forty-line block.
+     */
+    SECTIONS: [
+        {
+            key: 'cashAdvances', type: 'CashAdvance', title: 'Cash Advance Requests',
+            icon: () => Icon.wallet({size:16}),
+            line1: r => `${r.requestor || '—'} — ${r.projectId || '—'}`,
+            line2: r => [`₱${fmtMoney(parseFloat(r.amount) || 0)}`, ApprovalsPage._date(r.createdAt)]
+        },
+        {
+            key: 'incomingCash', type: 'IncomingCash', title: 'Incoming Cash Requests',
+            icon: () => Icon.incoming({size:16}),
+            line1: r => `${r.requestor || '—'} — ${r.projectId || '—'}`,
+            line2: r => [`₱${fmtMoney(parseFloat(r.amount) || 0)}`,
+                         `${r.paymentMethod || ''}${r.reference ? ' · ' + r.reference : ''}`,
+                         ApprovalsPage._date(r.createdAt)]
+        },
+        {
+            key: 'liquidations', type: 'Liquidation', title: 'Liquidation Requests',
+            icon: () => Icon.receipt({size:16}),
+            line1: r => `${r.requestor || '—'} — ${r.projectId || '—'}`,
+            line2: r => [`₱${fmtMoney(parseFloat(r.amount) || 0)}`, ApprovalsPage._date(r.createdAt)]
+        },
+        {
+            // v11: billings finally appear in the inbox. They were created
+            // Pending and were fully wired into the approval engine, but
+            // the only Approve button lived inside the project Billings
+            // tab — no badge, no inbox entry, so a downpayment could sit
+            // unapproved indefinitely and the workflow looked broken.
+            key: 'billings', type: 'Billing', title: 'Billings Pending Approval',
+            icon: () => Icon.spreadsheet({size:16}),
+            line1: b => `${b.billingType || 'Progress'} ${b.billingNo || ''} — ${b.projectName || b.projectId || '—'}`,
+            line2: b => [`Net ₱${fmtMoney(parseFloat(b.netAmount) || 0)}`,
+                         `${b.prevPct || 0}% → ${b.currentPct || 0}%`,
+                         b.period || '', ApprovalsPage._date(b.createdAt)]
+        },
+        {
+            key: 'materials', type: 'Material', title: 'Materials Pending Approval',
+            icon: () => Icon.package({size:16}),
+            line1: m => m.name || m.brand || 'Unnamed',
+            line2: m => [m.brand || '', m.category || '', `Requested by ${m.requestedBy || '—'}`]
+        },
+        {
+            key: 'equipment', type: 'Equipment', title: 'Equipment Pending Approval',
+            icon: () => Icon.wrench({size:16}),
+            line1: e => `${e.brand || e.name || 'Unnamed'}${e.model ? ' — ' + e.model : ''}`,
+            line2: e => [e.category || '', `Requested by ${e.requestedBy || '—'}`]
+        },
+        {
+            key: 'manpower', type: 'Manpower', title: 'Manpower Roles Pending Approval',
+            icon: () => Icon.users({size:16}),
+            line1: m => `${m.role || '—'}${m.classification ? ' (' + m.classification + ')' : ''}`,
+            line2: m => [`Requested by ${m.requestedBy || '—'}`, ApprovalsPage._date(m.createdAt)]
+        },
+        {
+            key: 'otRequests', type: 'OTRequest', title: 'Overtime Requests Pending Approval',
+            icon: () => Icon.timer({size:16}),
+            line1: o => `OT ${o.otDate || ''} · ${o.otStart || '?'}–${o.otEnd || '?'} (${o.projectId || '—'})`,
+            line2: o => [`SOW: ${(o.sowIds || []).join(', ') || '—'}`, o.reason || '',
+                         `Requested by ${o.requestedBy || '—'}`]
+        },
+        {
+            key: 'estimates', type: 'Estimate', title: 'Estimates Pending Approval',
+            icon: () => Icon.ruler({size:16}),
+            line1: e => `${e.sowId || e.id} — ${e.sowDescription || e.description || '—'}`,
+            line2: e => [e.projectId || '—', `₱${fmtMoney(parseFloat(e.estimateTotal) || 0)}`,
+                         `Submitted by ${e.submittedBy || '—'}`]
+        },
+        {
+            key: 'dailyRecords', type: 'DailyRecord', title: 'Daily Records Pending Approval',
+            icon: () => Icon.clipboardList({size:16}),
+            line1: d => `Daily Record — ${d.date || 'No date'} (${d.projectId || '—'})`,
+            line2: d => [`${d.weatherAM || ''} / ${d.weatherPM || ''}`,
+                         `Prepared by ${d.createdBy || '—'}`]
+        }
+    ],
+
+    _date(v) {
+        if (!v) return '';
+        const d = new Date(v);
+        return isNaN(d) ? String(v) : d.toLocaleDateString();
+    },
+
+    _esc(v) { return String(v == null ? '' : v).replace(/'/g, '&#39;').replace(/"/g, '&quot;'); },
 
     async load() {
         const container = document.getElementById('approvalsContent');
@@ -163,78 +407,35 @@ const ApprovalsPage = {
             const user = App.currentUser;
             const isSuperAdmin = user && user.role === 'superadmin';
             const isAdmin = user && user.role === 'admin';
-            const isApprover = App.isApprover() && !isSuperAdmin && !isAdmin;
 
             const pendingData = await DataService.getPendingApprovals(true);   // v9.3: always fresh on this page
             const myRequests = await DataService.getMyPendingRequests();
-            const myApproved = await DataService.getMyApprovedRequests ? await DataService.getMyApprovedRequests() : [];
-            const myRejected = await DataService.getMyRejectedRequests ? await DataService.getMyRejectedRequests() : [];
+            const myApproved = await DataService.getMyApprovedRequests();
+            const myRejected = await DataService.getMyRejectedRequests();
 
-            const userEmail = user ? user.email.toLowerCase() : '';
-            
-            const cashAdvances = pendingData.cashAdvances || [];
+            // v11: the backend already excludes the current user from
+            // every pending list (see getPendingApprovals). The old
+            // client-side re-filtering duplicated that logic per type and
+            // silently dropped rows whose owner column was blank.
             const releases = pendingData.releases || [];
-            const incomingCash = pendingData.incomingCash || [];   // v3
-            const liquidations = pendingData.liquidations || [];
-            const materials = pendingData.materials || [];
-            const equipment = pendingData.equipment || [];
-            const manpower = pendingData.manpower || [];           // v3
-            const estimates = pendingData.estimates || [];
-            const dailyRecords = pendingData.dailyRecords || [];
-            const otRequests = pendingData.otRequests || [];          // v9
+            const totalPending = this.SECTIONS.reduce(
+                (n, s) => n + ((pendingData[s.key] || []).length), 0);
 
-            const filteredCashAdvances = cashAdvances.filter(function(r) {
-                return r.requestorEmail && r.requestorEmail.toLowerCase() !== userEmail;
-            });
-
-            const filteredReleases = releases.filter(function(r) {
-                return r.releasedBy && r.releasedBy.toLowerCase() !== userEmail;
-            });
-
-            const filteredLiquidations = liquidations.filter(function(l) {
-                return l.requestorEmail && l.requestorEmail.toLowerCase() !== userEmail;
-            });
-
-            const filteredMaterials = materials.filter(function(m) {
-                return m.requestedBy && m.requestedBy.toLowerCase() !== userEmail;
-            });
-
-            const filteredEquipment = equipment.filter(function(e) {
-                return e.requestedBy && e.requestedBy.toLowerCase() !== userEmail;
-            });
-
-            const filteredDailyRecords = dailyRecords.filter(function(d) {
-                return d.createdBy && d.createdBy.toLowerCase() !== userEmail;
-            });
-
-            // v3: incoming cash + manpower join the inbox
-            const filteredIncomingCash = incomingCash.filter(function(r) {
-                return r.requestorEmail && r.requestorEmail.toLowerCase() !== userEmail;
-            });
-            const filteredManpower = manpower.filter(function(m) {
-                return m.requestedBy && m.requestedBy.toLowerCase() !== userEmail;
-            });
-
-            const totalPending = filteredCashAdvances.length + filteredReleases.length + 
-                                filteredIncomingCash.length + filteredLiquidations.length +
-                                filteredMaterials.length + filteredEquipment.length +
-                                filteredManpower.length + estimates.length + filteredDailyRecords.length + otRequests.length;
-
-            let html = `
+            const html = `
             <div class="section-head"><h2>Approval Dashboard</h2><div class="rule"></div>
                 <span class="badge">${(isAdmin || isSuperAdmin) ? totalPending + ' pending' : myRequests.length + ' my requests'}</span>
             </div>
 
             <div class="approval-tab-bar">
-                ${(isAdmin || isSuperAdmin) ? `<button class="active" data-tab="pending" onclick="ApprovalsPage.switchTab('pending')">${Icon.clipboardList({size:14})} Pending Approvals (${filteredCashAdvances.length + filteredIncomingCash.length + filteredLiquidations.length + filteredMaterials.length + filteredEquipment.length + filteredManpower.length + estimates.length + filteredDailyRecords.length + otRequests.length})</button>` : ''}
-                ${(isAdmin && !isSuperAdmin) ? `<button data-tab="reviewing" onclick="ApprovalsPage.switchTab('reviewing')">${Icon.clipboardList({size:14})} For Review (${filteredReleases.length})</button>` : ''}
+                ${(isAdmin || isSuperAdmin) ? `<button class="active" data-tab="pending" onclick="ApprovalsPage.switchTab('pending')">${Icon.clipboardList({size:14})} Pending Approvals (${totalPending})</button>` : ''}
+                ${(isAdmin && !isSuperAdmin) ? `<button data-tab="reviewing" onclick="ApprovalsPage.switchTab('reviewing')">${Icon.clipboardList({size:14})} For Review (${releases.length})</button>` : ''}
                 <button ${!(isAdmin || isSuperAdmin) ? 'class="active"' : ''} data-tab="myrequests" onclick="ApprovalsPage.switchTab('myrequests')">${Icon.user({size:14})} My Requests (${myRequests.length})</button>
                 <button data-tab="approved" onclick="ApprovalsPage.switchTab('approved')">${Icon.checkCircle({size:14})} Approved (${myApproved.length})</button>
                 <button data-tab="rejected" onclick="ApprovalsPage.switchTab('rejected')">${Icon.xCircle({size:14})} Rejected (${myRejected.length})</button>
             </div>
 
-            ${(isAdmin || isSuperAdmin) ? `<div id="approval-tab-pending" class="approval-tab-content active">${this._renderPendingTab({cashAdvances: filteredCashAdvances, incomingCash: filteredIncomingCash, liquidations: filteredLiquidations, materials: filteredMaterials, equipment: filteredEquipment, manpower: filteredManpower, estimates: estimates, dailyRecords: filteredDailyRecords, otRequests: otRequests})}</div>` : ''}
-            ${(isAdmin && !isSuperAdmin) ? `<div id="approval-tab-reviewing" class="approval-tab-content">${this._renderReviewingTab(filteredReleases)}</div>` : ''}
+            ${(isAdmin || isSuperAdmin) ? `<div id="approval-tab-pending" class="approval-tab-content active">${this._renderPendingTab(pendingData, totalPending)}</div>` : ''}
+            ${(isAdmin && !isSuperAdmin) ? `<div id="approval-tab-reviewing" class="approval-tab-content">${this._renderReviewingTab(releases)}</div>` : ''}
             <div id="approval-tab-myrequests" class="approval-tab-content ${!(isAdmin || isSuperAdmin) ? 'active' : ''}">${this._renderMyRequestsTab(myRequests, 'pending')}</div>
             <div id="approval-tab-approved" class="approval-tab-content">${this._renderMyRequestsTab(myApproved, 'approved')}</div>
             <div id="approval-tab-rejected" class="approval-tab-content">${this._renderMyRequestsTab(myRejected, 'rejected')}</div>`;
@@ -243,7 +444,7 @@ const ApprovalsPage = {
             this._loaded = true;
         } catch (err) {
             console.error('Approvals load error:', err);
-            UI.toast('Error loading approvals.', 'error');
+            UI.toast('Error loading approvals: ' + (err.message || err), 'error');
         }
     },
 
@@ -256,368 +457,94 @@ const ApprovalsPage = {
         if (target) target.classList.add('active');
     },
 
-    _renderPendingTab(data) {
+    /**
+     * _renderSection - one inbox section, driven by a SECTIONS entry.
+     * EVERY row opens RequestDetailModal. Nothing here reaches into
+     * another page's cache, which is what broke the old build.
+     */
+    _renderSection(section, items) {
         const user = App.currentUser;
         const isSuperAdmin = user && user.role === 'superadmin';
-        // v4: normal Approve/Reject is admin-role only; super admin sees Force only.
         const isApprover = user && user.role === 'admin';
 
-        let html = '';
+        let html = `<div class="section-head"><h3>${section.title}</h3><div class="rule"></div>
+            ${items.length ? `<span class="badge">${items.length}</span>` : ''}</div>`;
 
-        // ─── Cash Advance Requests ──────────────────────────────
-        html += `<div class="section-head"><h3>Cash Advance Requests</h3><div class="rule"></div></div>`;
-        if (data.cashAdvances.length === 0) {
-            html += `<div class="empty"><p>No pending cash advance requests.</p></div>`;
-        } else {
-            html += `<div class="panel"><div style="padding:4px 0;">`;
-            data.cashAdvances.forEach(r => {
-                let actionsHtml = '';
-                if (isSuperAdmin) {
-                    actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${r.id}','CashAdvance')">Force Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${r.id}','CashAdvance')">Force Reject</button>
-                    `;
-                } else if (isApprover) {
-                    actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${r.id}','CashAdvance')">Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${r.id}','CashAdvance')">Reject</button>
-                    `;
-                }
-                html += `
-                <div class="approval-request-item" style="cursor:pointer;">
-                    <div class="ar-icon">${Icon.wallet({size:16})}</div>
-                    <div class="ar-body" onclick="RequestDetailModal.open('${r.id}','request')">
-                        <div class="ar-title">${r.requestor} — ${r.projectId || '—'}</div>
-                        <div class="ar-meta">
-                            <span class="ar-id">${r.id}</span>
-                            <span>₱${fmtMoney((r.amount || 0))}</span>
-                            <span>${r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ''}</span>
-                            <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${r.status}</span>
-                        </div>
-                    </div>
-                    <div class="ar-actions">${actionsHtml}</div>
-                </div>`;
-            });
-            html += `</div></div>`;
+        if (!items.length) {
+            html += `<div class="empty"><p>No pending ${section.title.toLowerCase().replace(' pending approval', '')}.</p></div>`;
+            return html;
         }
 
-        // ─── Incoming Cash Requests (v3) ────────────────────────
-        html += `<div class="section-head"><h3>Incoming Cash Requests</h3><div class="rule"></div></div>`;
-        if (!data.incomingCash || data.incomingCash.length === 0) {
-            html += `<div class="empty"><p>No pending incoming cash requests.</p></div>`;
-        } else {
-            html += `<div class="panel"><div style="padding:4px 0;">`;
-            data.incomingCash.forEach(r => {
-                let actionsHtml = '';
-                if (isSuperAdmin) {
-                    actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${r.id}','IncomingCash')">Force Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${r.id}','IncomingCash')">Force Reject</button>
-                    `;
-                } else if (isApprover) {
-                    actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${r.id}','IncomingCash')">Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${r.id}','IncomingCash')">Reject</button>
-                    `;
-                }
-                html += `
-                <div class="approval-request-item" style="cursor:pointer;">
-                    <div class="ar-icon">${Icon.incoming ? Icon.incoming({size:16}) : Icon.wallet({size:16})}</div>
-                    <div class="ar-body" onclick="RequestDetailModal.open('${r.id}','request')">
-                        <div class="ar-title">${r.requestor} — ${r.projectId || '—'}</div>
-                        <div class="ar-meta">
-                            <span class="ar-id">${r.id}</span>
-                            <span>₱${fmtMoney((parseFloat(r.amount) || 0))}</span>
-                            <span>${r.paymentMethod || ''}${r.reference ? ' · ' + r.reference : ''}</span>
-                            <span>${r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ''}</span>
-                            <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${r.status}</span>
-                        </div>
-                    </div>
-                    <div class="ar-actions">${actionsHtml}</div>
-                </div>`;
-            });
-            html += `</div></div>`;
-        }
+        html += `<div class="panel"><div style="padding:4px 0;">`;
+        items.forEach(it => {
+            const id = this._esc(it.id);
+            let actionsHtml = '';
+            if (isSuperAdmin) {
+                actionsHtml = `
+                    <button class="btn-sm success" onclick="event.stopPropagation();ApprovalsPage.forceApproveItem('${id}','${section.type}')">Force Approve</button>
+                    <button class="btn-sm danger" onclick="event.stopPropagation();ApprovalsPage.forceRejectItem('${id}','${section.type}')">Force Reject</button>`;
+            } else if (isApprover) {
+                actionsHtml = `
+                    <button class="btn-sm success" onclick="event.stopPropagation();ApprovalsPage.approveItem('${id}','${section.type}')">Approve</button>
+                    <button class="btn-sm danger" onclick="event.stopPropagation();ApprovalsPage.rejectItem('${id}','${section.type}')">Reject</button>`;
+            }
 
-        // ─── Liquidation Requests ──────────────────────────────
-        html += `<div class="section-head"><h3>Liquidation Requests</h3><div class="rule"></div></div>`;
-        if (data.liquidations.length === 0) {
-            html += `<div class="empty"><p>No pending liquidation requests.</p></div>`;
-        } else {
-            html += `<div class="panel"><div style="padding:4px 0;">`;
-            data.liquidations.forEach(r => {
-                let actionsHtml = '';
-                if (isSuperAdmin) {
-                    actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${r.id}','Liquidation')">Force Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${r.id}','Liquidation')">Force Reject</button>
-                    `;
-                } else if (isApprover) {
-                    actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${r.id}','Liquidation')">Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${r.id}','Liquidation')">Reject</button>
-                    `;
-                }
-                html += `
-                <div class="approval-request-item" style="cursor:pointer;">
-                    <div class="ar-icon">${Icon.receipt({size:16})}</div>
-                    <div class="ar-body" onclick="RequestDetailModal.open('${r.id}','request')">
-                        <div class="ar-title">${r.requestor} — ${r.projectId || '—'}</div>
-                        <div class="ar-meta">
-                            <span class="ar-id">${r.id}</span>
-                            <span>₱${fmtMoney((r.amount || 0))}</span>
-                            <span>${r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ''}</span>
-                            <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${r.status}</span>
-                        </div>
-                    </div>
-                    <div class="ar-actions">${actionsHtml}</div>
-                </div>`;
-            });
-            html += `</div></div>`;
-        }
+            const chips = (section.line2(it) || [])
+                .filter(x => x !== null && x !== undefined && String(x).trim() !== '')
+                .map(x => `<span>${x}</span>`).join('');
+            const clipCount = (it.attachments || []).length;
 
-        // ─── Materials Pending Approval ──────────────────────────
-        html += `<div class="section-head"><h3>Materials Pending Approval</h3><div class="rule"></div></div>`;
-        if (data.materials.length === 0) {
-            html += `<div class="empty"><p>No pending materials.</p></div>`;
-        } else {
-            html += `<div class="panel"><div style="padding:4px 0;">`;
-            data.materials.forEach(m => {
-                let actionsHtml = '';
-                if (isSuperAdmin) {
-                    actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${m.id}','Material')">Force Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${m.id}','Material')">Force Reject</button>
-                    `;
-                } else if (isApprover) {
-                    actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${m.id}','Material')">Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${m.id}','Material')">Reject</button>
-                    `;
-                }
-                html += `
-                <div class="approval-request-item" style="cursor:pointer;">
-                    <div class="ar-icon">${Icon.package({size:16})}</div>
-                    <div class="ar-body" onclick="MaterialsPage.viewMaterial('${m.id}')">
-                        <div class="ar-title">${m.name || m.brand || 'Unnamed'}</div>
-                        <div class="ar-meta">
-                            <span class="ar-id">${m.id}</span>
-                            ${m.brand ? `<span>${m.brand}</span>` : ''}
-                            <span>${m.category}</span>
-                            <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${m.status}</span>
-                        </div>
+            html += `
+            <div class="approval-request-item" style="cursor:pointer;">
+                <div class="ar-icon">${section.icon()}</div>
+                <div class="ar-body" onclick="RequestDetailModal.open('${id}','request')">
+                    <div class="ar-title">${section.line1(it)}</div>
+                    <div class="ar-meta">
+                        <span class="ar-id">${it.id}</span>
+                        ${chips}
+                        ${clipCount ? `<span title="${clipCount} attachment(s)">${Icon.fileText({size:11})} ${clipCount}</span>` : ''}
+                        <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${it.status || 'Pending'}</span>
                     </div>
-                    <div class="ar-actions">${actionsHtml}</div>
-                </div>`;
-            });
-            html += `</div></div>`;
-        }
-
-        // ─── Equipment Pending Approval ──────────────────────────
-        html += `<div class="section-head"><h3>Equipment Pending Approval</h3><div class="rule"></div></div>`;
-        if (data.equipment.length === 0) {
-            html += `<div class="empty"><p>No pending equipment.</p></div>`;
-        } else {
-            html += `<div class="panel"><div style="padding:4px 0;">`;
-            data.equipment.forEach(e => {
-                let actionsHtml = '';
-                if (isSuperAdmin) {
-                    actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${e.id}','Equipment')">Force Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${e.id}','Equipment')">Force Reject</button>
-                    `;
-                } else if (isApprover) {
-                    actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${e.id}','Equipment')">Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${e.id}','Equipment')">Reject</button>
-                    `;
-                }
-                html += `
-                <div class="approval-request-item" style="cursor:pointer;">
-                    <div class="ar-icon">${Icon.wrench({size:16})}</div>
-                    <div class="ar-body" onclick="EquipmentPage.viewEquipment('${e.id}')">
-                        <div class="ar-title">${e.brand || e.name || 'Unnamed'} ${e.model ? '— ' + e.model : ''}</div>
-                        <div class="ar-meta">
-                            <span class="ar-id">${e.id}</span>
-                            <span>${e.category}</span>
-                            <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${e.status}</span>
-                        </div>
-                    </div>
-                    <div class="ar-actions">${actionsHtml}</div>
-                </div>`;
-            });
-            html += `</div></div>`;
-        }
-
-        // ─── v9: Overtime Requests Pending Approval ────────────
-        html += `<div class="section-head"><h3>Overtime Requests Pending Approval</h3><div class="rule"></div></div>`;
-        if (!data.otRequests || data.otRequests.length === 0) {
-            html += `<div class="empty"><p>No pending OT requests.</p></div>`;
-        } else {
-            html += `<div class="panel"><div style="padding:4px 0;">`;
-            data.otRequests.forEach(o => {
-                let actionsHtml = '';
-                if (isSuperAdmin) {
-                    actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${o.id}','OTRequest')">Force Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${o.id}','OTRequest')">Force Reject</button>
-                    `;
-                } else if (isApprover) {
-                    actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${o.id}','OTRequest')">Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${o.id}','OTRequest')">Reject</button>
-                    `;
-                }
-                html += `
-                <div class="approval-request-item" style="cursor:pointer;">
-                    <div class="ar-icon">${Icon.timer({size:13})}</div>
-                    <div class="ar-body" onclick="RequestDetailModal.open('${o.id}','request')">
-                        <div class="ar-title">OT ${o.otDate || ''} · ${o.otStart || '?'}–${o.otEnd || '?'} (${o.projectId || '—'})</div>
-                        <div class="ar-meta">
-                            <span class="ar-id">${o.id}</span>
-                            <span>SOW: ${(o.sowIds || []).join(', ') || '—'}</span>
-                            <span>${o.reason || ''}</span>
-                            <span>Requested by ${o.requestedBy || '—'}</span>
-                            <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${o.status}</span>
-                        </div>
-                    </div>
-                    <div class="ar-actions">${actionsHtml}</div>
-                </div>`;
-            });
-            html += `</div></div>`;
-        }
-
-        // ─── Manpower Roles Pending Approval (v3) ───────────────
-        html += `<div class="section-head"><h3>Manpower Roles Pending Approval</h3><div class="rule"></div></div>`;
-        if (!data.manpower || data.manpower.length === 0) {
-            html += `<div class="empty"><p>No pending manpower roles.</p></div>`;
-        } else {
-            html += `<div class="panel"><div style="padding:4px 0;">`;
-            data.manpower.forEach(m => {
-                let actionsHtml = '';
-                if (isSuperAdmin) {
-                    actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${m.id}','Manpower')">Force Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${m.id}','Manpower')">Force Reject</button>
-                    `;
-                } else if (isApprover) {
-                    actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${m.id}','Manpower')">Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${m.id}','Manpower')">Reject</button>
-                    `;
-                }
-                html += `
-                <div class="approval-request-item">
-                    <div class="ar-icon">${Icon.users({size:16})}</div>
-                    <div class="ar-body">
-                        <div class="ar-title">${m.role}${m.classification ? ' (' + m.classification + ')' : ''}</div>
-                        <div class="ar-meta">
-                            <span class="ar-id">${m.id}</span>
-                            <span>Requested by ${m.requestedBy || '—'}</span>
-                            <span>${m.createdAt ? new Date(m.createdAt).toLocaleDateString() : ''}</span>
-                            <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${m.status}</span>
-                        </div>
-                    </div>
-                    <div class="ar-actions">${actionsHtml}</div>
-                </div>`;
-            });
-            html += `</div></div>`;
-        }
-
-        // ─── Estimates Pending Approval ──────────────────────────
-        html += `<div class="section-head"><h3>Estimates Pending Approval</h3><div class="rule"></div></div>`;
-        if (data.estimates.length === 0) {
-            html += `<div class="empty"><p>No pending estimates.</p></div>`;
-        } else {
-            html += `<div class="panel"><div style="padding:4px 0;">`;
-            data.estimates.forEach(e => {
-                let actionsHtml = '';
-                if (isSuperAdmin) {
-                    actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${e.id}','Estimate')">Force Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${e.id}','Estimate')">Force Reject</button>
-                    `;
-                } else if (isApprover) {
-                    actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${e.id}','Estimate')">Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${e.id}','Estimate')">Reject</button>
-                    `;
-                }
-                html += `
-                <div class="approval-request-item" style="cursor:pointer;">
-                    <div class="ar-icon">${Icon.ruler({size:16})}</div>
-                    <div class="ar-body" onclick="ProjectPage.openSOWBreakdown('${e.sowId || e.id}')">
-                        <div class="ar-title">${e.sowId || e.id} — ${e.sowDescription || e.description || '—'}</div>
-                        <div class="ar-meta">
-                            <span class="ar-id">${e.id}</span>
-                            <span>${e.projectId || '—'}</span>
-                            <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${e.status}</span>
-                        </div>
-                    </div>
-                    <div class="ar-actions">${actionsHtml}</div>
-                </div>`;
-            });
-            html += `</div></div>`;
-        }
-
-        // ─── Daily Records Pending Approval ──────────────────────
-        html += `<div class="section-head"><h3>Daily Records Pending Approval</h3><div class="rule"></div></div>`;
-        if (data.dailyRecords.length === 0) {
-            html += `<div class="empty"><p>No pending daily records.</p></div>`;
-        } else {
-            html += `<div class="panel"><div style="padding:4px 0;">`;
-            data.dailyRecords.forEach(d => {
-                let actionsHtml = '';
-                if (isSuperAdmin) {
-                    actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.forceApproveItem('${d.id}','DailyRecord')">Force Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.forceRejectItem('${d.id}','DailyRecord')">Force Reject</button>
-                    `;
-                } else if (isApprover) {
-                    actionsHtml = `
-                        <button class="btn-sm success" onclick="ApprovalsPage.approveItem('${d.id}','DailyRecord')">Approve</button>
-                        <button class="btn-sm danger" onclick="ApprovalsPage.rejectItem('${d.id}','DailyRecord')">Reject</button>
-                    `;
-                }
-                html += `
-                <div class="approval-request-item" style="cursor:pointer;">
-                    <div class="ar-icon">${Icon.clipboardList({size:16})}</div>
-                    <div class="ar-body" onclick="ProjectPage.viewRecordById('${d.id}')">
-                        <div class="ar-title">Daily Record — ${d.date || 'No date'} (${d.projectId || '—'})</div>
-                        <div class="ar-meta">
-                            <span class="ar-id">${d.id}</span>
-                            <span>${d.weatherAM || ''} / ${d.weatherPM || ''}</span>
-                            <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">Pending</span>
-                        </div>
-                    </div>
-                    <div class="ar-actions">${actionsHtml}</div>
-                </div>`;
-            });
-            html += `</div></div>`;
-        }
-
+                </div>
+                <div class="ar-actions">${actionsHtml}</div>
+            </div>`;
+        });
+        html += `</div></div>`;
         return html;
+    },
+
+    _renderPendingTab(data, total) {
+        if (!total) {
+            return `<div class="empty" style="padding:36px 18px;">
+                <p><b>Nothing is waiting on you.</b></p>
+                <p style="font-size:12px;color:var(--ink-soft);">Every request has been decided or is not yours to approve.</p>
+            </div>`;
+        }
+        // Only render sections that actually have items, so the page is
+        // not nine "No pending X" blocks the approver has to scroll past.
+        return this.SECTIONS
+            .filter(s => (data[s.key] || []).length)
+            .map(s => this._renderSection(s, data[s.key] || []))
+            .join('');
     },
 
     _renderReviewingTab(reviews) {
         const user = App.currentUser;
         const userEmail = user ? user.email.toLowerCase() : '';
-        
+
         let html = `<div class="section-head"><h3>Cash Release Requests for Review</h3><div class="rule"></div></div>`;
-        if (reviews.length === 0) {
+        if (!reviews.length) {
             html += `<div class="empty"><p>No release requests awaiting review.</p></div>`;
             return html;
         }
         html += `<div class="panel"><div style="padding:4px 0;">`;
-        reviews.forEach(function(r) {
+        reviews.forEach(r => {
             const isSelf = r.releasedBy && r.releasedBy.toLowerCase() === userEmail;
             const isAdmin = user && user.role === 'admin';
             const canReview = isAdmin && !isSelf;
-            let actionsHtml = '';
+            let actionsHtml;
             if (canReview) {
-                actionsHtml = `
-                    <button class="btn-sm success" onclick="ApprovalsPage.reviewRelease('${r.id}')">Reviewed</button>
-                `;
+                actionsHtml = `<button class="btn-sm success" onclick="event.stopPropagation();ApprovalsPage.reviewRelease('${this._esc(r.id)}')">Reviewed</button>`;
             } else if (isSelf) {
                 actionsHtml = `<span style="font-size:10px;color:var(--ink-soft);">You cannot review your own request.</span>`;
             } else {
@@ -626,11 +553,11 @@ const ApprovalsPage = {
             html += `
                 <div class="approval-request-item" style="cursor:pointer;">
                     <div class="ar-icon">${Icon.outgoing({size:16})}</div>
-                    <div class="ar-body" onclick="RequestDetailModal.open('${r.id}','request')">
-                        <div class="ar-title">Release Cash — ${r.requestor} (${r.projectId || '—'})</div>
+                    <div class="ar-body" onclick="RequestDetailModal.open('${this._esc(r.id)}','request')">
+                        <div class="ar-title">Release Cash — ${r.requestor || '—'} (${r.projectId || '—'})</div>
                         <div class="ar-meta">
                             <span class="ar-id">${r.id}</span>
-                            <span>₱${fmtMoney((r.amount || 0))}</span>
+                            <span>₱${fmtMoney(parseFloat(r.amount) || 0)}</span>
                             <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${r.status}</span>
                         </div>
                     </div>
@@ -645,98 +572,71 @@ const ApprovalsPage = {
         const statusLabel = statusType === 'pending' ? 'Pending' : statusType === 'approved' ? 'Approved' : 'Rejected';
         const statusCls = statusType === 'pending' ? 'pending' : statusType === 'approved' ? 'approved' : 'rejected';
 
-        this._myRequestsById = this._myRequestsById || {};
-        requests.forEach(r => { this._myRequestsById[r.id] = r; });
-        
-        let html = `<div class="section-head"><h3>My ${statusLabel} Requests</h3><div class="rule"></div></div>`;
-        if (requests.length === 0) {
+        // v11 HOTFIX: "this._svg is not a function".
+        //
+        // Every Icon method is `name(o) { return this._svg(...) }`, so it
+        // depends on `this` being the Icon object. The previous version of
+        // this map stored METHOD REFERENCES (`Icon.wallet`) and then called
+        // the plucked function — `({...}[t] || Icon.fileText)({size:16})` —
+        // which invokes it with `this` undefined. `this._svg` is then not a
+        // function and the whole My Requests tab throws, taking the
+        // Approvals page down with it.
+        //
+        // Storing the icon NAME and calling `Icon[name](...)` keeps the
+        // method attached to its object, so `this` is correct. Any icon
+        // name that does not exist falls back to fileText rather than
+        // throwing, so a future typo degrades to a generic icon instead of
+        // breaking the page.
+        const ICON_BY_TYPE = {
+            CashAdvance: 'wallet', Liquidation: 'receipt', Estimate: 'ruler',
+            Material: 'package', Equipment: 'wrench', DailyRecord: 'clipboardList',
+            IncomingCash: 'incoming', CashRelease: 'outgoing', Manpower: 'users',
+            OTRequest: 'timer', Billing: 'spreadsheet'
+        };
+        const iconFor = t => {
+            const name = ICON_BY_TYPE[t];
+            const fn = (name && typeof Icon[name] === 'function') ? name : 'fileText';
+            return Icon[fn]({ size: 16 });
+        };
+
+        let html = `<div class="section-head"><h3>My ${statusLabel} Requests</h3><div class="rule"></div>
+            ${requests.length ? `<span class="badge">${requests.length}</span>` : ''}</div>`;
+
+        if (!requests.length) {
             html += `<div class="empty"><p>You have no ${statusLabel.toLowerCase()} requests.</p></div>`;
-        } else {
-            html += `<div class="panel"><div style="padding:4px 0;">`;
-            requests.forEach(r => {
-                const icon = r.type === 'CashAdvance' ? Icon.wallet({size:16}) : 
-                             r.type === 'Liquidation' ? Icon.receipt({size:16}) : 
-                             r.type === 'Estimate' ? Icon.ruler({size:16}) : 
-                             r.type === 'Material' ? Icon.package({size:16}) :
-                             r.type === 'Equipment' ? Icon.wrench({size:16}) :
-                             r.type === 'DailyRecord' ? Icon.clipboardList({size:16}) :
-                             r.type === 'IncomingCash' ? Icon.incoming({size:16}) :
-                             Icon.fileText({size:16});
-                const clickHandler = `ApprovalsPage.openMyRequestDetail('${r.id}')`;
-                html += `
-                <div class="my-request-item" onclick="${clickHandler}" style="cursor:pointer;">
-                    <div class="mr-icon">${icon}</div>
-                    <div class="mr-body">
-                        <div class="mr-title">${r.type}: ${r.id} — ${r.projectId || '—'}</div>
-                        <div class="mr-meta">
-                            <span class="mr-id">${r.id}</span>
-                            ${r.amount ? `<span>₱${fmtMoney((r.amount || 0))}</span>` : ''}
-                            ${r.description ? `<span>${r.description}</span>` : ''}
-                            ${r.type === 'OTRequest' ? `<span>OT ${r.otDate || ''} ${r.otStart || ''}–${r.otEnd || ''} · ${r.reason || ''}</span>` : ''}
-                            <span>${r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ''}</span>
-                            <span class="stamp ${statusCls}" style="transform:none;padding:1px 8px;font-size:9px;">${r.status}</span>
-                        </div>
-                    </div>
-                    <div style="font-size:11px;color:var(--ink-soft);">›</div>
-                </div>`;
-            });
-            html += `</div></div>`;
+            return html;
         }
+
+        html += `<div class="panel"><div style="padding:4px 0;">`;
+        requests.forEach(r => {
+            const label = RequestDetailModal._typeLabel(r.type);
+            const amount = parseFloat(r.amount || r.netAmount) || 0;
+            html += `
+            <div class="my-request-item" onclick="RequestDetailModal.open('${this._esc(r.id)}','request')" style="cursor:pointer;">
+                <div class="mr-icon">${iconFor(r.type)}</div>
+                <div class="mr-body">
+                    <div class="mr-title">${label}: ${r.id}${r.projectId ? ' — ' + r.projectId : ''}</div>
+                    <div class="mr-meta">
+                        <span class="mr-id">${r.id}</span>
+                        ${amount ? `<span>₱${fmtMoney(amount)}</span>` : ''}
+                        ${r.description ? `<span>${r.description}</span>` : ''}
+                        ${r.sowId ? `<span>SOW ${r.sowId}</span>` : ''}
+                        ${r.type === 'OTRequest' ? `<span>OT ${r.otDate || ''} ${r.otStart || ''}–${r.otEnd || ''}</span>` : ''}
+                        <span>${this._date(r.createdAt)}</span>
+                        <span class="stamp ${statusCls}" style="transform:none;padding:1px 8px;font-size:9px;">${r.status}</span>
+                    </div>
+                </div>
+                <div style="font-size:11px;color:var(--ink-soft);">›</div>
+            </div>`;
+        });
+        html += `</div></div>`;
         return html;
     },
 
-    async openMyRequestDetail(id) {
-        const r = this._myRequestsById && this._myRequestsById[id];
-        if (!r) { RequestDetailModal.open(id, 'request'); return; }
-
-        try {
-            switch (r.type) {
-                case 'Material':
-                    await MaterialsPage.viewMaterial(r.refId || r.id);
-                    break;
-
-                case 'Equipment':
-                    await EquipmentPage.viewEquipment(r.refId || r.id);
-                    break;
-
-                case 'Estimate': {
-                    if (!r.projectId) { UI.toast('Missing project reference for this estimate.', 'error'); return; }
-                    const projectData = await DataService.getProjectData(r.projectId);
-                    if (!projectData) { UI.toast('Project not found.', 'error'); return; }
-                    const group = (projectData.estimates && projectData.estimates.groups || [])
-                        .find(g => g.sowId === r.scope);
-                    if (!group) { UI.toast('Estimate details not found.', 'error'); return; }
-                    SOWBreakdownModal.open(r.scope, {
-                        materials: group.materials || [],
-                        equipment: group.equipment || [],
-                        labor: group.labor || [],
-                        indirect: group.indirect || []
-                    });
-                    break;
-                }
-
-                case 'DailyRecord': {
-                    if (!r.projectId) { UI.toast('Missing project reference for this daily record.', 'error'); return; }
-                    const projectData = await DataService.getProjectData(r.projectId);
-                    if (!projectData) { UI.toast('Project not found.', 'error'); return; }
-                    const record = (projectData.dailyRecords || []).find(d => d.id === (r.refId || r.id));
-                    if (!record) { UI.toast('Daily record not found.', 'error'); return; }
-                    PrintModal.open(record);
-                    break;
-                }
-
-                case 'IncomingCash':
-                case 'CashAdvance':
-                case 'CashRelease':
-                case 'Liquidation':
-                default:
-                    RequestDetailModal.open(r.id, 'request');
-            }
-        } catch (err) {
-            console.error('Error opening request detail:', err);
-            UI.toast('Error loading details: ' + err.message, 'error');
-        }
-    },
+    // v11: openMyRequestDetail() is retained only so any older inline
+    // handler still in a cached page does not throw. It now does exactly
+    // what every other row does — open the self-contained modal.
+    openMyRequestDetail(id) { RequestDetailModal.open(id, 'request'); },
 
     async approveItem(id, type, closeModal = false) {
         const confirmed = await Confirm.open('Approve Item?', `Approve ${id}?`);
@@ -747,13 +647,13 @@ const ApprovalsPage = {
             if (result && result.awaiting) {
                 UI.toast(`${id}: your approval is recorded — awaiting the other admins.`, 'success');
             } else {
-                UI.toast(`${id} approved!`, 'success');
+                UI.toast(`${id} approved.`, 'success');
             }
             if (closeModal) RequestDetailModal.close();
             this.load();
-            HomePage.load();
-        } catch (err) { 
-            UI.toast('' + err.message, 'error'); 
+            if (typeof HomePage !== 'undefined' && HomePage.load) HomePage.load();
+        } catch (err) {
+            UI.toast('' + err.message, 'error');
         }
     },
 
@@ -765,21 +665,22 @@ const ApprovalsPage = {
             UI.toast(`${id} rejected.`, 'error');
             if (closeModal) RequestDetailModal.close();
             this.load();
-            HomePage.load();
-        } catch (err) { 
-            UI.toast('' + err.message, 'error'); 
+            if (typeof HomePage !== 'undefined' && HomePage.load) HomePage.load();
+        } catch (err) {
+            UI.toast('' + err.message, 'error');
         }
     },
 
     async forceApproveItem(id, type, closeModal = false) {
-        const confirmed = await Confirm.open('Force Approve?', `Force approve ${id}?`);
+        const confirmed = await Confirm.open('Force Approve?',
+            `Force approve ${id}? This finalizes it immediately, without the other admins' signatures.`);
         if (!confirmed) return;
         try {
             await DataService.forceApprove(id, type);
-            UI.toast(`${id} force-approved!`, 'success');
+            UI.toast(`${id} force-approved.`, 'success');
             if (closeModal) RequestDetailModal.close();
             this.load();
-            HomePage.load();
+            if (typeof HomePage !== 'undefined' && HomePage.load) HomePage.load();
         } catch (err) {
             UI.toast('' + err.message, 'error');
         }
@@ -793,7 +694,7 @@ const ApprovalsPage = {
             UI.toast(`${id} force-rejected.`, 'error');
             if (closeModal) RequestDetailModal.close();
             this.load();
-            HomePage.load();
+            if (typeof HomePage !== 'undefined' && HomePage.load) HomePage.load();
         } catch (err) {
             UI.toast('' + err.message, 'error');
         }
@@ -806,11 +707,9 @@ const ApprovalsPage = {
         try {
             const user = App.currentUser;
             await DataService.reviewRelease(id, user.email);
-            UI.toast('Release request reviewed!', 'success');
+            UI.toast('Release request reviewed.', 'success');
             this.load();
-            if (typeof HomePage !== 'undefined' && HomePage.load) {
-                HomePage.load();
-            }
+            if (typeof HomePage !== 'undefined' && HomePage.load) HomePage.load();
         } catch (err) {
             UI.toast('' + err.message, 'error');
         }

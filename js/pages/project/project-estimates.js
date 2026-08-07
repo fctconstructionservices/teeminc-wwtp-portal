@@ -683,14 +683,34 @@ Object.assign(ProjectPage, {
         });
     },
 
-    _openPrintWindow(title, bodyHtml) {
+    /**
+     * _openPrintWindow (v11 BATCH E) - Now routes through PrintDoc so
+     * the estimate summary and DUPA carry the same company letterhead as
+     * every other printed document.
+     *
+     * These two prints open a NEW WINDOW, which does not inherit this
+     * page's stylesheet, so PrintDoc.documentHTML() inlines the
+     * letterhead CSS along with the caller's own table styles. Signature
+     * blocks come from the template rather than being hard-coded here.
+     *
+     * The template is loaded BEFORE window.open(): a popup opened and
+     * then left blank while an await resolves reads as a broken button,
+     * and some blockers close it.
+     */
+    async _openPrintWindow(title, bodyHtml, opts) {
+        opts = opts || {};
+        await PrintDoc.load();
         const w = window.open('', '_blank');
         if (!w) { UI.toast('Popup blocked — please allow popups for this site.', 'error'); return; }
-        w.document.write(`<!DOCTYPE html><html><head><title>${title}</title>
-            <style>
-                body{font-family:'Segoe UI',Arial,sans-serif;color:#1c2321;margin:26px;font-size:12px;}
+        const p = this._data || {};
+        w.document.write(PrintDoc.documentHTML({
+            title: title,
+            meta: [p.name, p.location].filter(Boolean).join(' · '),
+            landscape: !!opts.landscape,
+            body: bodyHtml,
+            css: `
                 h1{font-size:17px;text-transform:uppercase;letter-spacing:.04em;margin:0 0 2px;}
-                h2{font-size:13px;margin:20px 0 6px;text-transform:uppercase;letter-spacing:.03em;border-bottom:2px solid #24455A;padding-bottom:3px;}
+                h2{font-size:13px;margin:20px 0 6px;text-transform:uppercase;letter-spacing:.03em;border-bottom:2px solid var(--pd-accent);padding-bottom:3px;}
                 .meta{font-size:11px;color:#5B6360;margin-bottom:14px;}
                 table{width:100%;border-collapse:collapse;margin-bottom:10px;}
                 th,td{border:1px solid #c9c5b8;padding:5px 7px;font-size:11px;text-align:left;}
@@ -698,13 +718,9 @@ Object.assign(ProjectPage, {
                 td.amt,th.amt{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
                 tr.total td{font-weight:700;background:#f6f4ec;}
                 .grand{font-size:13px;font-weight:700;text-align:right;margin-top:8px;}
-                .sig{display:grid;grid-template-columns:repeat(3,1fr);gap:26px;margin-top:44px;}
-                .sig div{border-top:1px solid #1c2321;padding-top:5px;text-align:center;font-size:10.5px;text-transform:uppercase;}
-                @media print {.noprint{display:none;}}
                 .break{page-break-inside:avoid;}
-            </style></head><body>${bodyHtml}
-            <div class="noprint" style="margin-top:22px;"><button onclick="window.print()" style="padding:8px 18px;">Print / Save as PDF</button></div>
-            </body></html>`);
+            `
+        }));
         w.document.close();
         setTimeout(() => { try { w.focus(); } catch (e) {} }, 300);
     },
@@ -749,7 +765,9 @@ Object.assign(ProjectPage, {
             body += `<div class="grand">SOW Total: ₱${fmtMoney(gt)}${qty ? ` &nbsp;·&nbsp; Unit Cost: ₱${fmtMoney(gt / qty)} / ${sow.unit || 'unit'}` : ''}</div></div>`;
         });
         body += `<div class="grand" style="font-size:15px;border-top:2px solid #1c2321;padding-top:8px;">PROJECT TOTAL: ₱${fmtMoney(grand)}</div>
-            <div class="sig"><div>Prepared by</div><div>Checked by</div><div>Approved by</div></div>`;
+            `;   // v11 BATCH E: the signature row is no longer hard-coded here —
+                 // PrintDoc appends the blocks defined in the print template,
+                 // so labels and names are set once and apply to every document.
         this._openPrintWindow('DUPA — ' + (p.name || this._currentProjectId), body);
     },
 
@@ -779,7 +797,9 @@ Object.assign(ProjectPage, {
             <td class="amt">₱${fmtMoney(rows.reduce((s, r) => s + r.matCost, 0))}</td>
             <td class="amt">₱${fmtMoney(rows.reduce((s, r) => s + r.labCost, 0))}</td>
             <td class="amt">₱${fmtMoney(grand)}</td></tr></tbody></table>
-            <div class="sig"><div>Prepared by</div><div>Checked by</div><div>Approved by</div></div>`;
+            `;   // v11 BATCH E: the signature row is no longer hard-coded here —
+                 // PrintDoc appends the blocks defined in the print template,
+                 // so labels and names are set once and apply to every document.
         this._openPrintWindow('Estimate Summary — ' + (p.name || this._currentProjectId), body);
     },
 

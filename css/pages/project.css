@@ -150,52 +150,117 @@
     }
 }
 
-/* ─── DAILY RECORD LIST ─── */
-.daily-record-item {
-    display: flex;
-    gap: 14px;
-    padding: 12px 0;
-    border-bottom: 1px solid var(--line);
-    align-items: center;
-    cursor: pointer;
-    transition: background .15s;
-    border-radius: 4px;
-    padding-left: 8px;
-    padding-right: 8px;
+/* ─── DAILY RECORD LIST (v11 BATCH D: table, not cards) ───
+
+   The list used to be one tall card per record showing only the date,
+   the weather and a headcount. Everything actually entered — the SOW
+   items worked on, the equipment, the materials, the issues, the photos
+   — was invisible until you opened each record individually. On sixty
+   daily reports that is sixty clicks to answer "which days did we work
+   on B.2".
+
+   A table shows the same rows at a glance and lets you compare down a
+   column, which is the point of a log. The old .daily-record-item card
+   rules are removed; nothing else referenced them.                   */
+
+.dr-table-wrap {
+    overflow-x: auto;
+    max-height: 460px;
+    overflow-y: auto;
 }
-.daily-record-item:hover {
-    background: var(--bg);
+.dr-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
 }
-.daily-record-item .dr-badge {
-    font-family: 'Oswald', sans-serif;
-    font-size: 20px;
-    font-weight: 600;
+.dr-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--blueprint-tint);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: .09em;
+    text-transform: uppercase;
     color: var(--blueprint);
-    width: 40px;
-    text-align: center;
-    flex-shrink: 0;
+    text-align: left;
+    padding: 8px 9px;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--line);
 }
-.daily-record-item .dr-body {
-    flex: 1;
+.dr-table thead th.num { text-align: center; }
+.dr-table td {
+    padding: 7px 9px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: middle;
 }
-.daily-record-item .dr-body .dr-title {
-    font-weight: 600;
-    font-size: 13px;
+.dr-table td.num { text-align: center; }
+.dr-table tr:last-child td { border-bottom: none; }
+
+.dr-row { cursor: pointer; transition: background .15s; }
+.dr-row:hover { background: var(--bg); }
+/* Sundays are the rest day the duration maths already assumes, so a
+   record on one is worth noticing rather than skimming past. */
+.dr-row.is-rest .dr-date .wd { color: var(--amber); }
+.dr-row.is-rest td { background: rgba(194, 134, 15, .045); }
+.dr-row.is-rest:hover td { background: rgba(194, 134, 15, .09); }
+
+.dr-date { white-space: nowrap; }
+.dr-date .wd {
+    font-family: 'Oswald', sans-serif;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--ink-soft);
+    margin-right: 6px;
 }
-.daily-record-item .dr-body .dr-meta {
+.dr-date .dt {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11.5px;
+    font-weight: 500;
+}
+.dr-weather { font-size: 11.5px; color: var(--ink-soft); white-space: nowrap; }
+.dr-by {
     font-size: 11px;
     color: var(--ink-soft);
-    margin-top: 2px;
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.dr-note { font-size: 10px; color: var(--ink-soft); white-space: nowrap; }
+.dr-actions {
+    white-space: nowrap;
     display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+    justify-content: flex-end;
 }
-.daily-record-item .dr-body .dr-meta time {
+
+/* The counts are summaries you can act on, not decoration — they tell
+   you which record is worth opening. */
+.dr-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
     font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--ink);
+    white-space: nowrap;
 }
-.daily-record-item .dr-arrow {
-    color: var(--ink-soft);
-    font-size: 18px;
+.dr-chip.is-zero { color: var(--line); }
+.dr-chip.is-issue { color: var(--red); font-weight: 600; }
+
+@media (max-width: 900px) {
+    /* Drop the columns a phone cannot show usefully, keeping date,
+       manpower, SOW, status and the actions. */
+    .dr-table th:nth-child(2), .dr-table td:nth-child(2),
+    .dr-table th:nth-child(4), .dr-table td:nth-child(4),
+    .dr-table th:nth-child(6), .dr-table td:nth-child(6),
+    .dr-table th:nth-child(8), .dr-table td:nth-child(8),
+    .dr-table th:nth-child(9), .dr-table td:nth-child(9) { display: none; }
+    .dr-table { font-size: 11.5px; }
+    .dr-table-wrap { max-height: none; }
 }
 
 /* ─── ADD RECORD TOGGLE ─── */
@@ -337,4 +402,75 @@
     transform: translateX(-50%);
     color: rgba(255, 255, 255, .6);
     font-size: 13px;
+}
+
+/* ================================================================
+   v11 BATCH E2 — REPORT GENERATOR (project-reports.js)
+   The section picker. The printed report itself is styled inline by
+   PrintDoc.documentHTML(), because it opens in a new window that cannot
+   reach this stylesheet.
+   ================================================================ */
+
+.rp-picker {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 14px;
+    margin-bottom: 18px;
+}
+.rp-group {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 12px 14px;
+}
+.rp-group-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-family: 'Oswald', sans-serif;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--blueprint);
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 7px;
+    margin-bottom: 8px;
+}
+.rp-opt {
+    display: flex;
+    gap: 9px;
+    align-items: flex-start;
+    padding: 6px 0;
+    cursor: pointer;
+    border-bottom: 1px dotted var(--line);
+}
+.rp-opt:last-child { border-bottom: none; }
+.rp-opt input { width: auto; margin-top: 2px; flex-shrink: 0; }
+.rp-opt span { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.rp-opt b { font-size: 12.5px; font-weight: 600; }
+/* The sub-line explains what actually lands in the report, so a person
+   ticking a box knows what they are asking for. */
+.rp-opt em {
+    font-style: normal;
+    font-size: 10.5px;
+    color: var(--ink-soft);
+    line-height: 1.4;
+}
+.rp-opt:hover b { color: var(--blueprint); }
+
+.rp-actions {
+    display: flex;
+    gap: 14px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    padding: 14px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--blueprint-tint);
+}
+
+@media (max-width: 620px) {
+    .rp-actions { flex-direction: column; align-items: stretch; }
+    .rp-actions .field { max-width: none !important; }
 }

@@ -350,19 +350,22 @@ const DataService = {
 
     async _fetchPendingApprovals() {
         const data = await gasCall('getPendingApprovals') || {};
-        const requests = [...(data.cashAdvances || []), ...(data.releases || []), ...(data.liquidations || [])];
-        return {
-            requests: requests,
-            cashAdvances: data.cashAdvances || [],
-            releases: data.releases || [],
-            incomingCash: data.incomingCash || [],   // v3
-            liquidations: data.liquidations || [],
-            materials: data.materials || [],
-            equipment: data.equipment || [],
-            manpower: data.manpower || [],           // v3
-            estimates: data.estimates || [],
-            dailyRecords: data.dailyRecords || []
-        };
+        // v11 BATCH A: this used to be a hand-maintained WHITELIST, and
+        // `otRequests` was never added to it — so the backend returned
+        // pending OT requests correctly and this function threw them
+        // away, leaving the Overtime section of the inbox permanently
+        // empty. Billings would have hit the same wall. Every key the
+        // backend sends is now passed through, and the known array keys
+        // are defaulted so callers can index them without guarding.
+        const KEYS = ['cashAdvances', 'releases', 'incomingCash', 'liquidations',
+            'materials', 'equipment', 'manpower', 'estimates', 'billings',
+            'dailyRecords', 'otRequests'];
+        const out = Object.assign({}, data);
+        KEYS.forEach(k => { out[k] = data[k] || []; });
+        // legacy convenience key: the cash-money subset, kept because
+        // older call sites still read it.
+        out.requests = [...out.cashAdvances, ...out.releases, ...out.liquidations];
+        return out;
     },
     async getMyPendingRequests() {
         return await gasCall('getMyPendingRequests');
@@ -567,6 +570,83 @@ const DataService = {
     },
     async updateSafetyRecord(id, data) {
         return await gasCall('updateSafetyRecord', id, data);
+    },
+    // v11 BATCH D: safety records had no delete at all, so a mistyped
+    // entry stayed on the project's safety history permanently — and
+    // that history is what a client audit reads. Super Admin only.
+    async deleteSafetyRecord(id) {
+        return await gasCall('deleteSafetyRecord', id);
+    },
+
+    // ── v11 BATCH E: PRINT TEMPLATE ──
+    // The template is fetched once per session and cached by PrintDoc,
+    // because it is needed on every print and never changes mid-session
+    // unless the Super Admin edits it (which clears the cache).
+    async getPrintTemplate() {
+        return await gasCall('getPrintTemplate');
+    },
+    async savePrintTemplate(data) {
+        return await gasCall('savePrintTemplate', data);
+    },
+    async resetPrintTemplate() {
+        return await gasCall('resetPrintTemplate');
+    },
+
+    // ── v11 BATCH F1: KNOWLEDGE BASE / LESSONS LEARNED ──
+    async getLessons(projectId) {
+        return await gasCall('getLessons', projectId || '');
+    },
+    async addLesson(data) {
+        return await gasCall('addLesson', data);
+    },
+    async updateLesson(id, data) {
+        return await gasCall('updateLesson', id, data);
+    },
+    async deleteLesson(id) {
+        return await gasCall('deleteLesson', id);
+    },
+    // Generating and saving are deliberately separate calls: an
+    // auto-written record that lands in the knowledge base unreviewed is
+    // how a knowledge base fills with noise.
+    async generateProjectRetrospective(projectId) {
+        return await gasCall('generateProjectRetrospective', projectId);
+    },
+    async saveProjectRetrospective(projectId, edits) {
+        return await gasCall('saveProjectRetrospective', projectId, edits || {});
+    },
+    async getRetrospectiveCandidates() {
+        return await gasCall('getRetrospectiveCandidates');
+    },
+
+    // ── v11 BATCH F2: QUOTATIONS ──
+    // A quotation owns a Projects row with status 'Quotation', so the SOW
+    // and Estimates tools price it directly and awarding copies nothing.
+    async getQuotations() {
+        return await gasCall('getQuotations');
+    },
+    async createQuotation(data) {
+        return await gasCall('createQuotation', data);
+    },
+    async updateQuotation(id, data) {
+        return await gasCall('updateQuotation', id, data);
+    },
+    async setQuotationStatus(id, status) {
+        return await gasCall('setQuotationStatus', id, status);
+    },
+    async reviseQuotation(id, note) {
+        return await gasCall('reviseQuotation', id, note || '');
+    },
+    async getQuotationRevisions(id) {
+        return await gasCall('getQuotationRevisions', id);
+    },
+    async awardQuotation(id, data) {
+        return await gasCall('awardQuotation', id, data || {});
+    },
+    async loseQuotation(id, data) {
+        return await gasCall('loseQuotation', id, data || {});
+    },
+    async deleteQuotation(id) {
+        return await gasCall('deleteQuotation', id);
     },
     async addDrawing(data) {
         return await gasCall('addDrawing', data);

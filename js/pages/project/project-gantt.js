@@ -1,8 +1,7 @@
 // ================================================================
-//  pages/project/project-gantt.js — MS Project-style Timeline (v3)
+//  pages/project/project-gantt.js — MS Project-style Timeline (v11)
 //
-//  PURPOSE: Full-featured Gantt for the Timeline tab. Replaces the
-//  old drag-only chart. Features, modeled on MS Project:
+//  PURPOSE: Full-featured Gantt for the Timeline tab.
 //
 //    · CPM scheduling — forward/backward pass over Finish-to-Start
 //      predecessor links; critical tasks (zero float) outlined red
@@ -15,11 +14,46 @@
 //    · Today line and baseline ghost bars (Save Baseline snapshot)
 //    · Resource panel per task from its estimate (manpower /
 //      equipment / materials), with a jump to the Estimates editor
-//    · Drag to move, drag edges to resize — now PERSISTED through
-//      updateSOWItem (the old chart only showed a "simulated" toast)
+//    · Drag to move, drag edges to resize — persisted through
+//      updateSOWItem
+//
+//  ── v11 BATCH C: FROZEN-PANE LAYOUT REWRITE ──────────────────
+//
+//  WHAT WAS WRONG. Four separate layout faults:
+//
+//   1. The task label lived INSIDE the horizontally scrolling row, so
+//      scrolling right carried every name off screen and left you
+//      looking at unlabelled bars.
+//   2. `.gantt-timeline` was `position:sticky; top:0` — the VERTICAL
+//      axis — but its scroll parent only scrolled HORIZONTALLY and the
+//      page owned vertical scrolling. It stuck to nothing, so the dates
+//      scrolled away on any project with more than a screenful of SOW.
+//   3. The label column had THREE widths: padding-left:120px in
+//      project-sow.css, width:220px in gantt.css, and a computed
+//      LABEL_W (220–420px) written inline by this file.
+//   4. The schedule table was a separate collapsible block ABOVE the
+//      chart, so a row's dates and its bar could never be read together.
+//
+//  WHAT IT IS NOW. One `.gt-scroll` element scrolling on both axes,
+//  containing a two-column grid:
+//
+//      grid-template-columns: var(--gt-lw) max-content
+//
+//  The left cells are `position:sticky; left:0` so the task table stays
+//  pinned while the timeline slides underneath. The header cells are
+//  `position:sticky; top:0`. The corner is sticky on both. Vertical
+//  scrolling is shared because it is ONE element — there is no
+//  scroll-syncing script that can drift out of step. The column width is
+//  a single CSS variable, --gt-lw, used by the grid, the splitter and
+//  the today line.
+//
+//  Bars are positioned in PIXELS against a known track width instead of
+//  percentages of an unknown one. That also makes the drag maths exact:
+//  a pixel delta converts straight to whole days, so a bar can no longer
+//  land between two dates and round unpredictably.
 //
 //  Attached to ProjectPage via Object.assign; must load AFTER
-//  project-sow.js and BEFORE init.js.
+//  project-sow.js and project-schedule.js, and BEFORE init.js.
 // ================================================================
 
 Object.assign(ProjectPage, {
@@ -55,6 +89,28 @@ Object.assign(ProjectPage, {
         const day = String(d.getDate()).padStart(2, '0');
         return `${y}-${m}-${day}`;
     },
+    _MONTHS_SHORT: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+    _gShort(d) {
+        if (!d) return '—';
+        return `${String(d.getDate()).padStart(2, '0')} ${this._MONTHS_SHORT[d.getMonth()]}`;
+    },
+
+    // ─── frozen pane width ──────────────────────────────────────
+    // ONE source of truth, read and written as a CSS variable so the
+    // grid, the splitter and the today line can never disagree.
+    _GT_LW_DEFAULT: 470,
+    _GT_LW_COMPACT: 230,
+    _GT_LW_MIN: 170,
+    _GT_LW_MAX: 720,
+    _gLabelW() {
+        const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--gt-lw'));
+        return isNaN(v) ? this._GT_LW_DEFAULT : v;
+    },
+    _gSetLabelW(px) {
+        const w = Math.min(this._GT_LW_MAX, Math.max(this._GT_LW_MIN, Math.round(px)));
+        document.documentElement.style.setProperty('--gt-lw', w + 'px');
+        return w;
+    },
 
     renderGantt(p) {
         const container = document.getElementById('proj-tab-gantt');
@@ -71,6 +127,11 @@ Object.assign(ProjectPage, {
             : ((p && typeof p.totalProgress === 'number') ? p.totalProgress : 0);
         if (!this._gScale) this._gScale = 'week';
         if (!this._gZoom) this._gZoom = 1;
+        if (this._gCompact === undefined) this._gCompact = false;
+
+        // establish the pane width before anything measures it
+        this._gSetLabelW(this._gCompact ? this._GT_LW_COMPACT : (this._gLabelWUser || this._GT_LW_DEFAULT));
+
         // v6.3 (#3): while the contract basis is incomplete, the badge
         // shows WHAT is missing (with counts) instead of a total that
         // would be computed on a wrong base.
@@ -84,50 +145,66 @@ Object.assign(ProjectPage, {
                     cr.unapproved.length ? cr.unapproved.length + ' estimate(s) not approved' : '',
                     cr.zeroBudget.length ? cr.zeroBudget.length + ' SOW without budget' : ''
                 ].filter(Boolean).join(' · ')}</span>`;
+
+        const canEdit = this._canEdit !== false;
+
         container.innerHTML = `
             <div class="section-head">
-                <h2>Project Timeline (Gantt Chart)</h2>
+                <h2>Project Timeline</h2>
                 <div class="rule"></div>
                 ${badgeHtml}
-                ${this._canEdit !== false ? `<button class="btn-sm" style="margin-left:8px;" title="Snapshot current dates as the baseline"
+                ${canEdit ? `<button class="btn-sm" style="margin-left:8px;" title="Snapshot current dates as the baseline"
                     onclick="ProjectPage.saveGanttBaseline()">${Icon.pin({size:12})} Save Baseline</button>` : ''}
             </div>
-            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 10px;">
-                <span style="font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);">Scale:</span>
+            <div class="gt-toolbar">
+                <span class="gt-lbl">Scale</span>
                 <button class="btn-sm ${this._gScale === 'day' ? 'primary' : ''}" onclick="ProjectPage.setGanttScale('day')">Day</button>
                 <button class="btn-sm ${this._gScale === 'week' ? 'primary' : ''}" onclick="ProjectPage.setGanttScale('week')">Week</button>
                 <button class="btn-sm ${this._gScale === 'month' ? 'primary' : ''}" onclick="ProjectPage.setGanttScale('month')">Month</button>
-                <span style="width:10px;"></span>
-                <button class="btn-sm" title="Zoom out" onclick="ProjectPage.ganttZoom(0.8)">−</button>
+                <span class="gt-sep"></span>
+                <button class="btn-sm" title="Zoom out" onclick="ProjectPage.ganttZoom(0.8)">&minus;</button>
                 <button class="btn-sm" title="Zoom in" onclick="ProjectPage.ganttZoom(1.25)">+</button>
-                <button class="btn-sm" title="Fit the whole timeline in view" onclick="ProjectPage.ganttFit()">Fit All</button>
+                <button class="btn-sm" title="Fit the whole timeline in view" onclick="ProjectPage.ganttFit()">Fit all</button>
+                <span class="gt-sep"></span>
+                <button class="btn-sm" onclick="ProjectPage.toggleSchedule()"
+                    title="Show or hide the predecessor and date columns">
+                    ${this._gCompact ? Icon.chevronRight({size:12}) : Icon.arrowDown({size:12})} ${this._gCompact ? 'Show dates' : 'Hide dates'}
+                </button>
+                <button class="btn-sm" onclick="ProjectPage.ganttToday()">${Icon.calendar({size:12})} Go to today</button>
+                ${canEdit ? `<button class="btn-sm" style="margin-left:auto" onclick="ProjectPage.recalcSchedule()"
+                    title="Re-apply every predecessor link from the top down">${Icon.refresh({size:12})} Recalculate chain</button>` : ''}
             </div>
-            <!-- v10: editable schedule table (start / duration / finish /
-                 predecessor). You cannot drag a bar to "18 working days",
-                 and a delayed chain used to need retyping row by row. -->
-            ${this.renderScheduleGrid()}
-            <div class="gantt-wrapper" id="ganttWrapper">
-                <div class="gantt-container" id="ganttContainer" style="position:relative;">
-                    <div class="gantt-timeline" id="ganttTimeline"></div>
-                    <div class="gantt-body" id="ganttBody" style="position:relative;"></div>
-                    <svg id="ganttLinks" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible;"></svg>
+            <div class="gt" id="ganttBox">
+                <div class="gt-scroll" id="ganttScroll">
+                    <div class="gt-grid" id="ganttGrid"></div>
                 </div>
+                <div class="gt-splitter" id="ganttSplitter" role="separator" aria-orientation="vertical"
+                     tabindex="0" aria-label="Resize the task table"></div>
             </div>
-            <div class="gantt-legend">
-                <span><span class="dot" style="background:var(--green);"></span> On Track</span>
-                <span><span class="dot" style="background:var(--amber);"></span> Behind Schedule</span>
-                <span><span class="dot" style="background:var(--red);"></span> Overdue</span>
-                <span><span class="dot" style="background:var(--blueprint,#24455A);"></span> Complete</span>
-                <span><span class="dot" style="border:2px solid var(--red);background:transparent;"></span> Critical Path</span>
-                <span>◆ Milestone</span>
-                <span style="color:var(--ink-soft);font-size:11px;">Drag to move · edges to resize · click for details, links &amp; resources</span>
+            <div class="gt-legend">
+                <span><span class="dot" style="background:var(--green);"></span>On track</span>
+                <span><span class="dot" style="background:var(--amber);"></span>Behind schedule</span>
+                <span><span class="dot" style="background:var(--red);"></span>Overdue</span>
+                <span><span class="dot" style="background:var(--blueprint);"></span>Complete</span>
+                <span><span class="dot" style="border:2px solid var(--red);background:transparent;"></span>Critical path</span>
+                <span>&#9670; Milestone</span>
+                <span><span class="dot dot-baseline"></span>Baseline</span>
+                <span class="gt-hint">Duration counts working days and skips Sundays. Drag a bar to move it, its edges to resize. Click for details, links and resources.</span>
             </div>
             <div class="gantt-tooltip" id="ganttTooltip"></div>`;
+
         this._ganttData = this._sowItems;
-        setTimeout(() => this._renderGanttChart(p), 100);
+        this._renderGanttChart(p);
+        this._wireGanttSplitter();
+        // Open centred on today the first time this PROJECT's timeline is
+        // drawn. Keyed on the project id, not a plain boolean, so opening
+        // a second project re-centres instead of inheriting the scroll
+        // position of the first.
+        if (this._gCentredFor !== this._currentProjectId) {
+            this._gCentredFor = this._currentProjectId;
+            setTimeout(() => this.ganttToday(), 40);
+        }
     },
-
-
 
     // v6.2: px-per-day for each scale; zoom multiplies it.
     _gBaseDayW: { day: 26, week: 9, month: 3 },
@@ -141,18 +218,37 @@ Object.assign(ProjectPage, {
         this.renderGantt(this._data);   // rebuild toolbar active states + chart
     },
     ganttZoom(factor) {
-        this._gZoom = (this._gZoom || 1) * factor;
+        this._gZoom = Math.min(8, Math.max(0.2, (this._gZoom || 1) * factor));
         this._renderGanttChart(this._data);
     },
     ganttFit() {
-        const wrap = document.getElementById('ganttWrapper');
+        const scroll = document.getElementById('ganttScroll');
         const meta = this._ganttMeta;
-        if (!wrap || !meta || !meta.totalDays) { this._renderGanttChart(this._data); return; }
-        const labelW = meta.labelW || 220;
-        const avail = Math.max(wrap.clientWidth - labelW - 24, 100);
+        if (!scroll || !meta || !meta.totalDays) { this._renderGanttChart(this._data); return; }
+        const avail = Math.max(scroll.clientWidth - this._gLabelW() - 24, 120);
         const base = this._gBaseDayW[this._gScale || 'week'] || 9;
-        this._gZoom = Math.max(1.5, avail / meta.totalDays) / base;
+        this._gZoom = Math.max(0.2, (avail / meta.totalDays) / base);
         this._renderGanttChart(this._data);
+    },
+    /** ganttToday - scrolls the timeline so today sits in the middle. */
+    ganttToday() {
+        const scroll = document.getElementById('ganttScroll');
+        const meta = this._ganttMeta;
+        if (!scroll || !meta || !meta.minDate) return;
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const x = this._gDiffDays(meta.minDate, today) * meta.dayW;
+        const viewport = scroll.clientWidth - this._gLabelW();
+        scroll.scrollLeft = Math.max(0, x - viewport / 2);
+    },
+    /**
+     * toggleSchedule - collapses the frozen pane to the task name alone.
+     * Kept under its original name so any cached markup still works; it
+     * no longer shows or hides a separate table, because the schedule
+     * columns now live inside the pane.
+     */
+    toggleSchedule() {
+        this._gCompact = !this._gCompact;
+        this.renderGantt(this._data);
     },
 
     /**
@@ -245,12 +341,14 @@ Object.assign(ProjectPage, {
         return { label: 'On Track', color: 'var(--green)', cls: '' };
     },
 
+    // ─── the chart ──────────────────────────────────────────────
+
     _renderGanttChart(p) {
         const items = this._sowItems || [];
-        const body = document.getElementById('ganttBody');
-        if (!body) return;
+        const grid = document.getElementById('ganttGrid');
+        if (!grid) return;
         if (!items.length) {
-            body.innerHTML = `<div class="empty"><p>No SOW items yet. Add them in the SOW Budget tab.</p></div>`;
+            grid.innerHTML = `<div class="gt-empty"><p>No SOW items yet. Add them on the SOW Budget tab, then schedule them here.</p></div>`;
             return;
         }
 
@@ -267,215 +365,276 @@ Object.assign(ProjectPage, {
         });
         const today = new Date(); today.setHours(0, 0, 0, 0);
         dates.push(today);
-        const minDate = this._gAddDays(new Date(Math.min(...dates.map(d => d.getTime()))), -2);
-        const maxDate = this._gAddDays(new Date(Math.max(...dates.map(d => d.getTime()))), 2);
+        const minDate = this._gAddDays(new Date(Math.min(...dates.map(d => d.getTime()))), -3);
+        const maxDate = this._gAddDays(new Date(Math.max(...dates.map(d => d.getTime()))), 3);
         const totalDays = Math.max(this._gDiffDays(minDate, maxDate), 1);
-        this._ganttMeta.minDate = minDate;
-        this._ganttMeta.totalDays = totalDays;
 
-        // ── v6.2: auto-fit label column to the longest SOW name ──
-        const longest = items.reduce((mx, it) => Math.max(mx, (`${it.id} — ${it.description || ''}`).length), 0);
-        const LABEL_W = Math.min(420, Math.max(220, Math.round(longest * 6.3) + 70));
-        this._ganttMeta.labelW = LABEL_W;
-
-        // ── v6.2: pixel-based day width (scale × zoom) so long ranges
-        //    scroll horizontally instead of squeezing every day into
-        //    the visible width (the old flex:1 clipped the coverage). ──
         const DAY_W = this._gDayWidth();
         const trackW = Math.ceil(totalDays * DAY_W);
-        const containerEl = document.getElementById('ganttContainer');
-        if (containerEl) containerEl.style.width = (LABEL_W + trackW + 4) + 'px';
+        const x = d => this._gDiffDays(minDate, d) * DAY_W;
 
-        // header timeline — ticks depend on the selected scale
-        const MN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        cpm.minDate = minDate;
+        cpm.maxDate = maxDate;
+        cpm.totalDays = totalDays;
+        cpm.dayW = DAY_W;
+        cpm.trackW = trackW;
+
+        // week striping: a rhythm for the eye without a rule per day,
+        // which turns into visual noise once you zoom out
+        document.documentElement.style.setProperty('--gt-week-w', (DAY_W * 7) + 'px');
+
+        // ── header: a month band above the tick row, at every scale, so
+        //    you always know which month you are looking at even when
+        //    zoomed into individual days ──
+        const MN = this._MONTHS_SHORT;
+        let band = '';
+        let d = new Date(minDate);
+        while (d <= maxDate) {
+            const mEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+            const segEnd = mEnd < maxDate ? mEnd : maxDate;
+            const w = (this._gDiffDays(d, segEnd) + 1) * DAY_W;
+            band += `<div class="seg" style="width:${w}px">${w > 52 ? MN[d.getMonth()] + ' ' + d.getFullYear() : ''}</div>`;
+            d = this._gAddDays(segEnd, 1);
+        }
+
         const scale = this._gScale || 'week';
-        let tlHtml = `<div style="width:${LABEL_W}px;flex-shrink:0;font-size:9px;font-weight:600;color:var(--ink-soft);">SOW Item</div>`;
-        const tick = (w, label, hot) =>
-            `<div class="gt-day" style="flex:0 0 ${w}px;width:${w}px;overflow:hidden;white-space:nowrap;${hot ? 'color:var(--red);font-weight:700;' : ''}">${label}</div>`;
+        let ticks = '';
         if (scale === 'day') {
-            for (let d = new Date(minDate); d <= maxDate; d.setDate(d.getDate() + 1)) {
-                tlHtml += tick(DAY_W, DAY_W >= 16 ? `${d.getDate()}/${d.getMonth() + 1}` : (d.getDate() === 1 || d.getDay() === 1 ? d.getDate() : ''), d.getTime() === today.getTime());
+            for (let c = new Date(minDate); c <= maxDate; c = this._gAddDays(c, 1)) {
+                const isToday = c.getTime() === today.getTime();
+                const rest = c.getDay() === 0;   // Sunday, matching the working-day rule
+                ticks += `<div class="tk ${isToday ? 'is-today' : ''} ${rest ? 'is-rest' : ''}" style="width:${DAY_W}px">${DAY_W >= 15 ? c.getDate() : ''}</div>`;
             }
         } else if (scale === 'week') {
-            let d = new Date(minDate);
-            while (d <= maxDate) {
-                const weekEnd = this._gAddDays(d, 6 - ((d.getDay() + 6) % 7));   // upcoming Sunday
-                const segEnd = weekEnd < maxDate ? weekEnd : maxDate;
-                const days = this._gDiffDays(d, segEnd) + 1;
-                const hot = today >= d && today <= segEnd;
-                tlHtml += tick(days * DAY_W, days * DAY_W >= 34 ? `${d.getDate()}/${d.getMonth() + 1}` : '', hot);
-                d = this._gAddDays(segEnd, 1);
+            let c = new Date(minDate);
+            while (c <= maxDate) {
+                const wEnd = this._gAddDays(c, 6 - ((c.getDay() + 6) % 7));   // upcoming Sunday
+                const segEnd = wEnd < maxDate ? wEnd : maxDate;
+                const w = (this._gDiffDays(c, segEnd) + 1) * DAY_W;
+                const hot = today >= c && today <= segEnd;
+                ticks += `<div class="tk ${hot ? 'is-today' : ''}" style="width:${w}px">${w >= 34 ? this._gShort(c) : ''}</div>`;
+                c = this._gAddDays(segEnd, 1);
             }
         } else {
-            let d = new Date(minDate);
-            while (d <= maxDate) {
-                const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-                const segEnd = monthEnd < maxDate ? monthEnd : maxDate;
-                const days = this._gDiffDays(d, segEnd) + 1;
-                const hot = today >= d && today <= segEnd;
-                tlHtml += tick(days * DAY_W, days * DAY_W >= 30 ? `${MN[d.getMonth()]} ${String(d.getFullYear()).slice(2)}` : '', hot);
-                d = this._gAddDays(segEnd, 1);
+            let c = new Date(minDate);
+            while (c <= maxDate) {
+                const mEnd = new Date(c.getFullYear(), c.getMonth() + 1, 0);
+                const segEnd = mEnd < maxDate ? mEnd : maxDate;
+                const w = (this._gDiffDays(c, segEnd) + 1) * DAY_W;
+                const hot = today >= c && today <= segEnd;
+                ticks += `<div class="tk ${hot ? 'is-today' : ''}" style="width:${w}px">${w >= 30 ? MN[c.getMonth()] : ''}</div>`;
+                c = this._gAddDays(segEnd, 1);
             }
         }
-        document.getElementById('ganttTimeline').innerHTML = tlHtml;
 
-        const todayPct = (this._gDiffDays(minDate, today) / totalDays) * 100;
+        let html = `
+            ${this.renderScheduleHeadCells()}
+            <div class="gt-head-track" style="width:${trackW}px">
+                <div class="gt-band">${band}</div>
+                <div class="gt-ticks">${ticks}</div>
+            </div>`;
 
-        let bodyHtml = '';
         items.forEach((item, idx) => {
             const t = cpm.tById[item.id];
             const health = this._taskHealth(item);
-            const critCls = t && t.critical ? 'gantt-critical' : '';
-            const label = `${item.id} — ${item.description || ''}`;
-
-            let trackInner = '';
+            const critCls = t && t.critical ? 'is-critical' : '';
             const s = this._gDay(item.startDate), e = this._gDay(item.endDate);
+
+            let inner = '';
 
             // baseline ghost bar
             const bs = this._gDay(item.baselineStart), be = this._gDay(item.baselineEnd);
             if (bs && be) {
-                const bl = (this._gDiffDays(minDate, bs) / totalDays) * 100;
-                const bw = ((this._gDiffDays(bs, be) + 1) / totalDays) * 100;
-                trackInner += `<div class="gantt-baseline" style="left:${Math.max(0, bl)}%;width:${Math.max(1, bw)}%;" title="Baseline: ${item.baselineStart} → ${item.baselineEnd}"></div>`;
+                inner += `<div class="gt-baseline" style="left:${x(bs)}px;width:${Math.max(2, (this._gDiffDays(bs, be) + 1) * DAY_W)}px"
+                    title="Baseline: ${item.baselineStart} → ${item.baselineEnd}"></div>`;
             }
 
             if (!s || !e) {
-                trackInner += `<span class="gantt-nodates" data-idx="${idx}" style="font-size:10px;color:var(--red);padding-left:10px;cursor:pointer;text-decoration:underline;" title="Click to set start & end dates">No dates — click to set</span>`;
+                inner += `<span class="gt-nodates" data-idx="${idx}" title="Click to set start and end dates">No dates — click to set</span>`;
             } else if (item.isMilestone) {
-                const left = (this._gDiffDays(minDate, s) / totalDays) * 100;
-                trackInner += `
-                    <div class="gantt-milestone ${critCls}" data-idx="${idx}" style="left:${left}%;"
-                        title="${label} — ${item.startDate}">◆</div>`;
+                inner += `<div class="gt-ms ${critCls} ${(parseFloat(item.progress) || 0) >= 100 ? 'is-done' : ''}"
+                    data-idx="${idx}" style="left:${x(s)}px"
+                    title="${item.id} — ${item.description || ''} · ${item.startDate}"></div>`;
             } else {
-                const startOffset = this._gDiffDays(minDate, s);
-                const duration = this._gDiffDays(s, e) + 1;
-                const leftPct = (startOffset / totalDays) * 100;
-                const widthPct = (duration / totalDays) * 100;
+                const dur = this._gDiffDays(s, e) + 1;
+                const w = Math.max(3, dur * DAY_W);
                 const progress = Math.min(Math.max(parseFloat(item.progress) || 0, 0), 100);
-                trackInner += `
-                    <div class="gantt-bar ${critCls}" style="left:${Math.max(0, leftPct)}%;width:${Math.max(2, widthPct)}%;background:${health.color};"
-                        data-idx="${idx}" data-start="${item.startDate}" data-end="${item.endDate}">
-                        <div class="gantt-progress-fill" style="width:${progress}%;"></div>
-                        <span class="gantt-bar-label">${item.id} · ${progress.toFixed(0)}%</span>
-                        <div class="resize-handle left" data-action="resize-left">◀</div>
-                        <div class="resize-handle right" data-action="resize-right">▶</div>
+                inner += `
+                    <div class="gt-bar ${critCls}" data-idx="${idx}" data-start="${item.startDate}" data-end="${item.endDate}"
+                        style="left:${x(s)}px;width:${w}px;background:${health.color}"
+                        title="${item.id} — ${item.description || ''}&#10;${item.startDate} → ${item.endDate} · ${dur} day(s) · ${progress.toFixed(0)}% · ${health.label}${t ? (t.critical ? ' · CRITICAL' : ' · float ' + t.float + 'd') : ''}">
+                        <div class="gt-fill" style="width:${progress}%"></div>
+                        ${w > 62 ? `<span class="gt-bar-lbl">${item.id} · ${progress.toFixed(0)}%</span>` : ''}
+                        <div class="gt-handle left" data-action="resize-left"></div>
+                        <div class="gt-handle right" data-action="resize-right"></div>
                     </div>`;
             }
 
-            bodyHtml += `
-                <div class="gantt-row" data-idx="${idx}" data-taskid="${item.id}">
-                    <div class="gantt-row-label" style="width:${LABEL_W}px;flex-shrink:0;" title="${label}${t ? ' · float: ' + t.float + 'd' : ''}">
-                        <span class="gantt-label-text">${label}</span>
-                        <span class="gantt-label-sub">${health.label}${t && t.critical ? ' · CRITICAL' : t ? ' · float ' + t.float + 'd' : ''}</span>
-                    </div>
-                    <div class="gantt-row-track">${trackInner}</div>
-                </div>`;
+            html += this.renderScheduleRowCells(item, idx, t, health)
+                 + `<div class="gt-cell-track" data-id="${item.id}" data-idx="${idx}" style="width:${trackW}px">${inner}</div>`;
         });
-        body.innerHTML = bodyHtml + `<div class="gantt-today-line" style="left:calc(${LABEL_W}px + (100% - ${LABEL_W}px) * ${todayPct / 100});" title="Today"></div>`;
 
-        this._drawGanttLinks(items, cpm, LABEL_W);
-        this._attachGanttEvents(minDate, totalDays, items);
+        // The today line spans the whole grid. It runs under the frozen
+        // pane, which is opaque and sits at a higher z-index, so it is
+        // correctly clipped without any extra maths.
+        html += `<div class="gt-today" style="left:calc(var(--gt-lw) + ${x(today)}px)" title="Today"></div>
+                 <svg class="gt-links" id="ganttLinks" style="left:var(--gt-lw);width:${trackW}px"></svg>`;
+
+        grid.innerHTML = html;
+
+        this._drawGanttLinks(items, cpm);
+        this._attachGanttEvents(minDate, DAY_W, items);
     },
 
     /**
      * _drawGanttLinks - SVG connectors, predecessor end -> successor
      * start, drawn from live DOM geometry after layout settles.
+     * Coordinates are relative to the track area, so the overlay does
+     * not need to know the pane width beyond its own left offset.
      */
-    _drawGanttLinks(items, cpm, LABEL_W) {
-        setTimeout(() => {
+    _drawGanttLinks(items, cpm) {
+        requestAnimationFrame(() => {
             const svg = document.getElementById('ganttLinks');
-            const container = document.getElementById('ganttContainer');
-            if (!svg || !container) return;
-            const cRect = container.getBoundingClientRect();
-            let paths = '';
+            const grid = document.getElementById('ganttGrid');
+            if (!svg || !grid) return;
+            const gr = grid.getBoundingClientRect();
+            const lw = this._gLabelW();
+            const HEAD = 44;   // header height, matches .gt-head-track in CSS
+            let maxY = 0, paths = '';
+
             items.forEach(item => {
                 const t = cpm.tById[item.id];
                 if (!t || !t.preds.length) return;
-                const toEl = container.querySelector(`.gantt-row[data-taskid="${item.id}"] .gantt-bar, .gantt-row[data-taskid="${item.id}"] .gantt-milestone`);
+                const toEl = grid.querySelector(`.gt-cell-track[data-id="${item.id}"] .gt-bar, .gt-cell-track[data-id="${item.id}"] .gt-ms`);
                 if (!toEl) return;
-                const toR = toEl.getBoundingClientRect();
+                const tr = toEl.getBoundingClientRect();
                 t.preds.forEach(pid => {
-                    const fromEl = container.querySelector(`.gantt-row[data-taskid="${pid}"] .gantt-bar, .gantt-row[data-taskid="${pid}"] .gantt-milestone`);
+                    const fromEl = grid.querySelector(`.gt-cell-track[data-id="${pid}"] .gt-bar, .gt-cell-track[data-id="${pid}"] .gt-ms`);
                     if (!fromEl) return;
                     const fr = fromEl.getBoundingClientRect();
-                    const x1 = fr.right - cRect.left, y1 = fr.top - cRect.top + fr.height / 2;
-                    const x2 = toR.left - cRect.left, y2 = toR.top - cRect.top + toR.height / 2;
+                    const x1 = fr.right - gr.left - lw, y1 = fr.top - gr.top + fr.height / 2 - HEAD;
+                    const x2 = tr.left - gr.left - lw,  y2 = tr.top - gr.top + tr.height / 2 - HEAD;
+                    maxY = Math.max(maxY, y1, y2);
                     const critical = cpm.tById[pid].critical && t.critical;
                     const color = critical ? 'var(--red)' : 'var(--ink-soft)';
-                    const mx = x1 + Math.max(8, (x2 - x1) / 2);
-                    paths += `<path d="M ${x1} ${y1} L ${mx} ${y1} L ${mx} ${y2} L ${x2 - 5} ${y2}" fill="none" stroke="${color}" stroke-width="1.5" opacity="0.75"/>` +
-                             `<path d="M ${x2 - 5} ${y2 - 4} L ${x2} ${y2} L ${x2 - 5} ${y2 + 4} Z" fill="${color}" opacity="0.75"/>`;
+                    const mid = Math.max(x1 + 8, x2 - 8);
+                    paths += `<path d="M${x1},${y1} H${mid} V${y2} H${x2}" fill="none" stroke="${color}" stroke-width="1.3" opacity="0.6"/>` +
+                             `<path d="M${x2},${y2} l-5,-3.4 v6.8 z" fill="${color}" opacity="0.6"/>`;
                 });
             });
+            svg.setAttribute('height', Math.max(0, maxY) + 40);
             svg.innerHTML = paths;
-        }, 60);
+        });
+    },
+
+    /**
+     * _wireGanttSplitter - drag the divider to resize the frozen pane.
+     * The pane is sticky at left:0, so its right edge never moves
+     * relative to the scroll box — which is what makes a plain absolute
+     * position correct for the handle. Arrow keys work too, because a
+     * resize control that only responds to a mouse is not a control.
+     */
+    _wireGanttSplitter() {
+        const sp = document.getElementById('ganttSplitter');
+        const box = document.getElementById('ganttBox');
+        if (!sp || !box) return;
+        const self = this;
+        let dragging = false;
+
+        const commit = px => {
+            self._gLabelWUser = self._gSetLabelW(px);
+            self._gCompact = false;
+        };
+
+        sp.addEventListener('pointerdown', e => {
+            dragging = true;
+            sp.setPointerCapture(e.pointerId);
+            sp.classList.add('is-dragging');
+            e.preventDefault();
+        });
+        sp.addEventListener('pointermove', e => {
+            if (!dragging) return;
+            commit(e.clientX - box.getBoundingClientRect().left);
+        });
+        sp.addEventListener('pointerup', () => {
+            if (!dragging) return;
+            dragging = false;
+            sp.classList.remove('is-dragging');
+            self._drawGanttLinks(self._sowItems || [], self._ganttMeta);
+        });
+        sp.addEventListener('keydown', e => {
+            if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+            commit(self._gLabelW() + (e.key === 'ArrowLeft' ? -24 : 24));
+            self._drawGanttLinks(self._sowItems || [], self._ganttMeta);
+            e.preventDefault();
+        });
     },
 
     /**
      * _attachGanttEvents - Drag/resize with REAL persistence: on
-     * mouseup the new dates are written through updateSOWItem, then
+     * pointerup the new dates are written through updateSOWItem, then
      * the chart re-renders so CPM, links and health recompute.
      * Click opens the task detail modal.
+     *
+     * v11: the maths is now in PIXELS against a known day width, so a
+     * pixel delta converts to whole days exactly. The old percentage
+     * version divided by the track's rendered width, which meant a drag
+     * could land between two dates and round unpredictably — and it
+     * broke outright whenever the track was narrower than the content.
      */
-    _attachGanttEvents(minDate, totalDays, items) {
-        const bars = document.querySelectorAll('#ganttBody .gantt-bar');
+    _attachGanttEvents(minDate, dayW, items) {
         const self = this;
-        let activeBar = null, isResizing = false, resizeSide = null, isDragging = false;
-        let dragStartX = 0, origLeft = 0, origWidth = 0, moved = false;
+        const grid = document.getElementById('ganttGrid');
+        if (!grid) return;
 
-        const pctToDate = (pct) => self._gAddDays(minDate, Math.round((pct / 100) * totalDays));
+        let bar = null, mode = null, startX = 0, origLeft = 0, origWidth = 0, moved = false;
 
-        const onMouseMove = (e) => {
-            if (!activeBar) return;
-            const track = activeBar.closest('.gantt-row-track');
-            const rect = track.getBoundingClientRect();
-            const dxPct = ((e.clientX - dragStartX) / rect.width) * 100;
-            if (Math.abs(e.clientX - dragStartX) > 3) moved = true;
+        const snap = px => Math.round(px / dayW) * dayW;
 
-            if (isResizing) {
-                if (resizeSide === 'right') {
-                    activeBar.style.width = Math.max(2, origWidth + dxPct) + '%';
-                } else {
-                    const newLeft = Math.min(Math.max(0, origLeft + dxPct), origLeft + origWidth - 2);
-                    activeBar.style.left = newLeft + '%';
-                    activeBar.style.width = (origWidth + (origLeft - newLeft)) + '%';
-                }
-            } else if (isDragging) {
-                activeBar.style.left = Math.max(0, Math.min(100 - origWidth, origLeft + dxPct)) + '%';
+        const onMove = e => {
+            if (!bar) return;
+            const dx = e.clientX - startX;
+            if (Math.abs(dx) > 3) moved = true;
+
+            if (mode === 'resize-right') {
+                bar.style.width = Math.max(dayW, snap(origWidth + dx)) + 'px';
+            } else if (mode === 'resize-left') {
+                const maxShift = origWidth - dayW;
+                const shift = Math.min(snap(dx), maxShift);
+                bar.style.left = Math.max(0, origLeft + shift) + 'px';
+                bar.style.width = (origWidth - shift) + 'px';
+            } else {
+                bar.style.left = Math.max(0, snap(origLeft + dx)) + 'px';
             }
 
-            const idx = parseInt(activeBar.dataset.idx);
+            const idx = parseInt(bar.dataset.idx, 10);
             if (!isNaN(idx) && items[idx]) {
-                const l = parseFloat(activeBar.style.left) || 0;
-                const w = parseFloat(activeBar.style.width) || 2;
-                const ns = pctToDate(l);
-                const ne = self._gAddDays(ns, Math.max(Math.round((w / 100) * totalDays) - 1, 0));
-                const tooltip = document.getElementById('ganttTooltip');
-                tooltip.textContent = `${items[idx].id}: ${self._gFmt(ns)} → ${self._gFmt(ne)}`;
-                tooltip.style.left = (e.clientX - 40) + 'px';
-                tooltip.style.top = (e.clientY - 30) + 'px';
-                tooltip.classList.add('show');
+                const [ns, ne] = self._gBarDates(bar, minDate, dayW);
+                const tip = document.getElementById('ganttTooltip');
+                if (tip) {
+                    tip.textContent = `${items[idx].id}: ${self._gFmt(ns)} → ${self._gFmt(ne)}`;
+                    tip.style.left = (e.clientX - 40) + 'px';
+                    tip.style.top = (e.clientY - 34) + 'px';
+                    tip.classList.add('show');
+                }
             }
         };
 
-        const onMouseUp = async () => {
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
+        const onUp = async () => {
+            document.removeEventListener('pointermove', onMove);
+            document.removeEventListener('pointerup', onUp);
             document.getElementById('ganttTooltip')?.classList.remove('show');
-            const bar = activeBar;
-            activeBar = null;
-            if (!bar || !moved) { isResizing = isDragging = false; return; }
-            isResizing = isDragging = false;
+            const b = bar;
+            bar = null; mode = null;
+            if (!b || !moved) return;
 
-            const idx = parseInt(bar.dataset.idx);
+            const idx = parseInt(b.dataset.idx, 10);
             if (isNaN(idx) || !items[idx]) return;
-            const l = parseFloat(bar.style.left) || 0;
-            const w = parseFloat(bar.style.width) || 2;
-            const ns = pctToDate(l);
-            const ne = self._gAddDays(ns, Math.max(Math.round((w / 100) * totalDays) - 1, 0));
             const item = items[idx];
+            const [ns, ne] = self._gBarDates(b, minDate, dayW);
             const newStart = self._gFmt(ns), newEnd = self._gFmt(ne);
             if (newStart === item.startDate && newEnd === item.endDate) return;
+
             try {
                 await DataService.updateSOWItem(self._currentProjectId, item.id, { startDate: newStart, endDate: newEnd });
                 item.startDate = newStart; item.endDate = newEnd;
@@ -487,59 +646,67 @@ Object.assign(ProjectPage, {
             }
         };
 
-        bars.forEach(bar => {
-            bar.querySelectorAll('.resize-handle').forEach(handle => {
-                handle.addEventListener('mousedown', function (e) {
-                    e.stopPropagation();
-                    activeBar = bar; isResizing = true; moved = false;
-                    resizeSide = this.dataset.action === 'resize-left' ? 'left' : 'right';
-                    dragStartX = e.clientX;
-                    origLeft = parseFloat(bar.style.left) || 0;
-                    origWidth = parseFloat(bar.style.width) || 2;
-                    document.addEventListener('mousemove', onMouseMove);
-                    document.addEventListener('mouseup', onMouseUp);
+        const begin = (el, e, m) => {
+            bar = el; mode = m; moved = false;
+            startX = e.clientX;
+            origLeft = parseFloat(el.style.left) || 0;
+            origWidth = parseFloat(el.style.width) || dayW;
+            document.addEventListener('pointermove', onMove);
+            document.addEventListener('pointerup', onUp);
+        };
+
+        if (this._canEdit !== false) {
+            grid.querySelectorAll('.gt-bar').forEach(el => {
+                el.querySelectorAll('.gt-handle').forEach(h => {
+                    h.addEventListener('pointerdown', e => { e.stopPropagation(); begin(el, e, h.dataset.action); });
+                });
+                el.addEventListener('pointerdown', e => {
+                    if (e.target.closest('.gt-handle')) return;
+                    begin(el, e, 'move');
                 });
             });
-            bar.addEventListener('mousedown', function (e) {
-                if (e.target.closest('.resize-handle')) return;
-                activeBar = bar; isDragging = true; moved = false;
-                dragStartX = e.clientX;
-                origLeft = parseFloat(bar.style.left) || 0;
-                origWidth = parseFloat(bar.style.width) || 2;
-                document.addEventListener('mousemove', onMouseMove);
-                document.addEventListener('mouseup', onMouseUp);
-            });
-            bar.addEventListener('click', function (e) {
-                if (moved || e.target.closest('.resize-handle')) return;
-                const idx = parseInt(this.dataset.idx);
-                if (!isNaN(idx) && items[idx]) self.openTaskModal(items[idx].id);
-            });
-        });
-        document.querySelectorAll('#ganttBody .gantt-milestone').forEach(ms => {
-            ms.style.pointerEvents = 'auto';
-            ms.addEventListener('click', function () {
-                const idx = parseInt(this.dataset.idx);
-                if (!isNaN(idx) && items[idx]) self.openTaskModal(items[idx].id);
-            });
-        });
-        // "No dates" labels open the task modal so pre-v3 items (which
-        // have no bar to drag) can still be given a schedule.
-        document.querySelectorAll('#ganttBody .gantt-nodates').forEach(el => {
-            el.addEventListener('click', function () {
-                const idx = parseInt(this.dataset.idx);
-                if (!isNaN(idx) && items[idx]) self.openTaskModal(items[idx].id);
-            });
-        });
+        }
 
-        // v6.2: clicking the SOW label opens the same task modal as the bar
-        document.querySelectorAll('#ganttBody .gantt-row-label').forEach(el => {
-            el.style.cursor = 'pointer';
-            el.addEventListener('click', function () {
-                const row = this.closest('.gantt-row');
-                const id = row && row.dataset.taskid;
+        // click-through to the task modal, from the bar, the diamond,
+        // the "No dates" prompt, and the row in the frozen pane
+        const openFrom = el => {
+            const idx = parseInt(el.dataset.idx, 10);
+            if (!isNaN(idx) && items[idx]) self.openTaskModal(items[idx].id);
+        };
+        grid.querySelectorAll('.gt-bar').forEach(el => {
+            el.addEventListener('click', e => { if (!moved && !e.target.closest('.gt-handle')) openFrom(el); });
+        });
+        grid.querySelectorAll('.gt-ms, .gt-nodates').forEach(el => {
+            el.addEventListener('click', () => openFrom(el));
+        });
+        grid.querySelectorAll('.gt-task').forEach(el => {
+            el.addEventListener('click', () => {
+                const id = el.closest('.gt-cell-left')?.dataset.id;
                 if (id) self.openTaskModal(id);
             });
         });
+
+        // hover highlight spanning BOTH panes, so a row reads as one line
+        grid.querySelectorAll('.gt-cell-left, .gt-cell-track').forEach(el => {
+            el.addEventListener('mouseenter', () => self._gHighlight(el.dataset.id, true));
+            el.addEventListener('mouseleave', () => self._gHighlight(el.dataset.id, false));
+        });
+    },
+
+    /** _gBarDates - the start/end a bar's current pixel geometry means. */
+    _gBarDates(bar, minDate, dayW) {
+        const left = parseFloat(bar.style.left) || 0;
+        const width = parseFloat(bar.style.width) || dayW;
+        const startOffset = Math.round(left / dayW);
+        const days = Math.max(1, Math.round(width / dayW));
+        const ns = this._gAddDays(minDate, startOffset);
+        return [ns, this._gAddDays(ns, days - 1)];
+    },
+
+    _gHighlight(id, on) {
+        if (!id) return;
+        document.querySelectorAll(`#ganttGrid [data-id="${id}"]`)
+            .forEach(n => n.classList.toggle('is-hover', on));
     },
 
     /**

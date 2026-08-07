@@ -146,13 +146,12 @@
         height: 80px;
         align-self: flex-start;
     }
-    .gantt-row-label {
-        width: 80px;
-        font-size: 9px;
-    }
-    .gantt-timeline {
-        padding-left: 80px;
-    }
+    /* v11 BATCH C: two Gantt rules used to sit here, inside this
+       media query — a FOURTH file setting the label column width, on
+       top of project-sow.css, gantt.css and an inline width from
+       project-gantt.js. They only applied under 600px, which is why
+       the header and the rows never lined up on a phone.
+       The Timeline is styled solely by pages/gantt.css now. */
     .project-tabs button {
         font-size: 9px;
         padding: 6px 10px;

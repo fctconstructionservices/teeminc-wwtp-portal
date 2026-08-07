@@ -58,7 +58,9 @@ function requestOT(data) {
     updatedAt: new Date()
   });
   logActivity_('OT request ' + id + ' filed for ' + otDate + ' (' + data.otStart + '–' + data.otEnd + ')', 'g', id);
-  return { success: true, id: id };
+  // v11 BATCH A: Super Admin bypass — OT fields unlock immediately.
+  var autoApproved = autoApproveIfSuper_(id, 'OTRequest');
+  return { success: true, id: id, autoApproved: autoApproved };
 }
 
 /** getOTRequests - All OT requests for a project (sanitized dates). */
@@ -174,8 +176,23 @@ function getPunchlist(projectId) {
 
 /**
  * addSafetyRecord - data: { projectId, recordType, recordDate,
- * description, severity, personsInvolved, actionTaken, image }
+ * description, severity, personsInvolved, actionTaken, attachments }
  * recordType: Toolbox Talk | Inspection | Incident | Near Miss | Violation
+ *
+ * ── v11 BATCH D: MULTIPLE PHOTOS ─────────────────────────────
+ * The sheet had ONE `image` column and this function wrote one URL, so
+ * an incident could carry a single photo. That is the wrong shape for
+ * the job: an incident needs the scene, the injury, the equipment and
+ * the corrective action, and a toolbox talk needs the attendance sheet
+ * as well as the briefing. Photos are now an ARRAY stored in
+ * `attachmentsJSON`, the same [{url, name}] format the cash advance and
+ * liquidation forms already use — so AttachmentGallery renders them
+ * with no new frontend component.
+ *
+ * `image` is left in the schema and untouched on old rows.
+ * safetyAttachments_() folds a legacy single image into the array on
+ * read, so records filed before this change display exactly the same.
+ * No migration is needed.
  */
 function addSafetyRecord(data) {
   assertProjectEditor_(data.projectId);
@@ -192,14 +209,50 @@ function addSafetyRecord(data) {
     severity: String(data.severity || ''),
     personsInvolved: String(data.personsInvolved || ''),
     actionTaken: String(data.actionTaken || ''),
-    image: String(data.image || ''),
+    image: '',                                    // superseded by attachmentsJSON
+    attachmentsJSON: normalizeAttachments_(data.attachments),
     status: String(data.status || 'Open'),
     reportedBy: currentUserEmail_().toLowerCase(),
     createdAt: new Date(),
     updatedAt: new Date()
   });
-  logActivity_('Safety record ' + id + ' (' + data.recordType + ') filed', 'a', id);
+  var n = safeParse_(normalizeAttachments_(data.attachments), []).length;
+  logActivity_('Safety record ' + id + ' (' + data.recordType + ') filed' +
+    (n ? ' with ' + n + ' photo(s)' : ''), 'a', id);
   return { success: true, id: id };
+}
+
+/**
+ * normalizeAttachments_ (v11) - Coerces whatever the client sent into
+ * a clean [{url, name}] JSON string. Accepts an array of objects, an
+ * array of bare URLs, or a single URL string, so a caller that has not
+ * been updated yet still stores something valid.
+ */
+function normalizeAttachments_(v) {
+  var arr = [];
+  if (Array.isArray(v)) arr = v;
+  else if (typeof v === 'string' && v.indexOf('[') === 0) arr = safeParse_(v, []);
+  else if (typeof v === 'string' && v) arr = [{ url: v, name: 'Photo' }];
+  var out = arr.map(function (a, i) {
+    if (!a) return null;
+    if (typeof a === 'string') return { url: a, name: 'Photo ' + (i + 1) };
+    if (!a.url) return null;
+    return { url: String(a.url), name: String(a.name || ('Photo ' + (i + 1))) };
+  }).filter(Boolean);
+  return JSON.stringify(out);
+}
+
+/**
+ * safetyAttachments_ (v11) - Read side of the same idea. Returns the
+ * attachment array for a row, folding a legacy `image` value in so
+ * pre-v11 records are indistinguishable from new ones in the UI.
+ */
+function safetyAttachments_(row) {
+  var out = safeParse_(row.attachmentsJSON, []);
+  if ((!out || !out.length) && row.image && String(row.image).indexOf('http') === 0) {
+    out = [{ url: String(row.image), name: 'Photo' }];
+  }
+  return out || [];
 }
 
 /** updateSafetyRecord - Edit / close a safety record. */
@@ -208,11 +261,41 @@ function updateSafetyRecord(id, data) {
   if (!row) throw new Error('Safety record not found.');
   assertProjectEditor_(row.projectId);
   var upd = { updatedAt: new Date() };
-  ['recordType', 'description', 'severity', 'personsInvolved', 'actionTaken', 'image', 'status']
+  ['recordType', 'description', 'severity', 'personsInvolved', 'actionTaken', 'status']
     .forEach(function (f) { if (data[f] !== undefined) upd[f] = String(data[f]); });
   if (data.recordDate !== undefined) upd.recordDate = fmtDate_(data.recordDate);
+  // v11: photos can be added to an existing record — useful when the
+  // corrective-action photo only exists days after the incident was
+  // filed. Passing `attachments` REPLACES the set; `addAttachments`
+  // appends to it, which is what the "Add photos" button uses.
+  if (data.attachments !== undefined) {
+    upd.attachmentsJSON = normalizeAttachments_(data.attachments);
+  } else if (data.addAttachments !== undefined) {
+    var existing = safetyAttachments_(row);
+    var added = safeParse_(normalizeAttachments_(data.addAttachments), []);
+    upd.attachmentsJSON = JSON.stringify(existing.concat(added));
+    upd.image = '';   // folded into the array above, so clear the legacy column
+  }
   updateRow_('SafetyRecords', 'id', id, upd);
   logActivity_('Safety record ' + id + ' updated', 'g', id);
+  return { success: true };
+}
+
+/**
+ * deleteSafetyRecord (v11 BATCH D) - Super Admin only.
+ * There was no way to remove a safety record at all, so a mistyped
+ * entry stayed on the project's safety history permanently — and that
+ * history is what a client audit looks at. Restricted to Super Admin
+ * and logged, because deleting safety records is exactly the thing that
+ * needs an audit trail.
+ */
+function deleteSafetyRecord(id) {
+  requireSuperAdmin_('deleting a safety record');
+  var row = readAll_('SafetyRecords').find(function (r) { return r.id === id; });
+  if (!row) throw new Error('Safety record not found.');
+  deleteRow_('SafetyRecords', 'id', id);
+  logActivity_('Safety record ' + id + ' (' + row.recordType + ', ' +
+    row.recordDate + ') deleted by Super Admin ' + currentUserName_(), 'a', id);
   return { success: true };
 }
 
@@ -220,7 +303,13 @@ function updateSafetyRecord(id, data) {
 function getSafetyRecords(projectId) {
   return sanitizeDatesDeep_(
     readAll_('SafetyRecords').filter(function (r) { return r.projectId === projectId; })
-      .map(function (r) { r.recordDate = fmtDate_(r.recordDate); return r; })
+      .map(function (r) {
+        r.recordDate = fmtDate_(r.recordDate);
+        // v11: hand the UI a ready array so it never has to know about
+        // the legacy `image` column.
+        r.attachments = safetyAttachments_(r);
+        return r;
+      })
   );
 }
 

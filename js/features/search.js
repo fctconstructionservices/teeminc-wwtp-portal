@@ -134,7 +134,7 @@ async function performSearch() {
     if (!query) {
         countEl.textContent = '0 found';
         emptyEl.style.display = 'block';
-        emptyEl.querySelector('p').textContent = 'Mag-type para maghanap.';
+        emptyEl.querySelector('p').textContent = 'Type to search.';
         resultsEl.innerHTML = '';
         return;
     }

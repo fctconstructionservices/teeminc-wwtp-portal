@@ -26,6 +26,29 @@ function sheet_(name) {
 function headers_(name) { return SCHEMAS[name]; }
 
 /**
+ * ensureSheet_ (v11 BATCH E) - Returns a sheet, creating it with its
+ * schema header row if it does not exist yet.
+ *
+ * sheet_() throws when a sheet is missing, which is the right behaviour
+ * for the core data sheets — a missing Projects sheet means something is
+ * badly wrong and should fail loudly. But it makes shipping a NEW sheet
+ * a manual step for whoever deploys, and a forgotten step is a broken
+ * feature. Configuration sheets that start empty can safely create
+ * themselves on first use.
+ */
+function ensureSheet_(name) {
+  var sh = ss_().getSheetByName(name);
+  if (sh) return sh;
+  var heads = SCHEMAS[name];
+  if (!heads) throw new Error('No schema defined for sheet: ' + name);
+  sh = ss_().insertSheet(name);
+  sh.getRange(1, 1, 1, heads.length).setValues([heads]);
+  sh.setFrozenRows(1);
+  _invalidateRead_(name);
+  return sh;
+}
+
+/**
  * ══ v6.5 PERFORMANCE: batched reads ══
  *
  * Every readAll_ is a separate round-trip to the Sheets service, so a
@@ -150,6 +173,107 @@ function updateRow_(name, idField, idValue, patch) {
   });
   _invalidateRead_(name);   // v6.5
   return true;
+}
+
+/**
+ * ══ v11 BATCH B: COMPOSITE-KEY ROW HELPERS ══
+ *
+ * findRowNum_/updateRow_/deleteRow_ match on ONE column. That is fine
+ * for sheets whose id is globally unique (every nextId_ row), but it is
+ * DANGEROUS for sheets whose id is only unique WITHIN a project.
+ *
+ * SOWItems is the case that bit us. Its ids are typed by hand — "A.1",
+ * "1.1", "B.2" — so two different projects routinely hold the same one.
+ * updateRow_('SOWItems', 'id', 'A.1', …) rewrites whichever "A.1" sits
+ * highest in the sheet, which may belong to a completely different
+ * project. deleteSOWItem() had the same flaw, so deleting A.1 from the
+ * project you were looking at could silently delete A.1 from another.
+ * moveSOWItem() already knew this and hand-rolled its own scan; these
+ * helpers make the correct behaviour available everywhere.
+ *
+ * `match` is an object of column -> required value, all compared as
+ * strings: { id: 'A.1', projectId: 'PRJ-0001' }.
+ */
+
+/** findRowNumWhere_ - physical row number of the FIRST row matching every
+ *  column in `match`, or -1. */
+function findRowNumWhere_(name, match) {
+  const rows = findRowNumsWhere_(name, match);
+  return rows.length ? rows[0] : -1;
+}
+
+/** findRowNumsWhere_ - ALL physical row numbers matching `match`,
+ *  ascending. */
+function findRowNumsWhere_(name, match) {
+  const sh = sheet_(name);
+  const heads = headers_(name);
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return [];
+  const values = sh.getRange(2, 1, lastRow - 1, heads.length).getValues();
+  const cols = Object.keys(match).map(function (k) {
+    const i = heads.indexOf(k);
+    if (i === -1) throw new Error('Column "' + k + '" does not exist on sheet ' + name + '.');
+    return { i: i, v: String(match[k]) };
+  });
+  const out = [];
+  for (var r = 0; r < values.length; r++) {
+    var hit = true;
+    for (var c = 0; c < cols.length; c++) {
+      if (String(values[r][cols[c].i]) !== cols[c].v) { hit = false; break; }
+    }
+    if (hit) out.push(r + 2);
+  }
+  return out;
+}
+
+/** updateRowWhere_ - patch the first row matching every column in
+ *  `match`. Returns true when a row was written. */
+function updateRowWhere_(name, match, patch) {
+  const rowNum = findRowNumWhere_(name, match);
+  if (rowNum === -1) return false;
+  const sh = sheet_(name);
+  const heads = headers_(name);
+  Object.keys(patch).forEach(function (key) {
+    const col = heads.indexOf(key);
+    if (col > -1) sh.getRange(rowNum, col + 1).setValue(patch[key]);
+  });
+  _invalidateRead_(name);
+  return true;
+}
+
+/** deleteRowsWhere_ - removes EVERY row matching `match`. Deletes from
+ *  the bottom up, because deleting a row shifts everything below it and
+ *  a top-down loop would delete the wrong rows. Returns the count. */
+function deleteRowsWhere_(name, match) {
+  const rowNums = findRowNumsWhere_(name, match);
+  if (!rowNums.length) return 0;
+  const sh = sheet_(name);
+  for (var i = rowNums.length - 1; i >= 0; i--) sh.deleteRow(rowNums[i]);
+  _invalidateRead_(name);
+  return rowNums.length;
+}
+
+/** deleteRowsByValues_ - removes every row whose `col` is in `values`.
+ *  One pass, bottom-up. Used to clear a whole set of estimate line items
+ *  by groupId without a delete call per row. Returns the count. */
+function deleteRowsByValues_(name, col, values) {
+  if (!values || !values.length) return 0;
+  const sh = sheet_(name);
+  const heads = headers_(name);
+  const ci = heads.indexOf(col);
+  if (ci === -1) throw new Error('Column "' + col + '" does not exist on sheet ' + name + '.');
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return 0;
+  const wanted = {};
+  values.forEach(function (v) { wanted[String(v)] = true; });
+  const data = sh.getRange(2, ci + 1, lastRow - 1, 1).getValues();
+  const hits = [];
+  for (var r = 0; r < data.length; r++) {
+    if (wanted[String(data[r][0])]) hits.push(r + 2);
+  }
+  for (var i = hits.length - 1; i >= 0; i--) sh.deleteRow(hits[i]);
+  if (hits.length) _invalidateRead_(name);
+  return hits.length;
 }
 
 function nextId_(prefix) {

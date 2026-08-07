@@ -164,7 +164,9 @@ function submitDailyRecordForApproval(recordId) {
   assertProjectEditor_(rec.projectId);   // v6.6
   updateRow_('DailyRecords', 'id', recordId, { status: 'pending' });
   logActivity_('Daily record ' + recordId + ' submitted for approval', 'g', recordId);
-  return { success: true };
+  // v11 BATCH A: Super Admin bypass.
+  var autoApproved = autoApproveIfSuper_(recordId, 'DailyRecord');
+  return { success: true, autoApproved: autoApproved };
 }
 
 function approveDailyRecord(recordId) {

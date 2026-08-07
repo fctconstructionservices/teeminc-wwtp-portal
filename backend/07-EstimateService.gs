@@ -124,7 +124,10 @@ function approveEstimates(projectId, sowId) {
     const mode = (sow && sow.budgetMode) || 'auto';
     if (mode !== 'manual') {
       newBudget = computeEstimateGroupTotalByMode_(g.id, mode);
-      updateRow_('SOWItems', 'id', sowId, { budget: newBudget });
+      // v11 BATCH B: scoped to id + projectId. SOW ids are hand-typed
+      // and repeat across projects, so approving an estimate here could
+      // overwrite the budget of the same-numbered SOW in another project.
+      updateRowWhere_('SOWItems', { id: sowId, projectId: projectId }, { budget: newBudget });
     }
   }
   logActivity_('Estimate for ' + sowId + ' approved' + (newBudget !== null ? ' — SOW budget set to ₱' + newBudget.toFixed(2) : ''), 'g');

@@ -55,6 +55,32 @@ const App = {
             }
         }
 
+        // ─── KNOWLEDGE BASE: the three databases moved here ───
+        // v11 BATCH F1: Materials, Equipment and Manpower are no longer
+        // pages of their own. The old names still resolve, so existing
+        // links, the home tiles, the search page's deep links and
+        // anything a browser has cached keep working — they just land on
+        // the Knowledge Base with the right tab open.
+        const KB_ALIASES = { materials: 'materials', equipment: 'equipment', manpower: 'manpower' };
+        if (KB_ALIASES[page]) {
+            const tab = KB_ALIASES[page];
+            page = 'knowledge';
+            this._kbTab = tab;
+        } else if (page === 'knowledge' || page === 'knowledge-base') {
+            page = 'knowledge';
+            if (!this._kbTab) this._kbTab = 'materials';
+        }
+
+        // ─── PRINT TEMPLATE: Super Admin only ─────────────────
+        // This is the company's identity on documents that go to
+        // clients, so it is guarded here and again on the server in
+        // savePrintTemplate().
+        if (page === 'print-template' && !this.isSuperAdmin()) {
+            UI.toast('Access denied. Super Admin only.', 'error');
+            setTimeout(() => this.navigate('home'), 800);
+            return;
+        }
+
         // ─── RECORD CASH: Approvers only ──────────────────────
         if (page === 'record-cash' && !this.isApprover()) {
             UI.toast('Access denied. Approvers only.', 'error');
@@ -90,10 +116,13 @@ const App = {
         
         if (page === 'home') await HomePage.load();
         if (page === 'finance') await FinancePage.load();
-        if (page === 'materials') await MaterialsPage.load();
-        if (page === 'equipment') await EquipmentPage.load();
-        if (page === 'manpower') await ManpowerPage.load();
+        // v11 BATCH F1: one call replaces three. KnowledgeBasePage loads
+        // each database lazily on first open, so switching to it to read
+        // a lesson no longer pulls three full catalogues over the wire.
+        if (page === 'knowledge') await KnowledgeBasePage.load(this._kbTab || 'materials');
+        if (page === 'quotations') await QuotationsPage.load();   // v11 BATCH F2
         if (page === 'approvals') await ApprovalsPage.load();
+        if (page === 'print-template') await PrintTemplatePage.load();
         if (page === 'release-cash') {
             setTimeout(loadReleaseDropdown, 100);
         }
