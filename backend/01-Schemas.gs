@@ -175,6 +175,26 @@ const SCHEMAS = {
   // somebody wrote. The three JSON columns hold the computed metrics,
   // the findings and the suggestions, so the retrospective can grow new
   // fields without another schema change.
+  // ── v11 BATCH G1: PROCUREMENT ──
+  // Suppliers exist for one reason above all: `termsDays` is what sets
+  // the due date on every payable. The free-text `supplier` column on
+  // Materials and Equipment is left alone; `supplierId` links them over
+  // time without a name-matching migration.
+  Suppliers: ['id', 'name', 'contactPerson', 'contactNumber', 'email', 'address',
+    'tin', 'termsDays', 'vatRegistered', 'pricesIncludeVat', 'category', 'notes',
+    'status', 'createdBy', 'createdAt', 'updatedAt'],
+
+  // Every purchase starts as a PR. `budgetState` and `budgetMessage` are
+  // STORED, not recomputed on read: an approver must see the same
+  // warning the requester saw, and a live recomputation would drift as
+  // other requests land in between.
+  PurchaseRequests: ['id', 'projectId', 'sowId', 'title', 'justification', 'route',
+    'preferredSupplierId', 'dateNeeded', 'deliverTo', 'totalAmount',
+    'budgetState', 'budgetMessage', 'status', 'requestor', 'requestorEmail',
+    'approvalsJSON', 'cashAdvanceId', 'cancelReason', 'createdAt', 'updatedAt'],
+  PRLines: ['id', 'prId', 'materialId', 'itemName', 'unit', 'qty', 'rate', 'amount',
+    'qtyOrdered', 'qtyReceived', 'notes', 'sortOrder'],
+
   // ── v11 BATCH F2: QUOTATIONS ──
   // A quotation owns a Projects row with status 'Quotation' (see
   // 28-QuotationService.gs), so `projectId` is the id that row — and the

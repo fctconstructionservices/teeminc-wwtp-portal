@@ -60,6 +60,33 @@ function getPendingApprovals() {
       if (low_(a.approver) === userEmail) myDecided[a.requestId] = true;
     });
   }
+  // ── v11 BATCH G1: PURCHASE REQUESTS ──
+  // Every purchase now starts as a PR, so this is the busiest section of
+  // the inbox. Lines are attached because an approver deciding on a
+  // purchase needs to see WHAT is being bought, not just a total.
+  var prLinesByPr = {};
+  if (ss_().getSheetByName('PRLines')) {
+    readAll_('PRLines').forEach(function (l) {
+      (prLinesByPr[l.prId] = prLinesByPr[l.prId] || []).push(l);
+    });
+  }
+  var purchaseRequests = [];
+  if (ss_().getSheetByName('PurchaseRequests')) {
+    purchaseRequests = readAll_('PurchaseRequests').filter(function (r) {
+      return low_(r.status) === 'pending' && low_(r.requestorEmail) !== userEmail;
+    }).map(function (r) {
+      return {
+        id: r.id, type: 'PurchaseRequest', projectId: r.projectId,
+        requestor: r.requestor, requestorEmail: r.requestorEmail,
+        amount: parseFloat(r.totalAmount) || 0,
+        description: r.title, scope: r.sowId, status: r.status,
+        createdAt: r.createdAt, dateNeeded: r.dateNeeded,
+        route: r.route, budgetState: r.budgetState, budgetMessage: r.budgetMessage,
+        lines: prLinesByPr[r.id] || [], attachmentsJSON: '[]'
+      };
+    });
+  }
+
   const notMine_ = function (list) {
     return isSuper ? list : list.filter(function (it) { return !myDecided[it.id]; });
   };
@@ -183,7 +210,8 @@ function getPendingApprovals() {
     dailyRecords: notMine_(dailyRecords),
     estimates: notMine_(estimates),
     billings: notMine_(billings),
-    otRequests: notMine_(otRequests)
+    otRequests: notMine_(otRequests),
+    purchaseRequests: notMine_(purchaseRequests)   // v11 BATCH G1
   });
 }
 
@@ -196,7 +224,7 @@ function getPendingApprovals() {
 function myRequests_(want) {
   readMany_(['CashAdvanceRequests', 'CashRelease', 'IncomingCashRequests',
     'Liquidations', 'Materials', 'Equipment', 'Manpower', 'DailyRecords',
-    'EstimateGroups', 'OTRequests', 'Billings']);
+    'EstimateGroups', 'OTRequests', 'Billings', 'PurchaseRequests']);
 
   const email = currentUserEmail_().toLowerCase();
   const is_ = function (v) { return low_(v) === want; };
@@ -218,6 +246,7 @@ function myRequests_(want) {
     pick('Manpower', 'Manpower', 'requestedBy'),
     pick('DailyRecords', 'DailyRecord', 'createdBy'),
     pick('OTRequests', 'OTRequest', 'requestedBy'),
+    pick('PurchaseRequests', 'PurchaseRequest', 'requestorEmail'),   // v11 BATCH G1
     // ── v11 BATCH A FIX ──
     // The old getMyPendingRequests() filtered estimates on status ALONE
     // (`g.status === 'pending'`), with no email condition, so every user
@@ -302,7 +331,8 @@ function getRequestById(id) {
     ['Manpower', 'Manpower'],
     ['OTRequests', 'OTRequest'],
     ['EstimateGroups', 'Estimate'],
-    ['Billings', 'Billing']
+    ['Billings', 'Billing'],
+    ['PurchaseRequests', 'PurchaseRequest']   // v11 BATCH G1
   ];
   for (var i = 0; i < lookups.length; i++) {
     var req = readAll_(lookups[i][0]).find(function (r) { return r.id === id; });
@@ -315,6 +345,16 @@ function getRequestById(id) {
         req.scope = req.sowId;
         req.description = req.sowDescription;
         req.requestor = req.submittedBy;
+      }
+      if (req.type === 'PurchaseRequest') {
+        // v11 BATCH G1: the detail modal needs the line items and the
+        // stored budget warning — an approver must see the same warning
+        // the requester saw, not one recomputed since.
+        req.lines = readAll_('PRLines').filter(function (l) { return l.prId === req.id; })
+          .sort(function (a, b) { return (parseInt(a.sortOrder, 10) || 0) - (parseInt(b.sortOrder, 10) || 0); });
+        req.amount = parseFloat(req.totalAmount) || 0;
+        req.scope = req.sowId;
+        req.description = req.title;
       }
       if (req.type === 'Billing') {
         req.amount = parseFloat(req.netAmount) || 0;
@@ -513,6 +553,10 @@ function resolveApprovalItem_(id, type) {
       r = readAll_('CashAdvanceRequests').find(function (x) { return x.id === id; });
       return r ? { found: true, isPending: low_(r.status) === 'pending', submitter: low_(r.requestorEmail), obj: r }
                : { found: false, msg: 'Cash advance request not found.' };
+    case 'PurchaseRequest':   // v11 BATCH G1
+      r = readAll_('PurchaseRequests').find(function (x) { return x.id === id; });
+      return r ? { found: true, isPending: low_(r.status) === 'pending', submitter: low_(r.requestorEmail), obj: r }
+               : { found: false, msg: 'Purchase request not found.' };
     case 'CashRelease':
       r = readAll_('CashRelease').find(function (x) { return x.id === id; });
       return r ? { found: true, isPending: low_(r.status) === 'for review', submitter: low_(r.releasedBy), obj: r }
@@ -574,6 +618,14 @@ function finalizeDecision_(id, type, decision, meta) {
       if (approved) return approveCashAdvance(id);
       updateRow_('CashAdvanceRequests', 'id', id, { status: 'Rejected' });
       logActivity_('Cash advance ' + id + ' rejected', 'a', id);
+      return { success: true, status: 'Rejected' };
+
+    // v11 BATCH G1: approving a cash-route PR also creates and approves
+    // its cash advance — see approvePurchaseRequest().
+    case 'PurchaseRequest':
+      if (approved) return approvePurchaseRequest(id);
+      updateRow_('PurchaseRequests', 'id', id, { status: 'Rejected' });
+      logActivity_('Purchase request ' + id + ' rejected', 'a', id);
       return { success: true, status: 'Rejected' };
 
     case 'IncomingCash':

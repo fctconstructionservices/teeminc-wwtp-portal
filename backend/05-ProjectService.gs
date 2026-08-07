@@ -24,14 +24,16 @@ function getHomeData() {
   const projects = readAll_('Projects').filter(isLiveProject_).map(function (p) {
     p.editors = projectEditors_(p);   // v6.6: card avatars
     const revenue = getTotalIncomingCashForProject(p.id);
-    const expenses = getTotalReleasedCashForProject(p.id);
+    // v11 BATCH G1: cost vs cash, as above.
+    const expenses = projectActualCost_(p.id);
+    const cashOut = getTotalReleasedCashForProject(p.id);
     return {
       id: p.id,
       name: p.name,
       status: p.status,
       revenue: revenue,
       expenses: expenses,
-      cashPosition: revenue - expenses
+      cashPosition: revenue - cashOut
     };
   });
 
@@ -198,8 +200,14 @@ function getProjectData(projectId) {
   if (!proj) return null;
 
   const revenue = getTotalIncomingCashForProject(projectId);
-  const expenses = getTotalReleasedCashForProject(projectId);
-  const cashPosition = revenue - expenses;
+  // ── v11 BATCH G1: ACCRUAL SPLITS THESE TWO ──
+  // `expenses` is what the job has COST (accrual). `cashPosition` is
+  // real money, so it uses cash actually released. Before accrual these
+  // were the same number; conflating them now would misstate one or the
+  // other.
+  const expenses = projectActualCost_(projectId);
+  const cashOut = getTotalReleasedCashForProject(projectId);
+  const cashPosition = revenue - cashOut;
 
   // v8: honor sortOrder (Super Admin can move items up/down). Legacy rows
   // without a sortOrder keep their sheet position via the index fallback.
@@ -295,6 +303,11 @@ function getProjectData(projectId) {
   const cashReleases = readAll_('CashRelease').filter(function (r) { return r.projectId === projectId; });
   const liquidations = readAll_('Liquidations').filter(function (l) { return l.projectId === projectId; });
 
+  // v11 BATCH G1: loaded ONCE, outside the per-SOW loop below. Building
+  // it inside the loop is what made the old EVM code quadratic — one
+  // full sheet scan per scope item.
+  const _costBasis = costBasis_(projectId);
+
   // ─── v3: per-SOW effective budget, actual, and progress ───────
   const groupsById = {};
   groups.forEach(function (g) { groupsById[g.sowId] = g; });
@@ -333,11 +346,16 @@ function getProjectData(projectId) {
       }
     }
 
-    // Actual = sum of Reviewed cash releases tagged with this SOW item.
-    // (A release inherits its sowId from the originating cash advance.)
-    s.actual = cashReleases
-      .filter(function (r) { return r.status === 'Reviewed' && String(r.sowId) === String(s.id); })
-      .reduce(function (sum, r) { return sum + (parseFloat(r.amount) || 0); }, 0);
+    // ── v11 BATCH G1: ACCRUAL ──
+    // Actual cost now comes from ONE shared helper (30-CostBasis.gs)
+    // instead of being computed here. Cost and cash-out are no longer
+    // the same event: cost lands when value is consumed — goods
+    // received, or an advance liquidated — while cash-out lands when
+    // money moves.
+    //
+    // An unliquidated release still counts, PROVISIONALLY, so nothing
+    // drops when this ships. See THE PROVISIONAL RULE in 30-CostBasis.
+    s.actual = sowActualCost_(projectId, s.id, _costBasis);
 
     // Progress from Daily Site Reports (non-rejected): among work
     // accomplished rows whose scope === this SOW id, the LATEST report
@@ -726,7 +744,14 @@ function getProjectData(projectId) {
   }, 0);
   const nowIdx = monthsArr.findIndex(function (mm) { return mm.y * 12 + mm.m === nowKey; });
   const pvNow = nowIdx > -1 ? pvSeries[nowIdx] : (pvSeries[pvSeries.length - 1] || 0);
-  const acNow = acSeries.reduce(function (mx, v) { return v === null ? mx : v; }, 0);
+  // ── v11 BATCH G1: ACCRUAL ──
+  // The monthly acSeries stays CASH-DATED — it is the outflow chart, and
+  // a chart of when money left the account is a genuinely useful thing.
+  // But acNow, which drives CPI, is taken from the shared cost helper so
+  // that CPI cannot disagree with the SOW table sitting next to it.
+  // Two different "actual cost" numbers on one screen is a bug users
+  // report as "the system is wrong", and they would be right.
+  const acNow = projectActualCost_(projectId, _costBasis);
   const evm = {
     labels: monthLabels,
     pvSeries: pvSeries,
