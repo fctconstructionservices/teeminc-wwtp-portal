@@ -723,6 +723,19 @@ const DataService = {
     async getPayables() {
         return await gasCall('getPayables');
     },
+
+    // ── v11 BATCH H5: SOW TITLE MAINTENANCE ──
+    // For SOW items created before titles could be declared. The audit
+    // is read-only; the cleanup removes only EMPTY estimate groups.
+    async setSowItemKind(projectId, sowId, isTitle) {
+        return await gasCall('setSowItemKind', projectId, sowId, !!isTitle);
+    },
+    async auditSowTitles(projectId) {
+        return await gasCall('auditSowTitles', projectId);
+    },
+    async cleanSowTitleEstimates(projectId) {
+        return await gasCall('cleanSowTitleEstimates', projectId);
+    },
     async addDrawing(data) {
         return await gasCall('addDrawing', data);
     },

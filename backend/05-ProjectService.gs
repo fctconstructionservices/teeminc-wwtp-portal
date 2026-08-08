@@ -211,7 +211,7 @@ function getProjectData(projectId) {
 
   // v8: honor sortOrder (Super Admin can move items up/down). Legacy rows
   // without a sortOrder keep their sheet position via the index fallback.
-  const sowItems = readAll_('SOWItems').filter(function (s) { return s.projectId === projectId; })
+  let sowItems = readAll_('SOWItems').filter(function (s) { return s.projectId === projectId; })
     .map(function (s, i) { s._ord = (s.sortOrder !== '' && s.sortOrder !== undefined && s.sortOrder !== null && !isNaN(parseFloat(s.sortOrder))) ? parseFloat(s.sortOrder) : (i + 1) * 1000; return s; })
     .sort(function (a, b) { return a._ord - b._ord; })
     .map(function(s) {
@@ -284,7 +284,23 @@ function getProjectData(projectId) {
       .map(function (a) { return String(a.approver || '').toLowerCase(); });
   };
 
-  const estimateGroups = groups.map(function (g) {
+  // v11 BATCH H5: hide estimate groups belonging to a HEADING.
+  // Before H5 every SOW item got a group on creation, titles included,
+  // so existing projects already carry orphan draft groups for their
+  // headings. Those groups can never be approved — a heading has nothing
+  // to price — which meant the Estimates tab could never reach its
+  // "all approved" state and the print button that depends on it stayed
+  // hidden. They are filtered out on read rather than deleted: removing
+  // rows from live projects to fix a display problem is not a trade
+  // worth making.
+  const headingIds = {};
+  buildSowTree_(readAll_('SOWItems').filter(function (s) {
+    return s.projectId === projectId;
+  })).forEach(function (s) { if (s.isHeading) headingIds[String(s.id).trim()] = true; });
+
+  const estimateGroups = groups
+    .filter(function (g) { return !headingIds[String(g.sowId).trim()]; })
+    .map(function (g) {
     return {
       id: g.id,
       sowId: g.sowId,
@@ -392,6 +408,13 @@ function getProjectData(projectId) {
 
   // Budget-weighted total project completion (user-selected weighting).
   // Milestones (zero-duration, zero-budget) are excluded from the weights.
+  // ── v11 BATCH H4: SOW HIERARCHY ──
+  // Annotated and re-ordered ONCE, here, so the SOW Budget tab, the
+  // Timeline, the Estimates tab and the Reports all read the same tree
+  // in the same order. Deriving it separately on each surface is how
+  // four screens end up disagreeing about which item sits under which.
+  sowItems = buildSowTree_(sowItems);
+
   const weighted = sowItems.filter(function (s) { return !s.isMilestone; });
   const totalBudget = weighted.reduce(function (sum, s) { return sum + (s.budget || 0); }, 0);
   const totalProgress = totalBudget > 0
@@ -1040,6 +1063,12 @@ function getProjectData(projectId) {
   const crUnapproved = [], crZeroBudget = [];
   sowItems.forEach(function (s) {
     if (s.isMilestone) return;
+    // v11 BATCH H5: a HEADING is never estimated or budgeted — its money
+    // is the sum of the items beneath it. Counting it here is what made
+    // the Timeline report "setup incomplete" the moment a title was
+    // added, and kept the Estimates print button hidden even when every
+    // real estimate was approved.
+    if (s.isHeading) return;
     if (!((s.estimateTotal || 0) > 0)) crUnapproved.push(s.id);
     if (!((parseFloat(s.budget) || 0) > 0)) crZeroBudget.push(s.id);
   });
@@ -1153,17 +1182,23 @@ function addSOWItem(projectId, data) {
     budgetMode: data.budgetMode || 'auto',
     predecessors: data.predecessors || '',
     isMilestone: data.isMilestone ? 'TRUE' : '',
-    baselineStart: '', baselineEnd: ''
+    baselineStart: '', baselineEnd: '',
+    isTitle: data.isTitle ? 'TRUE' : ''   // v11 BATCH H5
   });
 
   // v11 BATCH B: only create the estimate group if this SOW does not
   // already have one. Before the cascade delete existed, a deleted-then-
   // re-added SOW could end up with two groups pointing at the same id,
   // and every estimate read would pick whichever came first.
+  // v11 BATCH H5: a TITLE gets no estimate group. It was getting one,
+  // which is why a newly added title appeared on the Estimates tab with
+  // a draft estimate nobody could ever approve — and why the tab's
+  // "all approved" state, and the print button that depends on it,
+  // could never be reached once a title existed.
   const hasGroup = readAll_('EstimateGroups').some(function (g) {
     return g.projectId === projectId && String(g.sowId) === id;
   });
-  if (!hasGroup) {
+  if (!hasGroup && !data.isTitle) {
     appendRow_('EstimateGroups', {
       id: nextId_('EG'), projectId: projectId, sowId: id,
       sowDescription: description, status: 'draft'

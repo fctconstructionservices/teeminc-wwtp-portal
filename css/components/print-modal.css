@@ -171,8 +171,14 @@
 
        `display: none` on everything that is not the open modal removes
        it from layout entirely, so the document starts at the modal. */
-    body > *:not(.print-modal-overlay) { display: none !important; }
+    /* v11 BATCH H5 FIX: `.printable-overlay` was added because the SWA
+       billing sheet is NOT a .print-modal-overlay — it is a custom
+       overlay with its own A4-landscape rules — so the selector above
+       hid it completely and the billing printed as a blank white page.
+       Any full-screen overlay that wants to print must carry this class. */
+    body > *:not(.print-modal-overlay):not(.printable-overlay) { display: none !important; }
     .print-modal-overlay:not(.open) { display: none !important; }
+    .printable-overlay { display: block !important; position: static !important; }
     .print-modal-overlay.open {
         display: block !important;
         position: static !important;

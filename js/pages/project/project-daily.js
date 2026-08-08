@@ -36,12 +36,19 @@ Object.assign(ProjectPage, {
                     <span class="dsb-count" id="dsbCount"></span>
                 </div>
             </div>
-            <div class="daily-form-section" id="dateWeatherSection"><div class="section-label">Date & Weather <span class="rule"></span></div>
-                <div class="sub-fields">
-                    <div class="field"><label>Date *</label><input type="date" id="dr-date" value="${today}" required onchange="ProjectPage.syncOTLock()" /></div>
-                    <div class="field"><label>Weather AM</label><input type="text" id="dr-weather-am" placeholder="e.g. Sunny" /></div>
-                    <div class="field"><label>Weather PM</label><input type="text" id="dr-weather-pm" placeholder="e.g. Cloudy" /></div>
-                </div>
+            <!-- v11 BATCH H4: the header block is laid out as the PRINTED
+                 form's header — one row of boxed fields — rather than as
+                 another labelled panel. Someone filling this in usually has
+                 the paper form in front of them, and a form is a grid. -->
+            <div class="dr-formhead">
+                <div class="cell"><label>Date *</label>
+                    <input type="date" id="dr-date" value="${today}" required onchange="ProjectPage.syncOTLock()" /></div>
+                <div class="cell"><label>Weather AM</label>
+                    <input type="text" id="dr-weather-am" placeholder="e.g. Sunny" /></div>
+                <div class="cell"><label>Weather PM</label>
+                    <input type="text" id="dr-weather-pm" placeholder="e.g. Cloudy" /></div>
+                <div class="cell"><label>Prepared by</label>
+                    <input type="text" value="${(App.getUser() || {}).name || ''}" readonly /></div>
             </div>
             <div class="daily-form-section" id="manpowerSection">
                 <div class="section-label">Manpower — Attendance <span class="rule"></span><span style="font-weight:400;font-size:10px;color:var(--ink-soft);" id="manpowerTotal">Total: 0</span></div>
@@ -63,13 +70,13 @@ Object.assign(ProjectPage, {
                 <div class="section-label">Work Accomplished <span class="rule"></span></div>
                 <div id="workEntries"><div class="entry-row" style="display:block;border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;background:var(--bg);">
                     <div style="display:grid;grid-template-columns:2fr 90px 30px;gap:8px;align-items:end;">
-                        <div class="field"><label>1 · Anong SOW ang ginawa? *</label><select class="wk-scope">${this._sowOptions()}</select></div>
+                        <div class="field"><label>1 · Which SOW item was worked on? *</label><select class="wk-scope">${this._sowOptions()}</select></div>
                         <div class="field"><label>2 · % Complete</label><input type="number" class="wk-pct" min="0" max="100" placeholder="0-100" /></div>
                         <button class="btn-sm danger" style="margin-bottom:6px;" onclick="ProjectPage.removeEntry(this,'work')">${Icon.close({size:12})}</button>
                     </div>
                     <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px;margin-top:6px;">
-                        <div class="field"><label>3 · Saan? (Location)</label><input type="text" class="wk-location" placeholder="e.g. NF2 Cell 2" /></div>
-                        <div class="field"><label>4 · Ano ang nagawa? (Description)</label><input type="text" class="wk-desc" placeholder="e.g. Liner welding, 3 panels completed" /></div>
+                        <div class="field"><label>3 · Location on site</label><input type="text" class="wk-location" placeholder="e.g. NF2 Cell 2" /></div>
+                        <div class="field"><label>4 · What was done</label><input type="text" class="wk-desc" placeholder="e.g. Liner welding, 3 panels completed" /></div>
                     </div>
                     <div style="display:grid;grid-template-columns:1fr;gap:8px;margin-top:6px;">
                         <div class="field"><label>5 · Photo (proof of work)</label><input type="file" accept="image/*" class="wk-image" data-photo onchange="ProjectPage.previewSmallImage(this,'wk-preview-${Date.now()}')" /></div>
@@ -104,6 +111,14 @@ Object.assign(ProjectPage, {
                 <div id="photosEntries"><div class="entry-row"><div class="field"><label>Photo</label><input type="file" accept="image/*" class="photo-input" data-photo onchange="ProjectPage.previewSmallImage(this,'photo-preview-${Date.now()}')" /></div><div class="field"><label>Caption</label><input type="text" class="photo-caption" placeholder="e.g. Liner welding at NF2 cell 2" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'photos')">${Icon.close({size:13})}</button></div></div></div>
                 <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('photos')">+ Add Photo</button></div>
             </div>
+            <!-- v11 BATCH H4: signature blocks, matching the printed form.
+                 On screen they are a reminder of who has to sign; when the
+                 record is printed they are the lines that get signed. -->
+            <div class="dr-signrow">
+                <div class="dr-sign"><div class="ln"></div><div class="lb">Prepared by</div></div>
+                <div class="dr-sign"><div class="ln"></div><div class="lb">Checked by</div></div>
+                <div class="dr-sign"><div class="ln"></div><div class="lb">Approved by</div></div>
+            </div>
             <div class="submit-row" id="dailyStepNav" hidden>
                 <button class="btn-ghost" id="dsbPrev" onclick="ProjectPage.dailyStep(-1)">← Back</button>
                 <button class="btn-primary" id="dsbNext" onclick="ProjectPage.dailyStep(1)">Next →</button>
@@ -120,10 +135,38 @@ Object.assign(ProjectPage, {
      * database so daily reports use consistent, analyzable values
      * (the Gantt progress rollup depends on scope === SOW id).
      */
+    /**
+     * _sowOptions (v11 BATCH H5) - The SOW dropdown as a tree.
+     *
+     * Headings become <optgroup> labels, so they read as headings and —
+     * more importantly — CANNOT BE SELECTED. Work is never accomplished
+     * against a title; it is accomplished against the items beneath it.
+     * Allowing one to be picked would put progress on a row whose
+     * progress is supposed to be the roll-up of its children.
+     *
+     * Items nested deeper are indented with figure spaces, because a
+     * <select> strips leading whitespace and CSS padding does not reach
+     * inside an <option> in most browsers.
+     */
     _sowOptions() {
         const items = this._sowItems || [];
-        return '<option value="">Select SOW...</option>' +
-            items.map(s => `<option value="${s.id}">${s.id} — ${(s.description || '').replace(/"/g, '&quot;')}</option>`).join('');
+        const esc = v => String(v || '').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        const PAD = '\u2007\u2007';   // figure space — survives inside <option>
+        let html = '<option value="">Select SOW...</option>';
+        let open = false;
+
+        items.forEach(s => {
+            if (s.isHeading) {
+                if (open) html += '</optgroup>';
+                html += `<optgroup label="${esc(s.id)} — ${esc(s.description)}">`;
+                open = true;
+                return;
+            }
+            const indent = PAD.repeat(Math.max(0, (s.level || 1) - 1));
+            html += `<option value="${esc(s.id)}">${indent}${esc(s.id)} — ${esc(s.description)}</option>`;
+        });
+        if (open) html += '</optgroup>';
+        return html;
     },
     /** _personnelOptions (v9) - Active people from the Personnel DB.
      *  data-role carries the trade so the row auto-fills. */

@@ -532,9 +532,20 @@ Object.assign(ProjectPage, {
         const p = this._data;
         if (!p || !this._sowItems) { UI.toast('No SOW items available.', 'error'); return; }
         const existingIds = (est.groups || []).map(g => g.sowId);
-        const available = this._sowItems.filter(s => !existingIds.includes(s.id));
+        // v11 BATCH H4: headings are NOT estimable. A heading is a title
+        // for the items beneath it; its money is their sum. Offering to
+        // price one would let the same cost be entered twice — once on
+        // the heading, once on its children — and the roll-up would then
+        // be right and wrong at the same time.
+        const available = this._sowItems.filter(s =>
+            !existingIds.includes(s.id) && !s.isHeading && !s.isMilestone);
         if (available.length === 0) {
-            UI.toast('All SOW items already have estimate groups.', 'error');
+            const onlyHeadings = this._sowItems.some(s => s.isHeading) &&
+                this._sowItems.filter(s => !s.isHeading && !s.isMilestone)
+                    .every(s => existingIds.includes(s.id));
+            UI.toast(onlyHeadings
+                ? 'Every priced SOW item already has an estimate. Headings are not estimated — they total the items beneath them.'
+                : 'All SOW items already have estimate groups.', 'error');
             return;
         }
         const sow = available[0];

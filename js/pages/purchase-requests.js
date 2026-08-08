@@ -407,9 +407,27 @@ const PurchaseRequestsPage = {
         sel.innerHTML = '<option value="">Loading...</option>';
         try {
             const data = await DataService.getProjectData(pid);
+            // v11 BATCH H5: headings become optgroup labels and cannot be
+            // selected. A purchase is charged to a priced scope item, never
+            // to a title — a title has no budget of its own to check
+            // against, so choosing one would silently disable the budget
+            // check the whole form exists for.
             this._sow = (data && data.sowItems || []).filter(s => !s.isMilestone);
-            sel.innerHTML = '<option value="">— select —</option>' + this._sow.map(s =>
-                `<option value="${this._esc(s.id)}" ${preselect === s.id ? 'selected' : ''}>${this._esc(s.id)} — ${this._esc(s.description || '')}</option>`).join('');
+            const PAD = '\u2007\u2007';
+            let opts = '<option value="">— select —</option>';
+            let open = false;
+            this._sow.forEach(s => {
+                if (s.isHeading) {
+                    if (open) opts += '</optgroup>';
+                    opts += `<optgroup label="${this._esc(s.id)} — ${this._esc(s.description || '')}">`;
+                    open = true;
+                    return;
+                }
+                const indent = PAD.repeat(Math.max(0, (s.level || 1) - 1));
+                opts += `<option value="${this._esc(s.id)}" ${preselect === s.id ? 'selected' : ''}>${indent}${this._esc(s.id)} — ${this._esc(s.description || '')}</option>`;
+            });
+            if (open) opts += '</optgroup>';
+            sel.innerHTML = opts;
             this.recalc();
         } catch (err) {
             sel.innerHTML = '<option value="">Could not load SOW items</option>';

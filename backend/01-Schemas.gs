@@ -75,7 +75,12 @@ const SCHEMAS = {
   // v8: sortOrder appended — display order of SOW items (Super Admin can
   // move items up/down). Blank = legacy row; falls back to sheet order.
   SOWItems: ['id', 'projectId', 'description', 'budget', 'actual', 'startDate', 'endDate', 'status', 'qty', 'unit',
-    'budgetMode', 'predecessors', 'isMilestone', 'baselineStart', 'baselineEnd', 'sortOrder'],
+    'budgetMode', 'predecessors', 'isMilestone', 'baselineStart', 'baselineEnd', 'sortOrder',
+    // v11 BATCH H5: an explicit TITLE flag. A heading is normally derived
+    // from the ids beneath it, but a title added before its children
+    // exist has none — so it would be treated as a priced item and
+    // demand an estimate it will never have.
+    'isTitle'],
   // v6: materialsUsedJSON appended — consumption rows; site stock =
   // delivered − used, computed live in getProjectData.
   // v7.5: deletedAt/deletedBy implement SOFT DELETE. Deleting a draft used
