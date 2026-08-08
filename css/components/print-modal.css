@@ -317,3 +317,105 @@
     .pd-name, .pd-doctitle { color: #1C2321 !important; }
     .pd-rule { border-bottom-color: #1C2321 !important; }
 }
+
+
+/* ================================================================
+   v11 BATCH H2 — WHAT YOU SEE IS WHAT PRINTS
+
+   The rule for every request modal: the modal IS the document. Anything
+   that is not part of the document — action buttons, guidance notes,
+   the close control — is marked .pd-noprint and disappears on paper.
+   Nothing is added at print time that was not on screen, and nothing on
+   screen is silently dropped except that chrome.
+
+   That is why these sub-tables are styled once here rather than inline
+   per modal: a Daily Record and an Estimate should print as the same
+   kind of document, because they are.
+   ================================================================ */
+
+.ps-subtitle {
+    font-family: 'Oswald', sans-serif;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--blueprint);
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 3px;
+    margin: 14px 0 6px;
+}
+.mini-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11.5px;
+}
+.mini-table th {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 8.5px;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    padding: 5px 6px;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+}
+.mini-table td {
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+}
+.mini-table tr:last-child td { border-bottom: none; }
+.bill-calc td { padding: 5px 6px; }
+.bill-calc td.amt {
+    text-align: right;
+    font-family: 'IBM Plex Mono', monospace;
+    white-space: nowrap;
+}
+.bill-calc tr.bill-net td {
+    border-top: 2px solid var(--ink);
+    border-bottom: none;
+    font-size: 13px;
+    padding-top: 7px;
+}
+.dsr-remarks { font-size: 12px; line-height: 1.55; margin: 0; white-space: pre-wrap; }
+
+/* Datasheet layout: details on the left, the photo on the right, which
+   is where it sits on a printed spec sheet. */
+.dsheet { display: flex; gap: 16px; align-items: flex-start; }
+.dsheet-main { flex: 1; min-width: 0; }
+.dsheet-photo {
+    flex: 0 0 190px;
+    text-align: center;
+}
+.dsheet-photo img {
+    width: 100%;
+    max-height: 190px;
+    object-fit: contain;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+}
+.dsheet-photo span {
+    display: block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9.5px;
+    color: var(--ink-soft);
+    margin-top: 4px;
+}
+
+@media (max-width: 640px) {
+    .dsheet { flex-direction: column; }
+    .dsheet-photo { flex: none; width: 100%; max-width: 240px; align-self: center; }
+}
+
+@media print {
+    /* Tables must not be cut across a page break mid-row, and a heading
+       must not be orphaned from the rows it introduces. */
+    .mini-table tr { page-break-inside: avoid; }
+    .mini-table thead { display: table-header-group; }
+    .ps-subtitle { page-break-after: avoid; }
+    .dsheet { display: flex !important; }
+    .dsheet-photo { flex: 0 0 55mm !important; }
+    .dsheet-photo img { max-height: 55mm !important; }
+    /* Screen-only chrome. */
+    .pd-noprint, .data-source-note.pd-noprint { display: none !important; }
+}

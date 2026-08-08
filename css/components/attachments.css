@@ -108,7 +108,10 @@
     position: fixed;
     inset: 0;
     background: rgba(28, 35, 33, .88);
-    z-index: 1200;
+    /* v11 BATCH H2: was 1200, which is BELOW the request modal's 2000 —
+       so an attachment opened behind the very modal that opened it, and
+       the modal had to be closed to see it. */
+    z-index: 3000;
     display: none;
     align-items: center;
     justify-content: center;
@@ -157,4 +160,75 @@
 @media (max-width: 520px) {
     .att-grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
     .att-card img, .att-fallback, .att-doc .att-ext { height: 66px; }
+}
+
+
+/* ================================================================
+   v11 BATCH H2 — ATTACHMENTS ON PAPER
+
+   On screen the grid of small thumbnails is right: an approver is
+   scanning. On paper it was useless — a receipt printed at thumbnail
+   size cannot be read, which defeats the point of attaching it.
+
+   Printed, attachments become full-width and centred, one below the
+   other, each kept whole on its page.
+   ================================================================ */
+
+@media print {
+    .att-block { page-break-inside: auto; margin-top: 16px; }
+    .att-label {
+        font-family: 'Oswald', sans-serif;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: .08em;
+        border-bottom: 1px solid #D6D2C4;
+        padding-bottom: 4px;
+        margin-bottom: 10px;
+    }
+    .att-count { display: none; }
+
+    /* One per row, centred, so each is as large as the page allows. */
+    .att-grid {
+        display: block !important;
+    }
+    .att-card {
+        display: block !important;
+        width: 100% !important;
+        height: auto !important;
+        border: none !important;
+        background: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin: 0 0 14px !important;
+        text-align: center;
+        page-break-inside: avoid;
+    }
+    .att-card img {
+        display: block;
+        margin: 0 auto;
+        max-width: 100% !important;
+        /* Bounded by height as well, so a tall photo does not push the
+           caption onto a page of its own. */
+        max-height: 165mm !important;
+        width: auto !important;
+        height: auto !important;
+        object-fit: contain !important;
+        border: 1px solid #D6D2C4;
+    }
+    .att-cap {
+        position: static !important;
+        display: block !important;
+        background: none !important;
+        color: #5B6360 !important;
+        font-size: 9.5px;
+        padding: 4px 0 0 !important;
+        text-align: center;
+    }
+    .att-fallback { display: none !important; }
+    /* A document card prints as its caption — the file itself is not
+       on this sheet, so a large empty box would be misleading. */
+    .att-card.att-doc { margin-bottom: 4px !important; }
+    .att-card.att-doc .att-ext { display: none !important; }
+    /* The lightbox is a screen affordance and never belongs on paper. */
+    .att-lightbox { display: none !important; }
 }

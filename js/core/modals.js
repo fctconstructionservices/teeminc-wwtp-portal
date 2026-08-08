@@ -467,12 +467,29 @@ const AttachmentGallery = {
     open(i) {
         const a = this._items[i];
         if (!a) return;
+        // v11 BATCH H2: the lightbox used to sit at z-index 1200 while the
+        // request modal sits at 2000, so an attachment opened BEHIND the
+        // modal that opened it and the modal had to be closed first. The
+        // stacking is fixed in CSS; this comment is here because the two
+        // numbers are far apart in the codebase and easy to break again.
+        this._openedFrom = document.querySelector('.print-modal-overlay.open');
         let box = document.getElementById('attLightbox');
         if (!box) {
             box = document.createElement('div');
             box.id = 'attLightbox';
             box.className = 'att-lightbox';
-            box.addEventListener('click', e => { if (e.target === box || e.target.dataset.close) AttachmentGallery.close(); });
+            // ── v11 BATCH H2 FIX: the X did not close the lightbox ──
+            // The close button contains an SVG icon, so a click lands on
+            // the <svg> or its <path>, never on the button itself.
+            // `e.target.dataset.close` was therefore always undefined and
+            // only Escape or an outside click worked. closest() walks up
+            // from whatever was actually clicked to the element carrying
+            // the marker.
+            box.addEventListener('click', e => {
+                if (e.target === box || (e.target.closest && e.target.closest('[data-close]'))) {
+                    AttachmentGallery.close();
+                }
+            });
             document.body.appendChild(box);
         }
         const nm = String(a.name || 'Attachment').replace(/</g, '&lt;');
@@ -481,13 +498,18 @@ const AttachmentGallery = {
             <div class="att-lb-frame"><img src="${driveImgSrc(a.url)}" alt="${nm}" /></div>
             <div class="att-lb-cap">${nm} · <a href="${a.url}" target="_blank" rel="noopener">Open original</a></div>`;
         box.classList.add('open');
-        this._esc = e => { if (e.key === 'Escape') AttachmentGallery.close(); };
-        document.addEventListener('keydown', this._esc);
+        this._esc = e => {
+            if (e.key !== 'Escape') return;
+            // Stop the modal underneath from also closing on the same key.
+            e.stopPropagation();
+            AttachmentGallery.close();
+        };
+        document.addEventListener('keydown', this._esc, true);
     },
 
     close() {
         const box = document.getElementById('attLightbox');
         if (box) box.classList.remove('open');
-        if (this._esc) document.removeEventListener('keydown', this._esc);
+        if (this._esc) document.removeEventListener('keydown', this._esc, true);
     }
 };
