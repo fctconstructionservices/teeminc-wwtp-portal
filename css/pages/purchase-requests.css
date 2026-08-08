@@ -300,3 +300,51 @@
     #payablesContent .kpi-strip { grid-template-columns: repeat(2, 1fr); }
     .pay-table { font-size: 11.5px; }
 }
+
+
+/* ================================================================
+   v11 BATCH H1 — PURCHASE REQUEST REGISTER
+
+   The card grid became a table. Cards suited a handful of requests and
+   stopped working at thirty: you cannot scan a column of amounts, or
+   compare two requests, when each one is its own box. A register is
+   also what this list looks like on paper.
+   ================================================================ */
+
+.pr-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.pr-table th {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--blueprint);
+    text-align: left;
+    padding: 8px 9px;
+    background: var(--blueprint-tint);
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+}
+.pr-table th.amt, .pr-table td.amt { text-align: right; }
+.pr-table td { padding: 8px 9px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.pr-table td.amt, .pr-table td.mono {
+    font-family: 'IBM Plex Mono', monospace;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.pr-table tfoot td { font-weight: 700; background: var(--bg); }
+.pr-table .muted { font-size: 10.5px; color: var(--ink-soft); margin-top: 2px; }
+.pr-table tr.cancelled, .pr-table tr.rejected { opacity: .6; }
+/* An over-budget request should be visible while scanning the column. */
+.pr-table tr td .pr-budget.over { font-weight: 700; }
+.pr-row-actions { white-space: nowrap; display: flex; gap: 4px; }
+.pr-row-actions .pr-note { align-self: center; }
+
+@media (max-width: 900px) {
+    /* Drop what a phone cannot show usefully, keeping the number,
+       description, amount, budget verdict and the actions. */
+    .pr-table th:nth-child(3), .pr-table td:nth-child(3),
+    .pr-table th:nth-child(4), .pr-table td:nth-child(4),
+    .pr-table th:nth-child(7), .pr-table td:nth-child(7),
+    .pr-table th:nth-child(8), .pr-table td:nth-child(8) { display: none; }
+    .pr-table { font-size: 11.5px; }
+}

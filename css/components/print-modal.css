@@ -162,20 +162,25 @@
     .print-modal-content .print-header {
         border-bottom: 2px solid #000 !important;
     }
-    body * {
-        visibility: hidden;
-    }
-    .print-modal-overlay,
-    .print-modal-content,
-    .print-modal-content * {
-        visibility: visible;
-    }
-    .print-modal-overlay {
-        position: absolute;
-        left: 0;
-        top: 0;
+    /* ── v11 BATCH H1: THE BLANK FIRST PAGE ──
+       This used to hide the app with `visibility: hidden`. Hidden
+       elements still OCCUPY LAYOUT SPACE, so the entire application —
+       home screen, project page, every section — was still laid out,
+       invisible, above the modal. That empty layout was the blank first
+       page, and on a long page it could be two or three.
+
+       `display: none` on everything that is not the open modal removes
+       it from layout entirely, so the document starts at the modal. */
+    body > *:not(.print-modal-overlay) { display: none !important; }
+    .print-modal-overlay:not(.open) { display: none !important; }
+    .print-modal-overlay.open {
+        display: block !important;
+        position: static !important;
         width: 100%;
     }
+    /* A fixed-position element can force its own page in some browsers,
+       and a watermark is not worth a blank sheet. */
+    .pd-watermark { position: absolute !important; }
 }
 
 /* ================================================================
@@ -299,13 +304,16 @@
        Firefox and Safari print it once, at the end. True repeating page
        footers need paged-media support no browser implements for
        arbitrary content, so this is as far as it goes honestly. */
+    /* v11 BATCH H1: this was `position: fixed` so it would repeat on
+       every page in Chrome. It also contributed to spurious blank
+       pages, and a footer that repeats is worth less than a document
+       that prints correctly. It now sits at the end, once. */
     .pd-foot {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
+        position: static;
         background: #fff;
     }
+    /* Anything the screen needs but paper does not. */
+    .pd-noprint, .no-print { display: none !important; }
     .pd-name, .pd-doctitle { color: #1C2321 !important; }
     .pd-rule { border-bottom-color: #1C2321 !important; }
 }

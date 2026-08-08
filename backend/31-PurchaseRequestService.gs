@@ -132,35 +132,113 @@ function sowMaterialBudget_(projectId, sowId) {
 }
 
 /**
- * sowMaterialCommitted_ - What has already been spent OR committed on
- * materials for this SOW item.
+ * sowMaterialCommitted_ - Everything already SPENT or COMMITTED against
+ * this SOW item, from every source.
  *
- * COMMITTED, not just spent: a PR that is approved but not yet
- * delivered has not cost anything, but the money is promised. Checking
- * a new request only against actual spend would let you approve three
- * requests that each look affordable and together blow the budget —
- * the classic way procurement overruns happen quietly.
+ * ── v11 BATCH H1 FIX ─────────────────────────────────────────
+ * The first version counted ONLY open purchase requests. That made the
+ * check almost useless in practice: a scope item could already have had
+ * most of its budget drawn down through cash advances, and a new
+ * purchase request would still read green because none of that spending
+ * was visible to it. The control was measuring against a budget that
+ * had already been eaten.
+ *
+ * Three sources now, and they must not double-count each other:
+ *
+ *   1. ACTUAL COST — from the shared accrual helper (30-CostBasis.gs).
+ *      Cash advances that have been released, and goods received.
+ *   2. PENDING CASH ADVANCES — requested but not yet released. Real
+ *      exposure: approved tomorrow, spent the day after.
+ *   3. OPEN PURCHASE REQUESTS — approved or awaiting approval, not yet
+ *      delivered. The money is promised but nothing has cost anything.
+ *
+ * THE DOUBLE-COUNT TRAP, and how it is avoided: an approved cash-route
+ * PR generates its own cash advance (see approvePurchaseRequest). That
+ * advance would then be counted a second time — once as the PR, once as
+ * the advance. So a PR that has spawned an advance is skipped here, and
+ * the advance is counted instead, because the advance is the one that
+ * turns into real money.
  */
 function sowMaterialCommitted_(projectId, sowId, excludePrId) {
   ensureSheet_('PurchaseRequests');
   ensureSheet_('PRLines');
 
-  var counted = { pending: true, approved: true, ordered: true };
+  var pid = String(projectId).trim();
   var key = String(sowId == null ? '' : sowId).trim();
+
+  // 1. what this scope item has actually cost so far
+  var spent = sowActualCost_(pid, key);
+
+  // 2. cash advances requested but not yet released
+  var pendingCash = 0;
+  readAll_('CashAdvanceRequests').forEach(function (ca) {
+    if (String(ca.projectId).trim() !== pid) return;
+    if (String(ca.sowId || ca.scope || '').trim() !== key) return;
+    if (low_(ca.status) !== 'pending') return;
+    pendingCash += parseFloat(ca.amount) || 0;
+  });
+
+  // 3. open purchase requests, minus any that already became an advance
+  var counted = { pending: true, approved: true, ordered: true };
   var prIds = {};
   readAll_('PurchaseRequests').forEach(function (pr) {
-    if (String(pr.projectId).trim() !== String(projectId).trim()) return;
+    if (String(pr.projectId).trim() !== pid) return;
     if (String(pr.sowId).trim() !== key) return;
     if (excludePrId && pr.id === excludePrId) return;
     if (!counted[low_(pr.status)]) return;
+    // its cash advance is already counted in (1) or (2)
+    if (pr.cashAdvanceId) return;
     prIds[pr.id] = true;
   });
 
-  var total = 0;
+  var openPr = 0;
   readAll_('PRLines').forEach(function (l) {
-    if (prIds[l.prId]) total += parseFloat(l.amount) || 0;
+    if (prIds[l.prId]) openPr += parseFloat(l.amount) || 0;
   });
-  return r2_(total);
+
+  return r2_(spent + pendingCash + openPr);
+}
+
+/**
+ * sowCommitmentBreakdown_ - The same figure, itemised, so the warning
+ * can say WHERE the budget went rather than just that it is gone.
+ * A number a person cannot decompose is a number they argue with.
+ */
+function sowCommitmentBreakdown_(projectId, sowId, excludePrId) {
+  var pid = String(projectId).trim();
+  var key = String(sowId == null ? '' : sowId).trim();
+
+  var spent = sowActualCost_(pid, key);
+
+  var pendingCash = 0;
+  readAll_('CashAdvanceRequests').forEach(function (ca) {
+    if (String(ca.projectId).trim() !== pid) return;
+    if (String(ca.sowId || ca.scope || '').trim() !== key) return;
+    if (low_(ca.status) !== 'pending') return;
+    pendingCash += parseFloat(ca.amount) || 0;
+  });
+
+  var counted = { pending: true, approved: true, ordered: true };
+  var prIds = {};
+  readAll_('PurchaseRequests').forEach(function (pr) {
+    if (String(pr.projectId).trim() !== pid) return;
+    if (String(pr.sowId).trim() !== key) return;
+    if (excludePrId && pr.id === excludePrId) return;
+    if (!counted[low_(pr.status)]) return;
+    if (pr.cashAdvanceId) return;
+    prIds[pr.id] = true;
+  });
+  var openPr = 0;
+  readAll_('PRLines').forEach(function (l) {
+    if (prIds[l.prId]) openPr += parseFloat(l.amount) || 0;
+  });
+
+  return {
+    spent: r2_(spent),
+    pendingCash: r2_(pendingCash),
+    openRequests: r2_(openPr),
+    total: r2_(spent + pendingCash + openPr)
+  };
 }
 
 /**
@@ -173,7 +251,9 @@ function sowMaterialCommitted_(projectId, sowId, excludePrId) {
 function checkPrBudget(projectId, sowId, requested, excludePrId) {
   readMany_(['EstimateGroups', 'EstimateMaterials', 'EstimateLabor',
     'EstimateEquipment', 'EstimateIndirect', 'SOWItems',
-    'PurchaseRequests', 'PRLines']);
+    'PurchaseRequests', 'PRLines',
+    // v11 BATCH H1: cash spending counts against the same budget
+    'CashAdvanceRequests', 'CashRelease', 'Liquidations']);
   var req = r2_(requested);
   var key = String(sowId == null ? '' : sowId).trim();
   var b = sowMaterialBudget_(projectId, key);
@@ -205,24 +285,33 @@ function checkPrBudget(projectId, sowId, requested, excludePrId) {
   }
 
   var budget = b.amount;
-  var committed = sowMaterialCommitted_(projectId, key, excludePrId);
+  var bd = sowCommitmentBreakdown_(projectId, key, excludePrId);
+  var committed = bd.total;
   var after = r2_(committed + req);
   var pct = Math.round(after / budget * 1000) / 10;
   var against = fmtMoney_(budget) + ' — ' + b.label;
 
+  // Say WHERE the budget went. A figure a person cannot decompose is a
+  // figure they argue with instead of acting on.
+  var parts = [];
+  if (bd.spent > 0) parts.push(fmtMoney_(bd.spent) + ' already spent');
+  if (bd.pendingCash > 0) parts.push(fmtMoney_(bd.pendingCash) + ' in cash advances awaiting release');
+  if (bd.openRequests > 0) parts.push(fmtMoney_(bd.openRequests) + ' in other open requests');
+  var where = parts.length ? ' Committed so far: ' + parts.join(', ') + '.' : '';
+
   if (after > budget) {
     return {
-      state: 'over', basis: b.basis, basisLabel: b.label,
+      state: 'over', basis: b.basis, basisLabel: b.label, breakdown: bd,
       budget: budget, committed: committed, requested: req, after: after,
       overBy: r2_(after - budget), pct: pct,
       message: 'This request puts committed spend on ' + key + ' at ' + fmtMoney_(after) +
-        ' against ' + against + ' — over by ' + fmtMoney_(after - budget) +
-        '. It can still be submitted, but approvers will see this and the overrun will need a variation order or a reason.'
+        ' against ' + against + ' — over by ' + fmtMoney_(after - budget) + '.' + where +
+        ' It can still be submitted, but approvers will see this and the overrun will need a variation order or a reason.'
     };
   }
   if (after > budget * 0.9) {
     return {
-      state: 'near', basis: b.basis, basisLabel: b.label,
+      state: 'near', basis: b.basis, basisLabel: b.label, breakdown: bd,
       budget: budget, committed: committed, requested: req, after: after,
       overBy: 0, pct: pct,
       message: 'This brings committed spend on ' + key + ' to ' + fmtMoney_(after) + ' of ' +
@@ -231,11 +320,11 @@ function checkPrBudget(projectId, sowId, requested, excludePrId) {
     };
   }
   return {
-    state: 'ok', basis: b.basis, basisLabel: b.label,
+    state: 'ok', basis: b.basis, basisLabel: b.label, breakdown: bd,
     budget: budget, committed: committed, requested: req, after: after,
     overBy: 0, pct: pct,
     message: 'Committed spend on ' + key + ' becomes ' + fmtMoney_(after) + ' of ' +
-      against + ' — ' + pct + '%.'
+      against + ' — ' + pct + '%.' + where
   };
 }
 

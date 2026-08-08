@@ -9,8 +9,25 @@
 
 /**
  * setDateNeededMin - Sets the minimum selectable date for Date Needed
- * PURPOSE: Ang pinakamaagang pwedeng piliin ay 3 days after today
+ * PURPOSE: The earliest selectable date is 3 days after today.
  */
+/**
+ * wireRequestBudgetCheck (v11 BATCH H1) - Attaches the budget check to
+ * the cash advance form. Bound once, guarded by a flag, because
+ * loadProjectsDropdown runs again on every visit to the page and
+ * re-binding would stack duplicate listeners.
+ */
+function wireRequestBudgetCheck() {
+    if (wireRequestBudgetCheck._done) return;
+    ['req-project', 'req-scope', 'req-amount'].forEach(function (id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('change', refreshRequestBudgetCheck);
+        el.addEventListener('input', refreshRequestBudgetCheck);
+    });
+    wireRequestBudgetCheck._done = true;
+}
+
 function setDateNeededMin() {
     const dateInput = document.getElementById('req-date');
     if (!dateInput) return;
@@ -80,6 +97,7 @@ async function loadProjectsDropdown() {
         }
         
         setDateNeededMin();
+        wireRequestBudgetCheck();   // v11 BATCH H1
         
         //console.log('✅ Ongoing projects loaded:', ongoingProjects.length);
         
@@ -140,6 +158,69 @@ async function loadIncomingProjectsDropdown() {
         if (select) {
             select.innerHTML = '<option value="">Error loading projects</option>';
         }
+    }
+}
+
+/**
+ * ── v11 BATCH H1: BUDGET CHECK ON CASH ADVANCES ──
+ *
+ * A cash advance draws on exactly the same scope budget as a purchase
+ * request, so it made no sense for one route to be checked and the
+ * other not — and the unchecked one was the easier of the two to raise.
+ *
+ * The check is the SAME server call the purchase request uses
+ * (checkPrBudget), so the two can never disagree about what a scope
+ * item has left. It warns; it does not block. A site that genuinely has
+ * to overspend a line will do so either way, and the useful thing is
+ * that the approvers see it.
+ *
+ * Debounced, because it fires on every keystroke in the amount field
+ * and each call reads several sheets.
+ */
+var _reqBudgetTimer = null;
+
+function refreshRequestBudgetCheck() {
+    clearTimeout(_reqBudgetTimer);
+    _reqBudgetTimer = setTimeout(_doRequestBudgetCheck, 400);
+}
+
+async function _doRequestBudgetCheck() {
+    const box = document.getElementById('req-budget');
+    if (!box) return;
+    const projectId = (document.getElementById('req-project') || {}).value || '';
+    const sowId = (document.getElementById('req-scope') || {}).value || '';
+    const amount = parseFloat((document.getElementById('req-amount') || {}).value) || 0;
+
+    if (!projectId || !sowId || amount <= 0) { box.innerHTML = ''; return; }
+
+    try {
+        const b = await DataService.checkPrBudget(projectId, sowId, amount);
+        const esc = v => String(v == null ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const basisWord = { materials: 'materials estimate', estimate: 'estimate',
+                            budget: 'SOW budget' }[b.basis] || 'budget';
+        const title = { ok: 'Within the ' + basisWord,
+                        near: 'Close to the ' + basisWord,
+                        over: 'Over the ' + basisWord + ' for ' + sowId,
+                        'no-estimate': 'Nothing to check against' }[b.state] || '';
+        const pct = b.budget > 0 ? Math.min(100, Math.round(b.committed / b.budget * 100)) : 0;
+        const pctThis = b.budget > 0 ? Math.min(100 - pct, Math.round(b.requested / b.budget * 100)) : 0;
+        const peso = v => '₱' + fmtMoney(parseFloat(v) || 0);
+
+        box.innerHTML =
+            '<div class="pr-budget-box ' + b.state + '" style="margin-top:10px;">' +
+                '<b>' + (b.state === 'over' ? Icon.warning({ size: 12 }) + ' ' : '') + title + '</b>' +
+                '<p>' + esc(b.message) + '</p>' +
+                (b.budget > 0
+                    ? '<div class="pr-bar"><div class="pr-bar-used" style="width:' + pct + '%"></div>' +
+                      '<div class="pr-bar-this" style="left:' + pct + '%;width:' + pctThis + '%"></div></div>' +
+                      '<div class="pr-bar-nums"><span>Committed ' + peso(b.committed) +
+                      ' · this request ' + peso(b.requested) + '</span><span>' +
+                      esc(b.basisLabel || 'budget') + ' ' + peso(b.budget) + '</span></div>'
+                    : '') +
+            '</div>';
+    } catch (err) {
+        box.innerHTML = '';
     }
 }
 

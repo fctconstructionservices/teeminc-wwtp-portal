@@ -158,11 +158,12 @@ const PrintDoc = {
     },
 
     /**
-     * footerHTML - repeats on every printed page in Chrome and Edge via
-     * `position: fixed` (see print-modal.css). Firefox and Safari print
-     * it once, at the end. That is a browser limitation, not a bug here:
-     * true repeating page footers need paged-media support that no
-     * browser implements for arbitrary content.
+     * footerHTML - printed once, at the end of the document.
+     *
+     * v11 BATCH H1: this used `position: fixed` so Chrome would repeat
+     * it on every page. That also contributed to spurious blank pages,
+     * and a footer that repeats is worth a great deal less than a
+     * document that prints without a blank sheet in front of it.
      */
     footerHTML() {
         const t = this.get();
@@ -318,7 +319,7 @@ ${this.footerHTML()}
 .pd-sign-pos { font-size:10px; color:#5B6360; margin-top:1px; }
 .pd-foot { margin-top:20px; padding-top:7px; border-top:1px solid #D6D2C4; font-size:9px; color:#5B6360; text-align:center; }
 .pd-watermark { position:fixed; top:44%; left:50%; transform:translate(-50%,-50%) rotate(-32deg); font-family:'Oswald',sans-serif; font-size:88px; font-weight:600; letter-spacing:.1em; color:rgba(28,35,33,.07); pointer-events:none; z-index:0; white-space:nowrap; }
-@media print { .pd-foot { position:fixed; bottom:0; left:0; right:0; background:#fff; } }
+@media print { .pd-foot { position:static; background:#fff; } .pd-noprint{display:none!important;} }
 `;
     }
 };
