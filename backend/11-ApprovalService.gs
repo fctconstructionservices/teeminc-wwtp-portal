@@ -346,6 +346,55 @@ function getRequestById(id) {
         req.description = req.sowDescription;
         req.requestor = req.submittedBy;
       }
+      // ── v11 BATCH H2 ──
+      // The Daily Site Record modal used to show five fields — date,
+      // weather, remarks — and told you to open the project tab for the
+      // rest. An approver was therefore signing off a record they could
+      // not see, which is the one thing an approval screen must not do.
+      // Every JSON column is parsed here so the modal can show the WHOLE
+      // record, exactly as the project's own Daily Records tab does.
+      if (req.type === 'DailyRecord') {
+        req.manpower = safeParse_(req.manpowerJSON, []);
+        req.equipment = safeParse_(req.equipmentJSON, []);
+        req.workAccomplished = safeParse_(req.workAccomplishedJSON, []);
+        req.materialsDelivered = safeParse_(req.materialsDeliveredJSON, []);
+        req.materialsUsed = safeParse_(req.materialsUsedJSON, []);
+        req.issues = safeParse_(req.issuesJSON, []);
+        req.visitors = safeParse_(req.visitorsJSON, []);
+        req.photos = safeParse_(req.photosJSON, []);
+        var dproj = readAll_('Projects').find(function (p) { return p.id === req.projectId; });
+        if (dproj) { req.projectName = dproj.name; req.projectLocation = dproj.location; }
+      }
+
+      // Billing showed the four money lines but nothing to check them
+      // against. An approver could not tell whether the downpayment
+      // recoupment was right without opening the project — so the
+      // contract basis and the billing history come with it now.
+      if (req.type === 'Billing') {
+        var bproj = readAll_('Projects').find(function (p) { return p.id === req.projectId; });
+        if (bproj) {
+          req.projectName = bproj.name;
+          req.contractValue = parseFloat(bproj.contractValue) || 0;
+          req.retentionPct = parseFloat(bproj.retentionPct) || 0;
+          req.downpaymentPct = parseFloat(bproj.downpaymentPct) || 0;
+        }
+        req.priorBillings = readAll_('Billings')
+          .filter(function (b) {
+            return b.projectId === req.projectId && b.id !== req.id &&
+                   low_(b.status) !== 'rejected';
+          })
+          .map(function (b) {
+            return {
+              id: b.id, billingNo: b.billingNo, billingType: b.billingType,
+              period: b.period, currentPct: b.currentPct,
+              grossAmount: parseFloat(b.grossAmount) || 0,
+              dpRecoupment: parseFloat(b.dpRecoupment) || 0,
+              netAmount: parseFloat(b.netAmount) || 0, status: b.status
+            };
+          })
+          .sort(function (a, b) { return String(a.billingNo).localeCompare(String(b.billingNo)); });
+      }
+
       if (req.type === 'PurchaseRequest') {
         // v11 BATCH G1: the detail modal needs the line items and the
         // stored budget warning — an approver must see the same warning

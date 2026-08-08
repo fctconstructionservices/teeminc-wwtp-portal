@@ -117,6 +117,16 @@ const ManpowerPage = {
                             <div class="field"><label>Contact Number</label><input type="text" id="prs-contact" placeholder="e.g. 09xx xxx xxxx" /></div>
                             <div class="field"><label>Daily Rate (₱)</label><input type="number" id="prs-rate" min="0" step="0.01" placeholder="optional" /></div>
                             <div class="field full"><label>Notes</label><input type="text" id="prs-notes" placeholder="Certifications, assigned site, remarks..." /></div>
+                            <!-- v11 BATCH H3: a personnel record without a face is of
+                                 limited use on site, where the point is recognising who
+                                 is being referred to. -->
+                            <div class="field full"><label>Photo</label>
+                                <div class="file-drop"><input type="file" accept="image/*" id="prs-image"
+                                    onchange="ManpowerPage.previewPersonImage(event)" /></div>
+                                <p style="font-size:11px;color:var(--ink-soft);margin-top:4px;">
+                                    A head-and-shoulders shot prints best. Leave blank when editing to keep the existing photo.</p>
+                                <div class="image-preview" id="prsImagePreview"><img id="prsImagePreviewImg" src="#" alt="Preview" /></div>
+                            </div>
                         </div>
                         <div class="submit-row"><button type="submit" class="btn-primary" id="prsSubmitBtn">Save Person</button><button type="button" class="btn-ghost" onclick="ManpowerPage.hidePersonForm()">Cancel</button></div>
                     </form>
@@ -222,18 +232,24 @@ const ManpowerPage = {
         }
         let html = `<div class="panel"><table><thead><tr>
             <th>ID</th><th>Name</th><th>Position / Role</th><th>Classification</th><th>Contact</th>
-            <th style="text-align:right">Daily Rate</th><th>Status</th>${isAdmin ? '<th></th>' : ''}
+            <th style="text-align:right">Daily Rate</th><th>Status</th><th></th>${isAdmin ? '<th></th>' : ''}
         </tr></thead><tbody>`;
         list.forEach(p => {
             const stampCls = p.status === 'active' ? 'approved' : 'rejected';
             html += `<tr>
                 <td><span class="req-id">${p.id}</span></td>
-                <td><b>${p.name}</b>${p.notes ? `<div style="font-size:10.5px;color:var(--ink-soft)">${p.notes}</div>` : ''}</td>
+                <td class="prs-name-cell">
+                    ${p.image ? `<img class="prs-thumb" src="${driveImgSrc(p.image)}" alt="" onerror="this.style.display='none'" />` : ''}
+                    <span><b>${p.name}</b>${p.notes ? `<div style="font-size:10.5px;color:var(--ink-soft)">${p.notes}</div>` : ''}</span>
+                </td>
                 <td>${p.role || '—'}</td>
                 <td>${p.classification || '—'}</td>
                 <td class="mono" style="font-size:11px">${p.contactNumber || '—'}</td>
                 <td class="amt">${p.dailyRate ? '₱' + fmtMoney(p.dailyRate) : '—'}</td>
                 <td><span class="stamp ${stampCls}">${p.status === 'active' ? 'Active' : 'Inactive'}</span></td>
+                <td style="white-space:nowrap">
+                    <button class="btn-sm" title="Open record" onclick="ManpowerPage.viewPerson('${p.id}')">${Icon.search({size:12})}</button>
+                </td>
                 ${isAdmin ? `<td style="white-space:nowrap">
                     <button class="btn-sm" onclick="ManpowerPage.editPerson('${p.id}')">${Icon.pencil({size:12})}</button>
                     ${p.status === 'active'
@@ -378,10 +394,83 @@ const ManpowerPage = {
         document.getElementById('prs-contact').value = p.contactNumber || '';
         document.getElementById('prs-rate').value = p.dailyRate || '';
         document.getElementById('prs-notes').value = p.notes || '';
+        const pv = document.getElementById('prsImagePreview');
+        const pvImg = document.getElementById('prsImagePreviewImg');
+        const fileEl = document.getElementById('prs-image');
+        if (fileEl) fileEl.value = '';
+        if (pv && pvImg) {
+            if (p.image) { pvImg.src = driveImgSrc(p.image); pv.style.display = 'block'; }
+            else { pv.style.display = 'none'; }
+        }
         document.getElementById('mpPersonFormTitle').textContent = `Edit ${p.name}`;
         document.getElementById('prsSubmitBtn').textContent = 'Save Changes';
         el.style.display = 'block';
         el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    },
+
+    /** previewPersonImage (v11 BATCH H3) - local preview before upload. */
+    previewPersonImage(ev) {
+        const f = ev.target.files && ev.target.files[0];
+        const box = document.getElementById('prsImagePreview');
+        const img = document.getElementById('prsImagePreviewImg');
+        if (!f || !box || !img) return;
+        const r = new FileReader();
+        r.onload = e2 => { img.src = e2.target.result; box.style.display = 'block'; };
+        r.readAsDataURL(f);
+    },
+
+    /**
+     * viewPerson (v11 BATCH H3) - The personnel record as a document.
+     *
+     * Uses the same modal shell every other datasheet uses, so it
+     * carries the company letterhead on print and looks like the rest
+     * of the system. The photo sits on the right with the details on
+     * the left — the layout a printed personnel record has always had,
+     * and the reason the photo was worth adding in the first place.
+     */
+    viewPerson(id) {
+        const p = (this._personnel || []).find(x => x.id === id);
+        if (!p) { UI.toast('Not found.', 'error'); return; }
+        const e = v => String(v == null ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        const V = (label, val, full) =>
+            `<div class="dg-item${full ? ' full' : ''}"><span class="dg-label">${label}</span><span class="dg-value">${e(val) || '—'}</span></div>`;
+
+        document.getElementById('prsViewModal')?.remove();
+        const m = document.createElement('div');
+        m.className = 'print-modal-overlay open';
+        m.id = 'prsViewModal';
+        m.innerHTML = `
+            <div class="print-modal-content" style="max-width:640px;">
+                <button class="close-modal pd-noprint" onclick="document.getElementById('prsViewModal').remove()">${Icon.close({size:18})}</button>
+                <div class="detail-print-header">
+                    <div class="dph-left">
+                        <h2>${e(p.id)} — ${e(p.name)}</h2>
+                        <div class="dph-id">${e(p.role) || ''}${p.classification ? ' · ' + e(p.classification) : ''}</div>
+                    </div>
+                    <div class="dph-right">${p.image
+                        ? `<img src="${driveImgSrc(p.image)}" alt="${e(p.name)}" onerror="this.style.display='none'" />`
+                        : `<div class="no-img-placeholder">${Icon.users({size:28})}<br>No Photo</div>`}</div>
+                </div>
+                <div class="print-section"><div class="ps-title">Personnel Details</div>
+                    <div class="detail-grid">
+                        ${V('Personnel ID', p.id)}
+                        ${V('Name', p.name)}
+                        ${V('Position / Role', p.role)}
+                        ${V('Classification', p.classification)}
+                        ${V('Contact Number', p.contactNumber)}
+                        ${V('Daily Rate', p.dailyRate ? '₱' + fmtMoney(p.dailyRate) : '')}
+                        ${V('Status', p.status === 'active' ? 'Active' : 'Inactive')}
+                        ${V('Notes', p.notes, true)}
+                    </div>
+                </div>
+                <div class="print-actions pd-noprint">
+                    <button class="btn-primary" onclick="PrintDoc.print({title:'Personnel Record — ${e(p.name)}'})">${Icon.printer({size:14})} Print</button>
+                    <button class="btn-ghost" onclick="document.getElementById('prsViewModal').remove()">Close</button>
+                </div>
+            </div>`;
+        document.body.appendChild(m);
     },
 
     async submitPerson(e) {
@@ -397,6 +486,15 @@ const ManpowerPage = {
         };
         if (!data.name || !data.role) { UI.toast('Name and Position are required.', 'error'); return false; }
         try {
+            // Uploaded before the record is written, so a failed upload
+            // does not leave a saved person with a half-attached photo.
+            const file = document.getElementById('prs-image')?.files?.[0];
+            if (file) {
+                UI.toast('Uploading photo...', 'success');
+                const b64 = await fileToBase64_(file);
+                const up = await DataService.uploadImage(b64, file.name, file.type);
+                if (up && up.url) data.image = up.url;
+            }
             if (id) {
                 await DataService.updatePersonnel(id, data);
                 UI.toast(`${data.name} updated.`, 'success');

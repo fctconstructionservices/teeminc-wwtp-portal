@@ -930,7 +930,10 @@ textarea:focus-visible {
     position: fixed;
     inset: 0;
     background: rgba(28, 35, 33, .88);
-    z-index: 1200;
+    /* v11 BATCH H2: was 1200, which is BELOW the request modal's 2000 —
+       so an attachment opened behind the very modal that opened it, and
+       the modal had to be closed to see it. */
+    z-index: 3000;
     display: none;
     align-items: center;
     justify-content: center;
@@ -979,6 +982,77 @@ textarea:focus-visible {
 @media (max-width: 520px) {
     .att-grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
     .att-card img, .att-fallback, .att-doc .att-ext { height: 66px; }
+}
+
+
+/* ================================================================
+   v11 BATCH H2 — ATTACHMENTS ON PAPER
+
+   On screen the grid of small thumbnails is right: an approver is
+   scanning. On paper it was useless — a receipt printed at thumbnail
+   size cannot be read, which defeats the point of attaching it.
+
+   Printed, attachments become full-width and centred, one below the
+   other, each kept whole on its page.
+   ================================================================ */
+
+@media print {
+    .att-block { page-break-inside: auto; margin-top: 16px; }
+    .att-label {
+        font-family: 'Oswald', sans-serif;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: .08em;
+        border-bottom: 1px solid #D6D2C4;
+        padding-bottom: 4px;
+        margin-bottom: 10px;
+    }
+    .att-count { display: none; }
+
+    /* One per row, centred, so each is as large as the page allows. */
+    .att-grid {
+        display: block !important;
+    }
+    .att-card {
+        display: block !important;
+        width: 100% !important;
+        height: auto !important;
+        border: none !important;
+        background: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin: 0 0 14px !important;
+        text-align: center;
+        page-break-inside: avoid;
+    }
+    .att-card img {
+        display: block;
+        margin: 0 auto;
+        max-width: 100% !important;
+        /* Bounded by height as well, so a tall photo does not push the
+           caption onto a page of its own. */
+        max-height: 165mm !important;
+        width: auto !important;
+        height: auto !important;
+        object-fit: contain !important;
+        border: 1px solid #D6D2C4;
+    }
+    .att-cap {
+        position: static !important;
+        display: block !important;
+        background: none !important;
+        color: #5B6360 !important;
+        font-size: 9.5px;
+        padding: 4px 0 0 !important;
+        text-align: center;
+    }
+    .att-fallback { display: none !important; }
+    /* A document card prints as its caption — the file itself is not
+       on this sheet, so a large empty box would be misleading. */
+    .att-card.att-doc { margin-bottom: 4px !important; }
+    .att-card.att-doc .att-ext { display: none !important; }
+    /* The lightbox is a screen affordance and never belongs on paper. */
+    .att-lightbox { display: none !important; }
 }
 
 
@@ -1965,20 +2039,25 @@ textarea:focus-visible {
     .print-modal-content .print-header {
         border-bottom: 2px solid #000 !important;
     }
-    body * {
-        visibility: hidden;
-    }
-    .print-modal-overlay,
-    .print-modal-content,
-    .print-modal-content * {
-        visibility: visible;
-    }
-    .print-modal-overlay {
-        position: absolute;
-        left: 0;
-        top: 0;
+    /* ── v11 BATCH H1: THE BLANK FIRST PAGE ──
+       This used to hide the app with `visibility: hidden`. Hidden
+       elements still OCCUPY LAYOUT SPACE, so the entire application —
+       home screen, project page, every section — was still laid out,
+       invisible, above the modal. That empty layout was the blank first
+       page, and on a long page it could be two or three.
+
+       `display: none` on everything that is not the open modal removes
+       it from layout entirely, so the document starts at the modal. */
+    body > *:not(.print-modal-overlay) { display: none !important; }
+    .print-modal-overlay:not(.open) { display: none !important; }
+    .print-modal-overlay.open {
+        display: block !important;
+        position: static !important;
         width: 100%;
     }
+    /* A fixed-position element can force its own page in some browsers,
+       and a watermark is not worth a blank sheet. */
+    .pd-watermark { position: absolute !important; }
 }
 
 /* ================================================================
@@ -2102,15 +2181,120 @@ textarea:focus-visible {
        Firefox and Safari print it once, at the end. True repeating page
        footers need paged-media support no browser implements for
        arbitrary content, so this is as far as it goes honestly. */
+    /* v11 BATCH H1: this was `position: fixed` so it would repeat on
+       every page in Chrome. It also contributed to spurious blank
+       pages, and a footer that repeats is worth less than a document
+       that prints correctly. It now sits at the end, once. */
     .pd-foot {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
+        position: static;
         background: #fff;
     }
+    /* Anything the screen needs but paper does not. */
+    .pd-noprint, .no-print { display: none !important; }
     .pd-name, .pd-doctitle { color: #1C2321 !important; }
     .pd-rule { border-bottom-color: #1C2321 !important; }
+}
+
+
+/* ================================================================
+   v11 BATCH H2 — WHAT YOU SEE IS WHAT PRINTS
+
+   The rule for every request modal: the modal IS the document. Anything
+   that is not part of the document — action buttons, guidance notes,
+   the close control — is marked .pd-noprint and disappears on paper.
+   Nothing is added at print time that was not on screen, and nothing on
+   screen is silently dropped except that chrome.
+
+   That is why these sub-tables are styled once here rather than inline
+   per modal: a Daily Record and an Estimate should print as the same
+   kind of document, because they are.
+   ================================================================ */
+
+.ps-subtitle {
+    font-family: 'Oswald', sans-serif;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--blueprint);
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 3px;
+    margin: 14px 0 6px;
+}
+.mini-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11.5px;
+}
+.mini-table th {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 8.5px;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    padding: 5px 6px;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+}
+.mini-table td {
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+}
+.mini-table tr:last-child td { border-bottom: none; }
+.bill-calc td { padding: 5px 6px; }
+.bill-calc td.amt {
+    text-align: right;
+    font-family: 'IBM Plex Mono', monospace;
+    white-space: nowrap;
+}
+.bill-calc tr.bill-net td {
+    border-top: 2px solid var(--ink);
+    border-bottom: none;
+    font-size: 13px;
+    padding-top: 7px;
+}
+.dsr-remarks { font-size: 12px; line-height: 1.55; margin: 0; white-space: pre-wrap; }
+
+/* Datasheet layout: details on the left, the photo on the right, which
+   is where it sits on a printed spec sheet. */
+.dsheet { display: flex; gap: 16px; align-items: flex-start; }
+.dsheet-main { flex: 1; min-width: 0; }
+.dsheet-photo {
+    flex: 0 0 190px;
+    text-align: center;
+}
+.dsheet-photo img {
+    width: 100%;
+    max-height: 190px;
+    object-fit: contain;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+}
+.dsheet-photo span {
+    display: block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9.5px;
+    color: var(--ink-soft);
+    margin-top: 4px;
+}
+
+@media (max-width: 640px) {
+    .dsheet { flex-direction: column; }
+    .dsheet-photo { flex: none; width: 100%; max-width: 240px; align-self: center; }
+}
+
+@media print {
+    /* Tables must not be cut across a page break mid-row, and a heading
+       must not be orphaned from the rows it introduces. */
+    .mini-table tr { page-break-inside: avoid; }
+    .mini-table thead { display: table-header-group; }
+    .ps-subtitle { page-break-after: avoid; }
+    .dsheet { display: flex !important; }
+    .dsheet-photo { flex: 0 0 55mm !important; }
+    .dsheet-photo img { max-height: 55mm !important; }
+    /* Screen-only chrome. */
+    .pd-noprint, .data-source-note.pd-noprint { display: none !important; }
 }
 
 
@@ -4062,6 +4246,29 @@ gap: 12px;
     }
 }
 
+/* ================================================================
+   v11 BATCH H3 — PERSONNEL PHOTO
+
+   A personnel record without a face is of limited use on site, where
+   the point is recognising who is being referred to.
+   ================================================================ */
+
+.prs-name-cell { display: flex; align-items: center; gap: 9px; }
+.prs-thumb {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid var(--line);
+    flex-shrink: 0;
+    background: var(--bg);
+}
+.field-hint { font-size: 11px; color: var(--ink-soft); margin: 4px 0 0; line-height: 1.45; }
+
+@media print {
+    .prs-thumb { display: none !important; }
+}
+
 
 /* ═══════ pages/approvals.css ═══════ */
 /* ================================================================
@@ -4963,5 +5170,53 @@ gap: 12px;
 @media (max-width: 620px) {
     #payablesContent .kpi-strip { grid-template-columns: repeat(2, 1fr); }
     .pay-table { font-size: 11.5px; }
+}
+
+
+/* ================================================================
+   v11 BATCH H1 — PURCHASE REQUEST REGISTER
+
+   The card grid became a table. Cards suited a handful of requests and
+   stopped working at thirty: you cannot scan a column of amounts, or
+   compare two requests, when each one is its own box. A register is
+   also what this list looks like on paper.
+   ================================================================ */
+
+.pr-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.pr-table th {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--blueprint);
+    text-align: left;
+    padding: 8px 9px;
+    background: var(--blueprint-tint);
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+}
+.pr-table th.amt, .pr-table td.amt { text-align: right; }
+.pr-table td { padding: 8px 9px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.pr-table td.amt, .pr-table td.mono {
+    font-family: 'IBM Plex Mono', monospace;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.pr-table tfoot td { font-weight: 700; background: var(--bg); }
+.pr-table .muted { font-size: 10.5px; color: var(--ink-soft); margin-top: 2px; }
+.pr-table tr.cancelled, .pr-table tr.rejected { opacity: .6; }
+/* An over-budget request should be visible while scanning the column. */
+.pr-table tr td .pr-budget.over { font-weight: 700; }
+.pr-row-actions { white-space: nowrap; display: flex; gap: 4px; }
+.pr-row-actions .pr-note { align-self: center; }
+
+@media (max-width: 900px) {
+    /* Drop what a phone cannot show usefully, keeping the number,
+       description, amount, budget verdict and the actions. */
+    .pr-table th:nth-child(3), .pr-table td:nth-child(3),
+    .pr-table th:nth-child(4), .pr-table td:nth-child(4),
+    .pr-table th:nth-child(7), .pr-table td:nth-child(7),
+    .pr-table th:nth-child(8), .pr-table td:nth-child(8) { display: none; }
+    .pr-table { font-size: 11.5px; }
 }
    /* v11 BATCH G1 */

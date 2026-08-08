@@ -130,6 +130,7 @@ const App = {
         }
         if (page === 'liquidate') {
             setTimeout(loadLiquidateDropdown, 100);   // v4: auto-list reviewed advances to liquidate
+            setTimeout(loadLiquidationVendors, 120);  // v11 BATCH H3: supplier names + TIN
         }
 
         this.updateUserBadges();

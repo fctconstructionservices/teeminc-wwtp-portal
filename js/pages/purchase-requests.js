@@ -121,14 +121,88 @@ const PurchaseRequestsPage = {
             </div>
 
             ${list.length
-                ? `<div class="pr-grid">${list.map(p => this._card(p)).join('')}</div>`
+                ? this._table(list)
                 : `<div class="empty"><p>${this._all.length
                     ? 'No requests with this status.'
                     : 'No purchase requests yet. Raise one to start buying against a scope item.'}</p></div>`}`;
     },
 
     _peso(v) { return '₱' + fmtMoney(parseFloat(v) || 0); },
+
+    /** _minNeeded - three clear days from today, matching the cash advance form. */
+    _minNeeded() {
+        const d = new Date();
+        d.setDate(d.getDate() + 3);
+        return d.toISOString().slice(0, 10);
+    },
     setFilter(f) { this._filter = f; this._render(); },
+
+    /**
+     * _table (v11 BATCH H1) - Replaces the card grid.
+     *
+     * Cards suited a handful of requests and stopped working the moment
+     * there were thirty: you cannot scan down a column of amounts, or
+     * compare two requests, when each one is its own box. A register is
+     * also what a purchase request list looks like on paper, which
+     * matters when someone prints it for a meeting.
+     */
+    _table(list) {
+        const e = this._esc.bind(this);
+        const total = list.reduce((s, p) => s + (parseFloat(p.totalAmount) || 0), 0);
+        return `<div class="panel" style="padding:0;overflow:hidden;"><div class="scroll-x">
+            <table class="pr-table">
+                <thead><tr>
+                    <th>PR No.</th><th>Description</th><th>Project / SOW</th>
+                    <th class="amt">Items</th><th class="amt">Amount</th>
+                    <th>Budget</th><th>Needed</th><th>Route</th><th>Status</th><th></th>
+                </tr></thead>
+                <tbody>${list.map(p => this._row(p)).join('')}</tbody>
+                <tfoot><tr>
+                    <td colspan="4">${list.length} request${list.length === 1 ? '' : 's'}</td>
+                    <td class="amt">${this._peso(total)}</td>
+                    <td colspan="5"></td>
+                </tr></tfoot>
+            </table></div></div>`;
+    },
+
+    _row(p) {
+        const e = this._esc.bind(this);
+        const st = String(p.status).toLowerCase();
+        const user = App.getUser() || {};
+        const isMine = String(p.requestorEmail || '').toLowerCase() === String(user.email || '').toLowerCase();
+        const bs = { ok: '', near: 'near', over: 'over', 'no-estimate': 'none' }[p.budgetState] || '';
+        const bLabel = { ok: 'Within', near: 'Close', over: 'Over', 'no-estimate': 'Not checked' }[p.budgetState] || '—';
+
+        let actions = '';
+        if (st === 'draft' && isMine) {
+            actions = `<button class="btn-sm primary" onclick="PurchaseRequestsPage.submitDraft('${e(p.id)}')">Submit</button>
+                <button class="btn-sm" title="Edit" onclick="PurchaseRequestsPage.openForm('${e(p.id)}')">${Icon.pencil({size:12})}</button>`;
+        } else if (st === 'approved') {
+            actions = p.route === 'cash'
+                ? `<span class="pr-note">CA ${e(p.cashAdvanceId || '')}</span>`
+                : `<button class="btn-sm primary" onclick="PurchaseRequestsPage.openPoForm('${e(p.id)}')">Raise PO</button>`;
+        } else if (st === 'ordered') {
+            actions = `<button class="btn-sm" onclick="PurchaseRequestsPage.openPoList('${e(p.id)}')">Orders</button>`;
+        }
+
+        return `<tr class="${st}">
+            <td class="mono"><b>${e(p.id)}</b><div class="muted">${e(p.requestor)}</div></td>
+            <td>${e(p.title)}</td>
+            <td>${e(p.projectName || p.projectId)}<div class="muted">${e(p.sowId)}</div></td>
+            <td class="amt">${p.lineCount}</td>
+            <td class="amt"><b>${this._peso(p.totalAmount)}</b></td>
+            <td><span class="pr-budget ${bs}" title="${e(p.budgetMessage || '')}">${bLabel}</span></td>
+            <td class="mono">${p.dateNeeded ? this._date(p.dateNeeded) : '—'}</td>
+            <td>${p.route === 'cash' ? 'Cash' : 'PO'}</td>
+            <td><span class="pr-status ${st}">${e(p.status)}</span></td>
+            <td class="pr-row-actions">
+                <button class="btn-sm" title="Open" onclick="PurchaseRequestsPage.view('${e(p.id)}')">${Icon.search({size:12})}</button>
+                ${actions}
+                ${['draft','pending','approved'].includes(st) && isMine
+                    ? `<button class="btn-sm danger" title="Cancel" onclick="PurchaseRequestsPage.cancel('${e(p.id)}')">${Icon.close({size:11})}</button>` : ''}
+            </td>
+        </tr>`;
+    },
 
     _card(p) {
         const e = this._esc.bind(this);
@@ -194,7 +268,12 @@ const PurchaseRequestsPage = {
                     <div class="print-meta">${e(p.projectName || p.projectId)} · ${e(p.sowId)} ·
                         ${e(p.status)} · ${p.route === 'cash' ? 'Cash purchase' : 'Purchase order'}</div></div>
 
-                ${p.budgetMessage ? `<div class="pr-budget-box ${p.budgetState}">
+                <!-- v11 BATCH H1: .pd-noprint — the budget verdict is INTERNAL.
+                     It tells an approver whether to spend; it has no place on a
+                     document that may be handed to a supplier or filed with a
+                     client, and it invites questions nobody should have to
+                     answer outside the company. -->
+                ${p.budgetMessage ? `<div class="pr-budget-box pd-noprint ${p.budgetState}">
                     <b>${{ok:'Within budget',near:'Close to budget',
                           over:'Over budget','no-estimate':'Not checked against a budget'}[p.budgetState] || ''}</b>
                     <p>${e(p.budgetMessage)}</p>
@@ -215,7 +294,7 @@ const PurchaseRequestsPage = {
                     </table>
                 </div>
 
-                <div class="print-section"><div class="ps-title">Justification</div>
+                <div class="print-section"><div class="ps-title">Description</div>
                     <p style="font-size:12.5px;white-space:pre-wrap;">${e(p.justification)}</p></div>
 
                 <div class="print-section"><div class="ps-title">Details</div>
@@ -264,14 +343,18 @@ const PurchaseRequestsPage = {
                             <select id="pr-sow" onchange="PurchaseRequestsPage.recalc()"><option value="">— select a project first —</option></select>
                             <p class="pr-hint">Every peso traces back to a scope item. This is what makes the budget check possible.</p></div>
                         <div class="field"><label>Needed on site by</label>
-                            <input type="date" id="pr-needed" value="${e(existing ? existing.dateNeeded : '')}" /></div>
+                            <input type="date" id="pr-needed" min="${this._minNeeded()}"
+                                value="${e(existing ? existing.dateNeeded : this._minNeeded())}" />
+                            <p class="pr-hint">Earliest is three days out — approval, ordering and delivery
+                            cannot happen the same afternoon, and a date that was never achievable just
+                            makes the whole schedule less believable.</p></div>
                         <div class="field"><label>Deliver to</label>
                             <input type="text" id="pr-deliver" value="${e(existing ? existing.deliverTo : '')}" /></div>
                     </div>
                     <div class="field"><label>Title *</label>
                         <input type="text" id="pr-title" value="${e(existing ? existing.title : '')}" placeholder="e.g. Geotextile for NF2 cell" /></div>
-                    <div class="field"><label>Justification *</label>
-                        <textarea id="pr-just" rows="2" placeholder="Why is this needed now? Approvers read this first.">${e(existing ? existing.justification : '')}</textarea></div>
+                    <div class="field"><label>Description *</label>
+                        <textarea id="pr-just" rows="2" placeholder="What is this for, and why is it needed now? Approvers read this first.">${e(existing ? existing.justification : '')}</textarea></div>
                 </div>
 
                 <div class="print-section"><div class="ps-title">Items</div>
@@ -446,7 +529,7 @@ const PurchaseRequestsPage = {
         if (!payload.projectId) { UI.toast('Select a project.', 'error'); return; }
         if (!payload.sowId) { UI.toast('Select the SOW item this is charged to.', 'error'); return; }
         if (!payload.title) { UI.toast('Give the request a title.', 'error'); return; }
-        if (!payload.justification) { UI.toast('A justification is required — approvers read it first.', 'error'); return; }
+        if (!payload.justification) { UI.toast('A description is required — approvers read it first.', 'error'); return; }
         if (!payload.lines.length) { UI.toast('Add at least one item with a quantity.', 'error'); return; }
 
         try {
@@ -537,6 +620,19 @@ const PurchaseRequestsPage = {
                         Order all of it, or just the lines this supplier is winning. Whatever you leave
                         can go on another order to someone else.
                     </p>
+                    <!-- v11 BATCH H1: the unit price is READ-ONLY here. It is what
+                         the approvers signed off on; letting it be retyped at the
+                         ordering step means the approved figure and the ordered
+                         figure can differ with nothing recording that they did.
+                         Quantity stays editable only so one request can be split
+                         across several suppliers, and it cannot exceed what remains
+                         unordered. If a price has genuinely moved, cancel the
+                         request and raise it again at the real number — that keeps
+                         the estimate honest for the next job. -->
+                    <p class="pr-hint" style="margin:0 0 8px;">
+                        Unit prices come from the approved request and cannot be changed here.
+                        Quantities can only be reduced, so one request can be split across suppliers.
+                    </p>
                     <div style="overflow-x:auto;"><table class="ps-table">
                         <thead><tr><th>Item</th><th>Unit</th><th class="amt">Unordered</th>
                             <th class="amt">Order qty</th><th class="amt">Unit price</th><th class="amt">Amount</th></tr></thead>
@@ -546,8 +642,9 @@ const PurchaseRequestsPage = {
                             <td class="amt"><input type="number" class="po-q" data-id="${e(l.id)}" data-i="${i}"
                                 min="0" max="${l.remaining}" step="any" value="${l.remaining}"
                                 oninput="PurchaseRequestsPage.poCalc()" /></td>
-                            <td class="amt"><input type="number" class="po-r" data-i="${i}" min="0" step="any"
-                                value="${parseFloat(l.rate) || 0}" oninput="PurchaseRequestsPage.poCalc()" /></td>
+                            <td class="amt"><input type="number" class="po-r" data-i="${i}"
+                                value="${parseFloat(l.rate) || 0}" readonly tabindex="-1"
+                                title="Set on the purchase request — that is what was approved" /></td>
                             <td class="amt po-amt" data-i="${i}">—</td></tr>`).join('')}</tbody>
                         <tfoot><tr><td colspan="5">Order total</td><td class="amt" id="po-total">—</td></tr></tfoot>
                     </table></div>
@@ -580,6 +677,7 @@ const PurchaseRequestsPage = {
      */
     poCalc() {
         let total = 0;
+        // The rate input is read-only; its value still reads normally.
         document.querySelectorAll('.po-q').forEach(q => {
             const i = q.dataset.i;
             const r = document.querySelector(`.po-r[data-i="${i}"]`);
@@ -653,7 +751,9 @@ const PurchaseRequestsPage = {
                             <td class="amt">${this._peso(p.grossAmount)}</td>
                             <td class="amt">${p.receivedPct}%</td>
                             <td><span class="stamp">${e(p.status)}</span></td>
-                            <td>${['issued','partly received'].includes(String(p.status).toLowerCase())
+                            <td><button class="btn-sm" title="Print for the supplier"
+                                    onclick="PurchaseRequestsPage.printPo('${e(p.id)}')">${Icon.printer({size:12})}</button>
+                                ${['issued','partly received'].includes(String(p.status).toLowerCase())
                                 ? `<button class="btn-sm primary" onclick="PurchaseRequestsPage.openReceive('${e(p.id)}')">Receive</button>` : ''}
                                 ${String(p.status).toLowerCase() === 'pending approval'
                                 ? `<button class="btn-sm success" onclick="PurchaseRequestsPage.approvePo('${e(p.id)}')">Approve overrun</button>` : ''}</td>
@@ -664,6 +764,115 @@ const PurchaseRequestsPage = {
                     </div>
                 </div>`;
             document.body.appendChild(m);
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
+
+    /**
+     * printPo (v11 BATCH H1) - The purchase order as the SUPPLIER sees it.
+     *
+     * This is an external document, so it carries none of the internal
+     * apparatus: no budget verdict, no estimate comparison, no
+     * commitment breakdown. Those are for approvers deciding whether to
+     * spend; a supplier being told what to deliver has no business
+     * seeing how close the job is to its budget.
+     *
+     * What it DOES carry is what a supplier needs to act and to invoice:
+     * the line items, the delivery address and date, the payment terms,
+     * the VAT breakdown, and somewhere to sign.
+     */
+    async printPo(id) {
+        try {
+            const all = await DataService.getPurchaseOrders();
+            const po = (all || []).find(p => p.id === id);
+            if (!po) { UI.toast('Purchase order not found.', 'error'); return; }
+            await PrintDoc.load();
+
+            const e = this._esc.bind(this);
+            const money = v => fmtMoney(parseFloat(v) || 0);
+            const rows = (po.lines || []).map((l, i) => `<tr>
+                <td class="ctr">${i + 1}</td>
+                <td>${e(l.itemName)}</td>
+                <td class="ctr">${e(l.unit)}</td>
+                <td class="amt">${money(l.qty)}</td>
+                <td class="amt">${money(l.rate)}</td>
+                <td class="amt">${money(l.amount)}</td></tr>`).join('');
+
+            const vatRow = (parseFloat(po.vatAmount) || 0) > 0 ? `
+                <tr><td colspan="5" class="lbl">Subtotal, net of VAT</td><td class="amt">${money(po.netAmount)}</td></tr>
+                <tr><td colspan="5" class="lbl">VAT 12%</td><td class="amt">${money(po.vatAmount)}</td></tr>` : '';
+
+            const w = window.open('', '_blank');
+            if (!w) { UI.toast('Allow pop-ups for this site to print.', 'error'); return; }
+            w.document.write(PrintDoc.documentHTML({
+                title: 'Purchase Order ' + po.id,
+                meta: po.projectName + (po.sowId ? ' · ' + po.sowId : ''),
+                body: `
+                    <table class="po-meta">
+                        <tr><td class="k">Supplier</td><td><b>${e(po.supplierName)}</b></td>
+                            <td class="k">PO number</td><td><b>${e(po.id)}</b></td></tr>
+                        <tr><td class="k">Payment terms</td><td>${e(po.termsLabel)}</td>
+                            <td class="k">Date issued</td><td>${this._date(po.issuedAt)}</td></tr>
+                        <tr><td class="k">Deliver to</td><td>${e(po.deliverTo) || '—'}</td>
+                            <td class="k">Expected delivery</td><td>${po.expectedDate ? this._date(po.expectedDate) : 'To be advised'}</td></tr>
+                    </table>
+
+                    <table class="po-items">
+                        <thead><tr><th class="ctr">#</th><th>Description</th><th class="ctr">Unit</th>
+                            <th class="amt">Qty</th><th class="amt">Unit price</th><th class="amt">Amount</th></tr></thead>
+                        <tbody>${rows}</tbody>
+                        <tfoot>${vatRow}
+                            <tr class="grand"><td colspan="5" class="lbl">TOTAL</td>
+                                <td class="amt">${money(po.grossAmount)}</td></tr></tfoot>
+                    </table>
+
+                    ${po.notes ? `<p class="po-notes"><b>Notes:</b> ${e(po.notes)}</p>` : ''}
+
+                    <div class="po-terms">
+                        <h3>Terms and conditions</h3>
+                        <ol>
+                            <li><b>Payment terms:</b> ${e(po.termsLabel)}. Terms run from the date of
+                                delivery, not the date of invoice.</li>
+                            <li>Deliver to ${e(po.deliverTo) || 'the address above'}${po.expectedDate ? ' on or before ' + this._date(po.expectedDate) : ''}.
+                                Advise us in advance if the delivery date cannot be met.</li>
+                            <li>This purchase order number must appear on the delivery receipt and the
+                                sales invoice. Invoices without it may be delayed in processing.</li>
+                            <li>Quantities and unit prices are as stated. Any variation must be agreed
+                                in writing before delivery; goods delivered outside this order may be
+                                rejected or returned at the supplier's cost.</li>
+                            <li>Goods are subject to inspection on arrival. Items found short, damaged
+                                or not to specification will be rejected and are to be replaced at the
+                                supplier's cost.</li>
+                            <li>Partial deliveries are accepted; each is invoiced against the quantity
+                                actually received.</li>
+                            <li>Prices are ${(parseFloat(po.vatAmount) || 0) > 0 ? 'inclusive of VAT' : 'as quoted'}
+                                and inclusive of delivery unless stated otherwise.</li>
+                        </ol>
+                    </div>`,
+                css: `
+                    .po-meta { width:100%; border-collapse:collapse; margin:4px 0 16px; font-size:11.5px; }
+                    .po-meta td { padding:4px 6px; border-bottom:1px dotted #D6D2C4; }
+                    .po-meta td.k { color:#5B6360; text-transform:uppercase; font-size:9px;
+                        letter-spacing:.06em; width:110px; white-space:nowrap; }
+                    .po-items { width:100%; border-collapse:collapse; font-size:11px; }
+                    .po-items th { background:#EEF1F3; border:1px solid #C9C5B8; padding:6px;
+                        text-transform:uppercase; font-size:9px; letter-spacing:.05em; text-align:left; }
+                    .po-items td { border:1px solid #E5E1D6; padding:5px 6px; }
+                    .po-items td.amt, .po-items th.amt { text-align:right;
+                        font-family:'IBM Plex Mono',monospace; white-space:nowrap; }
+                    .po-items td.ctr, .po-items th.ctr { text-align:center; }
+                    .po-items td.lbl { text-align:right; font-weight:600; }
+                    .po-items tfoot td { background:#F6F4EC; }
+                    .po-items tr.grand td { font-size:13px; font-weight:700; }
+                    .po-notes { font-size:11.5px; margin-top:10px; }
+                    .po-terms { margin-top:20px; page-break-inside:avoid; }
+                    .po-terms h3 { font-family:'Oswald',sans-serif; font-size:11px; text-transform:uppercase;
+                        letter-spacing:.08em; color:var(--pd-accent); border-bottom:1px solid #D6D2C4;
+                        padding-bottom:4px; margin:0 0 8px; }
+                    .po-terms ol { margin:0; padding-left:18px; font-size:10.5px; line-height:1.6; }
+                    .po-terms li { margin-bottom:3px; }`
+            }));
+            w.document.close();
+            setTimeout(() => { try { w.focus(); } catch (err2) {} }, 250);
         } catch (err) { UI.toast('' + err.message, 'error'); }
     },
 

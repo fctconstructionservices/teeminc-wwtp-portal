@@ -96,6 +96,36 @@ const RequestDetailModal = {
         return `<div class="dg-item${full ? ' full' : ''}"><span class="dg-label">${label}</span><span class="dg-value">${value || '—'}</span></div>`;
     },
 
+    _esc(v) {
+        return String(v == null ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    },
+
+    /**
+     * _tbl (v11 BATCH H2) - One table helper for every layout, so the
+     * sub-tables in a Daily Record look the same as the ones in an
+     * Estimate. Returns '' when there are no rows, so a section can be
+     * dropped in unconditionally and simply will not appear.
+     *
+     * cols: [ [heading, key, align?, formatter?] ]
+     */
+    _tbl(title, rows, cols) {
+        if (!rows || !rows.length) return '';
+        const e = this._esc.bind(this);
+        return `<div class="ps-subtitle">${e(title)}</div>
+            <table class="mini-table">
+                <thead><tr>${cols.map(c =>
+                    `<th style="text-align:${c[2] || 'left'}">${e(c[0])}</th>`).join('')}</tr></thead>
+                <tbody>${rows.map(r => `<tr>${cols.map(c => {
+                    const raw = r[c[1]];
+                    const val = c[3] ? c[3](raw, r)
+                        : (c[2] === 'right' ? fmtMoney(parseFloat(raw) || 0) : e(raw || '—'));
+                    return `<td style="text-align:${c[2] || 'left'}">${val}</td>`;
+                }).join('')}</tr>`).join('')}</tbody>
+            </table>`;
+    },
+
     _renderDetails(data) {
         const user = App.currentUser;
         const isSuperAdmin = user && user.role === 'superadmin';
@@ -164,7 +194,7 @@ const RequestDetailModal = {
                     ${R('Reason for OT', data.reason, true)}
                 </div>
                 ${attachmentsHtml}
-                <div class="data-source-note" style="margin-top:10px;">Once all admins approve, the OT in and out fields open on the Daily Site Record for ${data.otDate || 'this date'} on this project.</div>
+                <div class="data-source-note pd-noprint" style="margin-top:10px;">Once all admins approve, the OT in and out fields open on the Daily Site Record for ${data.otDate || 'this date'} on this project.</div>
             </div>`;
 
         } else if (data.type === 'Estimate') {
@@ -198,7 +228,7 @@ const RequestDetailModal = {
                 ${table('Labor', L.labor, [['Role','role'],['Description','desc'],['Qty','qty','right'],['Duration','duration','right'],['Rate','rate','right'],['Cost','cost','right']])}
                 ${table('Equipment', L.equipment, [['Item','equipName'],['Description','desc'],['Qty','qty','right'],['Duration','duration','right'],['Rate','rate','right'],['Cost','cost','right']])}
                 ${table('Indirect Costs', L.indirect, [['Description','desc'],['Type','type'],['Amount','amount','right']])}
-                <div class="data-source-note" style="margin-top:10px;">Approving this estimate writes its total back to the SOW budget, following that item's budget mode.</div>
+                <div class="data-source-note pd-noprint" style="margin-top:10px;">Approving this estimate writes its total back to the SOW budget, following that item's budget mode.</div>
             </div>`;
 
         } else if (data.type === 'Billing') {
@@ -206,37 +236,114 @@ const RequestDetailModal = {
             const ret = parseFloat(data.retentionAmount) || 0;
             const dpr = parseFloat(data.dpRecoupment) || 0;
             const net = parseFloat(data.netAmount) || 0;
+            // ── v11 BATCH H2 ──
+            // The four money lines were here, but nothing to check them
+            // against. An approver could not tell whether the retention
+            // or the downpayment recoupment was right without opening the
+            // project — so the contract basis and the billing history now
+            // come with it, and the arithmetic is shown as a statement
+            // rather than a grid of unrelated numbers.
+            const T2 = this._tbl.bind(this);
+            const e2 = this._esc.bind(this);
+            const contract = parseFloat(data.contractValue) || 0;
+            const dpPct = parseFloat(data.downpaymentPct) || 0;
+            const retPct = parseFloat(data.retentionPct) || 0;
+            const prior = data.priorBillings || [];
+            const dpTotal = contract * dpPct;
+            const dpRecouped = prior.reduce((sm, b) => sm + (parseFloat(b.dpRecoupment) || 0), 0);
+
             detailsHtml = `
-            <div class="print-section"><div class="ps-title">${Icon.receipt({size:13})} ${data.billingType || 'Progress'} Billing ${data.billingNo || ''}</div>
+            <div class="print-section"><div class="ps-title">${Icon.receipt({size:13})} ${e2(data.billingType || 'Progress')} Billing ${e2(data.billingNo || '')}</div>
                 <div class="detail-grid">
                     ${R('Submitted By', data.submittedBy)}
                     ${R('Project', project)}
-                    ${R('Period', data.period)}
+                    ${R('Period covered', data.period)}
                     ${R('Accomplishment', `${data.prevPct || 0}% → ${data.currentPct || 0}%`)}
-                    ${R('Gross Amount', '₱' + fmtMoney(gross))}
-                    ${R('Less Retention', '₱' + fmtMoney(ret))}
-                    ${R('Less DP Recoupment', '₱' + fmtMoney(dpr))}
-                    ${R('NET PAYABLE', '<b>₱' + fmtMoney(net) + '</b>')}
+                    ${R('Contract value', '₱' + fmtMoney(contract))}
+                    ${R('Retention rate', (retPct * 100).toFixed(0) + '%')}
+                    ${dpPct > 0 ? R('Downpayment', (dpPct * 100).toFixed(0) + '% — ₱' + fmtMoney(dpTotal)) : ''}
+                    ${dpPct > 0 ? R('DP recouped to date', '₱' + fmtMoney(dpRecouped) +
+                        ' of ₱' + fmtMoney(dpTotal)) : ''}
                 </div>
+
+                <div class="ps-subtitle">This billing</div>
+                <table class="mini-table bill-calc">
+                    <tbody>
+                        <tr><td>Gross for the period (${data.prevPct || 0}% → ${data.currentPct || 0}%)</td>
+                            <td class="amt">₱${fmtMoney(gross)}</td></tr>
+                        <tr><td>Less retention @ ${(retPct * 100).toFixed(0)}%</td>
+                            <td class="amt">(₱${fmtMoney(ret)})</td></tr>
+                        ${dpr > 0 ? `<tr><td>Less downpayment recoupment</td>
+                            <td class="amt">(₱${fmtMoney(dpr)})</td></tr>` : ''}
+                        <tr class="bill-net"><td><b>NET PAYABLE</b></td>
+                            <td class="amt"><b>₱${fmtMoney(net)}</b></td></tr>
+                    </tbody>
+                </table>
+
+                ${T2('Billing history on this project', prior, [
+                    ['No.', 'billingNo', 'left', v => e2(v || '—')],
+                    ['Type', 'billingType', 'left', v => e2(v || 'Progress')],
+                    ['Period', 'period', 'left', v => e2(v || '—')],
+                    ['%', 'currentPct', 'right', v => (parseFloat(v) || 0).toFixed(0) + '%'],
+                    ['Gross', 'grossAmount', 'right'],
+                    ['DP recouped', 'dpRecoupment', 'right'],
+                    ['Net', 'netAmount', 'right'],
+                    ['Status', 'status', 'left', v => e2(v || '—')]
+                ])}
+
                 ${attachmentsHtml}
-                <div class="data-source-note" style="margin-top:10px;">Approving releases this billing for sending and collection. It is not revenue until it is marked Paid.</div>
+                <div class="data-source-note pd-noprint" style="margin-top:10px;">Approving releases this billing for sending and collection. It is not revenue until it is marked Paid.</div>
             </div>`;
 
         } else if (data.type === 'Material' || data.type === 'Equipment') {
+            // ── v11 BATCH H2 ──
+            // This showed nine fields out of the twenty-odd the request
+            // form collects, and never the PHOTO — so an approver was
+            // deciding on a material without seeing it. Every field the
+            // form asks for now appears, empty ones are dropped rather
+            // than printed as dashes, and the image sits beside the
+            // details the way it does on a datasheet.
+            const isMat = data.type === 'Material';
+            const spec = isMat
+                ? [['Model', data.model], ['Specifications', data.specs], ['Grade', data.grade],
+                   ['Size', data.size], ['Length', data.length], ['Thickness', data.thickness],
+                   ['Weight', data.weight], ['Standard code', data.standardCode],
+                   ['Application', data.application], ['Subcategory', data.subcategory]]
+                : [['Model', data.model], ['Type', data.type2 || data.equipType],
+                   ['Capacity', data.capacity], ['Serial no.', data.serial],
+                   ['Power source', data.powerSource], ['Ownership', data.ownership],
+                   ['Acquisition date', data.acquisitionDate], ['Condition', data.condition]];
+            const specRows = spec.filter(p => p[1] !== undefined && p[1] !== null && String(p[1]).trim() !== '')
+                .map(p => R(p[0], this._esc(p[1]))).join('');
+
+            const photo = data.image
+                ? `<div class="dsheet-photo">
+                       <img src="${driveImgSrc(data.image)}" alt="${this._esc(data.name)}"
+                            onerror="this.style.display='none'" />
+                       <span>${this._esc(data.code || data.id)}</span>
+                   </div>` : '';
+
             detailsHtml = `
-            <div class="print-section"><div class="ps-title">${data.type === 'Material' ? Icon.package({size:13}) : Icon.wrench({size:13})} ${this._typeLabel(data.type)}</div>
-                <div class="detail-grid">
-                    ${R('Requested By', data.requestedBy)}
-                    ${R('Name', data.name)}
-                    ${R('Brand', data.brand)}
-                    ${R('Category', data.category)}
-                    ${R('Unit', data.unit)}
-                    ${R('Rate', '₱' + fmtMoney(parseFloat(data.rate) || 0))}
-                    ${R('Supplier', data.supplier)}
-                    ${R('Code', data.code)}
-                    ${R('Description', data.desc, true)}
-                    ${R('Notes', data.notes, true)}
+            <div class="print-section"><div class="ps-title">${isMat ? Icon.package({size:13}) : Icon.wrench({size:13})} ${this._typeLabel(data.type)}</div>
+                <div class="dsheet">
+                    <div class="dsheet-main">
+                        <div class="detail-grid">
+                            ${R('Requested By', data.requestedBy)}
+                            ${R('Code', data.code)}
+                            ${R('Name', data.name)}
+                            ${R('Brand', data.brand)}
+                            ${R('Category', data.category)}
+                            ${R('Unit', data.unit)}
+                            ${R('Rate', '₱' + fmtMoney(parseFloat(data.rate) || 0))}
+                            ${R('Supplier', data.supplier)}
+                            ${specRows}
+                            ${data.desc ? R('Description', this._esc(data.desc), true) : ''}
+                            ${data.notes ? R('Notes', this._esc(data.notes), true) : ''}
+                        </div>
+                    </div>
+                    ${photo}
                 </div>
+                ${AttachmentGallery.render(data.docsJSON, 'Supporting documents')}
                 ${attachmentsHtml}
             </div>`;
 
@@ -253,17 +360,93 @@ const RequestDetailModal = {
             </div>`;
 
         } else if (data.type === 'DailyRecord') {
+            // ── v11 BATCH H2 ──
+            // This used to show five fields and then tell the approver to
+            // go and open the project tab for everything that mattered.
+            // An approval screen that cannot show what is being approved
+            // is not doing its job — people sign off what is in front of
+            // them. The whole record is here now: manpower with a
+            // headcount, equipment, accomplishment against SOW, materials
+            // in and out, issues, visitors and photos.
+            const T = this._tbl.bind(this);
+            const e = this._esc.bind(this);
+            const mp = data.manpower || [];
+            const heads = mp.reduce((n, m) => n + (parseInt(m.count, 10) || 0), 0);
+            const wa = data.workAccomplished || [];
+            const issues = data.issues || [];
+
+            // Per-accomplishment photos live on the rows, not in the
+            // record's own photo list, and were invisible everywhere.
+            const rowPhotos = wa.filter(w => w.image).map(w => ({
+                url: w.image, name: (w.scope || 'Accomplishment') + ' — ' + (w.pct || 0) + '%'
+            }));
+            const allPhotos = (data.photos || []).concat(rowPhotos);
+
             detailsHtml = `
             <div class="print-section"><div class="ps-title">${Icon.clipboardList({size:13})} Daily Site Record</div>
                 <div class="detail-grid">
                     ${R('Prepared By', data.createdBy)}
                     ${R('Project', project)}
+                    ${R('Location', data.projectLocation)}
                     ${R('Date', data.date)}
-                    ${R('Weather AM / PM', `${data.weatherAM || '—'} / ${data.weatherPM || '—'}`)}
-                    ${R('Remarks', data.remarks, true)}
+                    ${R('Weather AM / PM', `${e(data.weatherAM) || '—'} / ${e(data.weatherPM) || '—'}`)}
+                    ${R('Total manpower', heads ? heads + ' worker(s)' : '—')}
                 </div>
+
+                ${T('Manpower', mp, [
+                    ['Role / trade', 'role', 'left', v => e(v || '—')],
+                    ['AM', 'am', 'center', v => e(v || '—')],
+                    ['PM', 'pm', 'center', v => e(v || '—')],
+                    ['OT', 'ot', 'center', v => e(v || '—')],
+                    ['Count', 'count', 'right', v => String(parseInt(v, 10) || 0)],
+                    ['Remarks', 'remarks', 'left', v => e(v || '')]
+                ])}
+
+                ${T('Equipment', data.equipment || [], [
+                    ['Equipment', 'name', 'left', (v, r) => e(v || r.equipName || r.equipment || '—')],
+                    ['Hours', 'hours', 'right', v => e(v || '—')],
+                    ['Status', 'status', 'left', v => e(v || '—')],
+                    ['Remarks', 'remarks', 'left', v => e(v || '')]
+                ])}
+
+                ${T('Work accomplished', wa, [
+                    ['SOW', 'scope', 'left', v => e(v || '—')],
+                    ['Description', 'description', 'left', (v, r) => e(v || r.desc || '—')],
+                    ['% complete', 'pct', 'right', v => (parseFloat(v) || 0).toFixed(0) + '%'],
+                    ['Remarks', 'remarks', 'left', v => e(v || '')]
+                ])}
+
+                ${T('Materials delivered', data.materialsDelivered || [], [
+                    ['Material', 'material', 'left', (v, r) => e(v || r.materialName || '—')],
+                    ['Qty', 'qty', 'right', v => fmtMoney(parseFloat(v) || 0)],
+                    ['Unit', 'unit', 'left', v => e(v || '')],
+                    ['Supplier / DR', 'supplier', 'left', (v, r) => e(v || r.deliveryRef || '')]
+                ])}
+
+                ${T('Materials used', data.materialsUsed || [], [
+                    ['Material', 'material', 'left', (v, r) => e(v || r.materialName || '—')],
+                    ['Qty', 'qty', 'right', v => fmtMoney(parseFloat(v) || 0)],
+                    ['Unit', 'unit', 'left', v => e(v || '')],
+                    ['Used on', 'scope', 'left', v => e(v || '')]
+                ])}
+
+                ${T('Issues and delays', issues, [
+                    ['Issue', 'description', 'left', (v, r) => e(v || r.issue || '—')],
+                    ['Hours lost', 'timeLost', 'right', v => (parseFloat(v) || 0).toFixed(1)],
+                    ['Action taken', 'action', 'left', v => e(v || '')]
+                ])}
+
+                ${T('Visitors', data.visitors || [], [
+                    ['Name', 'name', 'left', v => e(v || '—')],
+                    ['Company', 'company', 'left', v => e(v || '')],
+                    ['Purpose', 'purpose', 'left', v => e(v || '')]
+                ])}
+
+                ${data.remarks ? `<div class="ps-subtitle">Remarks</div>
+                    <p class="dsr-remarks">${e(data.remarks)}</p>` : ''}
+
+                ${AttachmentGallery.render(allPhotos, 'Site photos')}
                 ${attachmentsHtml}
-                <div class="data-source-note" style="margin-top:10px;">Open the project's Daily Records tab for the full manpower, equipment and accomplishment breakdown.</div>
             </div>`;
 
         } else {
@@ -290,7 +473,7 @@ const RequestDetailModal = {
             <div class="print-meta">${data.createdAt || new Date().toLocaleDateString()} · <span class="stamp ${statusCls}">${data.status}</span></div>
         </div>
         ${detailsHtml}
-        <div class="print-actions">
+        <div class="print-actions pd-noprint">
             <button class="btn-primary" onclick="PrintDoc.print()">${Icon.printer({size:14})} Print</button>
             ${actionButtons}
             <button class="btn-ghost" onclick="RequestDetailModal.close()">Close</button>
