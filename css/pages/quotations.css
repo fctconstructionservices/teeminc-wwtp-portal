@@ -212,3 +212,76 @@
     .qt-metrics { grid-template-columns: repeat(2, 1fr); }
     #quotationsContent .kpi-strip { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ================================================================
+   v11 BATCH I3 — QUOTATION REGISTER
+
+   The card grid became a table, for the same reason the purchase
+   requests did: cards suit a handful and stop working at thirty. You
+   cannot scan a column of values, or compare two bids, when each one is
+   its own box — and comparing bids is most of what this page is for.
+   ================================================================ */
+
+.qt-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.qt-table th {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--blueprint);
+    text-align: left;
+    padding: 8px 9px;
+    background: var(--blueprint-tint);
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+}
+.qt-table th.amt, .qt-table td.amt { text-align: right; }
+.qt-table td { padding: 8px 9px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.qt-table td.amt, .qt-table td.mono {
+    font-family: 'IBM Plex Mono', monospace;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.qt-table tfoot td { font-weight: 700; background: var(--bg); }
+.qt-table .muted { font-size: 10.5px; color: var(--ink-soft); margin-top: 2px; font-weight: 400; }
+.qt-table td.pos b, .qt-table td.pos { color: var(--green); }
+.qt-table td.neg, .qt-table td.neg b { color: var(--red); }
+.qt-table tr.lost { opacity: .68; }
+/* The left edge still carries the stage, so the board reads at a glance
+   even as a table. */
+.qt-table tr.sent td:first-child { box-shadow: inset 3px 0 0 var(--blueprint); }
+.qt-table tr.negot td:first-child { box-shadow: inset 3px 0 0 var(--amber); }
+.qt-table tr.won td:first-child { box-shadow: inset 3px 0 0 var(--green); }
+.qt-table tr.lost td:first-child { box-shadow: inset 3px 0 0 var(--red); }
+
+.qt-row-actions { white-space: nowrap; display: flex; gap: 4px; flex-wrap: wrap; }
+
+/* The stage buttons stay on the row: moving a bid along is the most
+   frequent thing done here, and it should not need a modal. */
+.qt-stage-inline { display: flex; gap: 3px; margin-top: 5px; }
+.qt-stage-inline button {
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 2px 7px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--ink-soft);
+    cursor: pointer;
+}
+.qt-stage-inline button:hover { border-color: var(--blueprint); color: var(--blueprint); }
+.qt-stage-inline button.active {
+    background: var(--blueprint);
+    color: #fff;
+    border-color: var(--blueprint);
+}
+
+@media (max-width: 900px) {
+    .qt-table th:nth-child(3), .qt-table td:nth-child(3),
+    .qt-table th:nth-child(5), .qt-table td:nth-child(5),
+    .qt-table th:nth-child(7), .qt-table td:nth-child(7),
+    .qt-table th:nth-child(8), .qt-table td:nth-child(8) { display: none; }
+    .qt-table { font-size: 11.5px; }
+}

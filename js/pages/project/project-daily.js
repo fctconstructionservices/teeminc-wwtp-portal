@@ -189,10 +189,45 @@ Object.assign(ProjectPage, {
      * row matched, and free text still saves.
      */
     _wireDailyTypeaheads(root) {
-        if (typeof Typeahead === 'undefined') return;
+        // ── v11 BATCH I3: LOUD, AND WIRED BY DELEGATION ──
+        //
+        // Two faults made the suggestions vanish completely.
+        //
+        // 1. This returned SILENTLY when Typeahead was not loaded. Since
+        //    the <select> elements had already been replaced with plain
+        //    inputs, the result was a form with no dropdown AND no
+        //    suggestions — and nothing anywhere saying why. A missing
+        //    dependency must complain.
+        //
+        // 2. Wiring happened only when the form was opened, so it
+        //    depended on that one call happening at the right moment.
+        //    A single delegated listener on the form container is wired
+        //    once and covers every row, including ones added later,
+        //    whatever order things render in.
+        if (typeof Typeahead === 'undefined') {
+            if (!this._warnedNoTypeahead) {
+                this._warnedNoTypeahead = true;
+                console.error('Typeahead is not loaded — add <script src="js/core/typeahead.js"> to index.html.');
+                UI.toast('Suggestions are unavailable: js/core/typeahead.js is not loaded. You can still type values in.', 'error');
+            }
+            return;
+        }
         const scope = root || document.getElementById('addRecordForm');
         if (!scope) return;
         const self = this;
+
+        // Delegation: attach on first focus, wherever the row came from.
+        const form = document.getElementById('addRecordForm');
+        if (form && !form._taDelegated) {
+            form._taDelegated = true;
+            form.addEventListener('focusin', ev => {
+                const t = ev.target;
+                if (!t || t.tagName !== 'INPUT' || t.dataset.ta) return;
+                if (t.matches('.mp-person, .mp-role, .eq-name, .mat-name, .mu-name')) {
+                    self._wireDailyTypeaheads(t.closest('.entry-row') || form);
+                }
+            });
+        }
 
         scope.querySelectorAll('.mp-person:not([data-ta])').forEach(inp => {
             inp.dataset.ta = '1';
@@ -208,21 +243,38 @@ Object.assign(ProjectPage, {
         });
         scope.querySelectorAll('.eq-name:not([data-ta])').forEach(inp => {
             inp.dataset.ta = '1';
-            Typeahead.attach(inp, () => (self._approvedEquipment || []).map(e => ({
-                label: [e.brand, e.model].filter(Boolean).join(' ') || e.name || e.category || e.id,
-                sub: e.category || '', value: [e.brand, e.model].filter(Boolean).join(' ') || e.name || e.category || e.id
-            })));
+            // The catalogue stores the display value in `name`; brand and
+            // model are extra context, not the identity. Building the
+            // label from brand+model first meant an item with neither
+            // fell through to its id, which is not a name anyone types.
+            Typeahead.attach(inp, () => (self._approvedEquipment || []).map(e => {
+                const label = e.name || [e.brand, e.model].filter(Boolean).join(' ') || e.category || e.id;
+                return { label: label, value: label,
+                         sub: [e.brand, e.model, e.category].filter(Boolean).join(' · ') };
+            }));
         });
-        scope.querySelectorAll('.mat-name:not([data-ta]), .mu-name:not([data-ta])').forEach(inp => {
+        scope.querySelectorAll('.mat-name:not([data-ta])').forEach(inp => {
             inp.dataset.ta = '1';
-            Typeahead.attach(inp, () => (self._approvedMaterials || []).map(m => ({
-                label: m.name || m.desc || m.id,
-                sub: [m.brand, m.unit].filter(Boolean).join(' · '),
-                value: m.name || m.desc || m.id, data: m
-            })), () => {
-                if (inp.classList.contains('mat-name')) self.syncMaterialUnit(inp);
-                else self.syncUsedMaterialUnit(inp);
-            });
+            Typeahead.attach(inp, () => (self._approvedMaterials || []).map(m => {
+                const label = m.name || m.desc || m.id;
+                return { label: label, value: label,
+                         sub: [m.brand, m.unit].filter(Boolean).join(' · '), data: m };
+            }), () => self.syncMaterialUnit(inp));
+        });
+
+        // Materials USED searches what is actually on site, not the whole
+        // catalogue, and shows the remaining balance — you cannot consume
+        // something that was never delivered, and the crew should see the
+        // stock figure before typing a quantity against it.
+        scope.querySelectorAll('.mu-name:not([data-ta])').forEach(inp => {
+            inp.dataset.ta = '1';
+            Typeahead.attach(inp, () => ((self._data && self._data.siteMaterials) || [])
+                .filter(m => (parseFloat(m.remaining) || 0) > 0)
+                .map(m => {
+                    const label = m.material || m.materialName || '';
+                    return { label: label, value: label,
+                             sub: `${fmtMoney(m.remaining)} ${m.unit || ''} on site`, data: m };
+                }), () => self.syncUsedMaterialUnit(inp));
         });
     },
 

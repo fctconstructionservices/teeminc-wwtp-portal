@@ -141,6 +141,19 @@ async function performSearch() {
 
     // debounce + stale-response guard: only the LATEST query may render
     const seq = ++SearchPage._seq;
+
+    // ── v11 BATCH I3: SAY THAT IT IS SEARCHING ──
+    // A search over twenty-odd sheets takes a moment on Apps Script. With
+    // no feedback the screen simply sat there, so people typed again,
+    // which starts another search and makes it slower still. The spinner
+    // is not decoration — it is what stops the retrying.
+    countEl.textContent = 'Searching...';
+    emptyEl.style.display = 'block';
+    emptyEl.querySelector('p').innerHTML =
+        '<span class="search-spin"></span> Searching every record for “' +
+        String(query).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '”...';
+    resultsEl.innerHTML = '';
+
     try {
         const results = await DataService.search(query);
         if (seq !== SearchPage._seq) return;   // a newer search superseded this one
@@ -156,8 +169,15 @@ async function performSearch() {
         emptyEl.style.display = 'none';
 
         // group by type, keep a stable order
-        const order = ['Project', 'Cash Advance', 'Cash Release', 'Incoming Cash', 'Liquidation',
-            'Material', 'Equipment', 'Manpower Role', 'Personnel', 'Billing', 'Transfer'];
+        // v11 BATCH I3: the new record types are ordered too. A type that
+        // is not listed here still renders — it just sorts last — so a
+        // future record type appears in search the day it is added
+        // rather than the day someone remembers this array.
+        const order = ['Project', 'Quotation', 'Purchase Request', 'Purchase Order',
+            'Goods Receipt', 'Supplier Invoice', 'Supplier',
+            'Cash Advance', 'Cash Release', 'Incoming Cash', 'Liquidation', 'Billing',
+            'Material', 'Equipment', 'Manpower Role', 'Personnel', 'Transfer',
+            'Safety', 'Punchlist', 'Drawing', 'OT Request', 'Lesson'];
         const groups = {};
         results.forEach((r, i) => {
             r._idx = i;
@@ -187,6 +207,10 @@ async function performSearch() {
         });
         resultsEl.innerHTML = html;
     } catch (err) {
+        if (seq !== SearchPage._seq) return;
+        emptyEl.style.display = 'block';
+        emptyEl.querySelector('p').textContent = 'Search failed: ' + (err.message || err);
+        countEl.textContent = '0 found';
         if (seq !== SearchPage._seq) return;
         console.error('Search error:', err);
         UI.toast('Error performing search.', 'error');

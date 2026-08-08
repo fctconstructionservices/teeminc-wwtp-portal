@@ -119,13 +119,78 @@ const QuotationsPage = {
             </div>
 
             ${list.length
-                ? `<div class="qt-grid">${list.map(q => this._card(q)).join('')}</div>`
+                ? this._table(list)
                 : `<div class="empty"><p>${this._all.length
                     ? 'No quotations with this status.'
                     : 'No quotations yet. Create one to start pricing a job — you get the full SOW and Estimates tools straight away.'}</p></div>`}`;
     },
 
     setFilter(f) { this._filter = f; this._render(); },
+
+    /**
+     * _table (v11 BATCH I3) - Replaces the card grid, for the same reason
+     * the purchase requests did: cards suit a handful and stop working at
+     * thirty. You cannot scan a column of values, or compare two bids,
+     * when each one is its own box — and comparing bids is most of what
+     * this page is for.
+     */
+    _table(list) {
+        const e = this._esc.bind(this);
+        const pipeline = list.reduce((s, q) => s + (parseFloat(q.quotedValue) || 0), 0);
+        return `<div class="panel" style="padding:0;overflow:hidden;"><div class="scroll-x">
+            <table class="qt-table">
+                <thead><tr>
+                    <th>Quote No.</th><th>Title</th><th>Client</th>
+                    <th class="amt">Quoted</th><th class="amt">Est. cost</th><th class="amt">Margin</th>
+                    <th class="amt">SOW</th><th>Valid to</th><th>Status</th><th></th>
+                </tr></thead>
+                <tbody>${list.map(q => this._row(q)).join('')}</tbody>
+                <tfoot><tr>
+                    <td colspan="3">${list.length} quotation${list.length === 1 ? '' : 's'}</td>
+                    <td class="amt">₱${fmtMoney(pipeline)}</td>
+                    <td colspan="6"></td>
+                </tr></tfoot>
+            </table></div></div>`;
+    },
+
+    _row(q) {
+        const e = this._esc.bind(this);
+        const price = parseFloat(q.quotedValue) || 0;
+        const cost = parseFloat(q.estimatedCost) || 0;
+        const margin = price - cost;
+        const decided = q.status === 'Won' || q.status === 'Lost';
+        const cls = { Draft: '', Sent: 'sent', 'Under Negotiation': 'negot', Won: 'won', Lost: 'lost' }[q.status] || '';
+
+        let actions = decided
+            ? `<button class="btn-sm" onclick="QuotationsPage.openProject('${e(q.projectId)}')">${q.status === 'Won' ? 'Project' : 'Estimate'}</button>`
+            : `<button class="btn-sm" title="Price it" onclick="QuotationsPage.openProject('${e(q.projectId)}')">${Icon.ruler({size:12})}</button>
+               <button class="btn-sm" title="Edit" onclick="QuotationsPage.openEditModal('${e(q.id)}')">${Icon.pencil({size:12})}</button>
+               <button class="btn-sm success" onclick="QuotationsPage.openAwardModal('${e(q.id)}')">Award</button>
+               <button class="btn-sm danger" onclick="QuotationsPage.openLoseModal('${e(q.id)}')">Lost</button>`;
+
+        return `<tr class="${cls}">
+            <td class="mono"><b>${e(q.id)}</b>
+                <div class="muted">Rev ${e(q.revision || 'A')}${q.revisionCount
+                    ? ` · <span class="qt-revcount" onclick="QuotationsPage.openRevisions('${e(q.id)}')">${q.revisionCount} prior</span>` : ''}</div></td>
+            <td>${e(q.title)}
+                ${!decided ? `<div class="qt-stage-inline">${['Draft','Sent','Under Negotiation'].map(st =>
+                    `<button class="${q.status === st ? 'active' : ''}"
+                        onclick="QuotationsPage.setStatus('${e(q.id)}','${st}')">${st === 'Under Negotiation' ? 'Negotiating' : st}</button>`).join('')}</div>` : ''}</td>
+            <td>${e(q.clientName) || '—'}</td>
+            <td class="amt"><b>₱${fmtMoney(price)}</b></td>
+            <td class="amt">${cost > 0 ? '₱' + fmtMoney(cost) : '—'}</td>
+            <td class="amt ${cost > 0 ? (margin < 0 ? 'neg' : 'pos') : ''}">${cost > 0
+                ? `₱${fmtMoney(margin)}<div class="muted">${q.marginPct}%</div>`
+                : '<span class="muted">no estimate</span>'}</td>
+            <td class="amt">${q.sowCount}</td>
+            <td class="mono">${q.validUntil ? this._date(q.validUntil) : '—'}</td>
+            <td><span class="qt-status ${cls}">${e(q.status)}</span>
+                ${decided && q.decisionNote ? `<div class="muted">${e(q.decisionNote)}</div>` : ''}</td>
+            <td class="qt-row-actions">${actions}
+                ${(App.getUser() || {}).role === 'superadmin' && q.status === 'Lost'
+                    ? `<button class="btn-sm danger" onclick="QuotationsPage.remove('${e(q.id)}')">${Icon.trash({size:12})}</button>` : ''}</td>
+        </tr>`;
+    },
 
     _card(q) {
         const e = this._esc.bind(this);
