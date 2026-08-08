@@ -181,6 +181,11 @@ function getAssignableUsers() {
 }
 
 function getProjectData(projectId) {
+  // v11 BATCH I1b: brings SOWItems up to schema. `isTitle` was added in
+  // Hotfix 3 with a note to add the header by hand; a forgotten note is
+  // a feature that silently does nothing, and this is the path every
+  // project view already goes through.
+  ensureSheet_('SOWItems');
   // v6.5 PERF: pull every sheet this page needs in ONE batched pass
   // instead of ~16 separate round-trips. Subsequent readAll_ calls below
   // are served from the per-request memo, so the code stays readable and
@@ -1195,6 +1200,25 @@ function addSOWItem(projectId, data) {
   // a draft estimate nobody could ever approve — and why the tab's
   // "all approved" state, and the print button that depends on it,
   // could never be reached once a title existed.
+  // v11 BATCH I1b: if a group already exists for this id — left over from
+  // an item that was deleted and re-added as a title — remove it now.
+  // Filtering it out on read was not enough: it came back on the next
+  // estimate save, which is exactly the loop that kept titles appearing
+  // on the Estimates tab.
+  if (data.isTitle) {
+    var stale = readAll_('EstimateGroups').find(function (g) {
+      return g.projectId === projectId && String(g.sowId).trim() === String(id).trim();
+    });
+    if (stale) {
+      var lines = 0;
+      ['EstimateMaterials', 'EstimateLabor', 'EstimateEquipment'].forEach(function (sheet) {
+        readAll_(sheet).forEach(function (r) { if (String(r.groupId) === String(stale.id)) lines++; });
+      });
+      readAll_('EstimateIndirect').forEach(function (r) { if (String(r.groupId) === String(stale.id)) lines++; });
+      if (lines === 0) deleteRow_('EstimateGroups', 'id', stale.id);
+    }
+  }
+
   const hasGroup = readAll_('EstimateGroups').some(function (g) {
     return g.projectId === projectId && String(g.sowId) === id;
   });

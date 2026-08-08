@@ -183,7 +183,7 @@ Object.assign(ProjectPage, {
                 </div>
 
                 <div class="col-pred">
-                    ${canEdit ? `<select class="gt-in" onchange="ProjectPage.setPredecessor('${esc(item.id)}', this.value)"
+                    ${canEdit ? `<select class="gt-in" onchange="ProjectPage.stageSched('${esc(item.id)}','pred',this.value)"
                         title="Finish-to-start link — this item follows the selected one">
                         <option value="">— none —</option>${predOpts}
                     </select>` : `<span class="gt-ro">${esc(pred) || '—'}</span>`}
@@ -192,7 +192,7 @@ Object.assign(ProjectPage, {
                 <div class="col-date">
                     ${canEdit ? `<input type="date" class="gt-in" value="${esc(item.startDate)}" ${locked ? 'readonly' : ''}
                         title="${locked ? 'Follows ' + esc(pred) + ' — change that item or clear the link' : 'Start date'}"
-                        onchange="ProjectPage.setSchedField('${esc(item.id)}','start',this.value)" />`
+                        onchange="ProjectPage.stageSched('${esc(item.id)}','start',this.value)" />`
                         : `<span class="gt-ro">${esc(item.startDate) || '—'}</span>`}
                     ${locked ? `<span class="gt-lock" title="Start follows ${esc(pred)}">${Icon.lock({ size: 9 })} ${esc(pred)}</span>` : ''}
                 </div>
@@ -202,19 +202,155 @@ Object.assign(ProjectPage, {
                         ? `<span class="gt-ro">—</span>`
                         : (canEdit ? `<input type="number" min="1" class="gt-in gt-dur" value="${dur}"
                             title="Working days, Sundays excluded"
-                            onchange="ProjectPage.setSchedField('${esc(item.id)}','dur',this.value)" />`
+                            onchange="ProjectPage.stageSched('${esc(item.id)}','dur',this.value)" />`
                           : `<span class="gt-ro">${dur}</span>`)}
                 </div>
 
                 <div class="col-date">
                     ${canEdit ? `<input type="date" class="gt-in" value="${esc(item.endDate)}"
-                        onchange="ProjectPage.setSchedField('${esc(item.id)}','end',this.value)" />`
+                        onchange="ProjectPage.stageSched('${esc(item.id)}','end',this.value)" />`
                         : `<span class="gt-ro">${esc(item.endDate) || '—'}</span>`}
                 </div>
             </div>`;
     },
 
     // ─── editing ──────────────────────────────────────────────
+
+    /**
+     * ── v11 BATCH I2: EDIT, THEN SAVE ──
+     *
+     * Every schedule field used to write to the server on `change`. One
+     * keystroke in a duration field meant: recompute the chain, write
+     * every affected row, reload the whole project, redraw the tab. Fix
+     * four items and that happened four times, each one moving the rows
+     * under your cursor while you were still working.
+     *
+     * Changes are now STAGED. Nothing reaches the server until Save. The
+     * chain still recalculates as you type, so you see what a change
+     * does to the items after it — but locally, instantly, and it can be
+     * discarded.
+     *
+     * The staged copy is the source of truth for rendering while it
+     * exists, so what is on screen is always what will be saved.
+     */
+    stageSched(sowId, field, value) {
+        this._schedDraft = this._schedDraft || {};
+        const it = (this._sowItems || []).find(x => x.id === sowId);
+        if (!it) return;
+
+        let start = this._sDay(it.startDate);
+        let end = this._sDay(it.endDate);
+        let dur = (start && end) ? this._sWorkBetween(start, end) : 1;
+
+        if (field === 'pred') {
+            if (value === sowId) { UI.toast('An item cannot depend on itself.', 'error'); return; }
+            if (value && this._wouldCycle(sowId, value)) {
+                UI.toast(`Linking ${sowId} to ${value} would create a circular dependency.`, 'error');
+                this._renderGanttChart(this._data);
+                return;
+            }
+            it.predecessors = value;
+            if (value) {
+                const pred = (this._sowItems || []).find(x => x.id === value);
+                const pEnd = this._sDay(pred && pred.endDate);
+                if (pEnd) {
+                    const ns = this._sNextWork(new Date(pEnd.getTime() + this._MS_DAY));
+                    it.startDate = this._sFmt(ns);
+                    it.endDate = this._sFmt(this._sAddWork(ns, dur));
+                }
+            }
+        } else if (field === 'start') {
+            const ns = this._sDay(value);
+            if (!ns) { UI.toast('Enter a valid start date.', 'error'); return; }
+            const s2 = this._sNextWork(ns);
+            it.startDate = this._sFmt(s2);
+            it.endDate = this._sFmt(this._sAddWork(s2, dur));
+        } else if (field === 'dur') {
+            const nd = parseInt(value, 10);
+            if (!nd || nd < 1) { UI.toast('Duration must be at least 1 working day.', 'error'); return; }
+            if (!start) start = this._sNextWork(new Date());
+            it.startDate = this._sFmt(start);
+            it.endDate = this._sFmt(this._sAddWork(start, nd));
+        } else if (field === 'end') {
+            const ne = this._sDay(value);
+            if (!ne) { UI.toast('Enter a valid finish date.', 'error'); return; }
+            if (!start) start = this._sNextWork(new Date());
+            if (ne < start) { UI.toast('The finish date cannot be earlier than the start date.', 'error'); return; }
+            it.endDate = this._sFmt(ne);
+        }
+
+        this._schedDraft[sowId] = true;
+        // Successors follow as you type, so the effect of a change is
+        // visible before it is committed — which is the whole reason for
+        // staging rather than saving.
+        this._chainSuccessors().forEach(p => {
+            const t = (this._sowItems || []).find(x => x.id === p.id);
+            if (!t) return;
+            t.startDate = p.startDate;
+            t.endDate = p.endDate;
+            this._schedDraft[p.id] = true;
+        });
+
+        this._renderGanttChart(this._data);
+        this._paintSchedDirty();
+    },
+
+    _schedDirtyCount() { return Object.keys(this._schedDraft || {}).length; },
+
+    /** _paintSchedDirty - the unsaved-changes bar. */
+    _paintSchedDirty() {
+        const bar = document.getElementById('schedDirtyBar');
+        if (!bar) return;
+        const n = this._schedDirtyCount();
+        bar.style.display = n ? 'flex' : 'none';
+        const label = document.getElementById('schedDirtyLabel');
+        if (label) label.textContent = `${n} unsaved change${n === 1 ? '' : 's'}`;
+    },
+
+    /** saveSchedule - one write for everything that changed. */
+    async saveSchedule() {
+        const ids = Object.keys(this._schedDraft || {});
+        if (!ids.length) { UI.toast('Nothing to save.', 'success'); return; }
+
+        const patches = ids.map(id => {
+            const it = (this._sowItems || []).find(x => x.id === id);
+            if (!it) return null;
+            return {
+                id: id,
+                startDate: it.startDate || '',
+                endDate: it.endDate || '',
+                predecessors: it.predecessors || ''
+            };
+        }).filter(Boolean);
+
+        const btn = document.getElementById('schedSaveBtn');
+        if (btn) { btn.textContent = 'Saving...'; btn.disabled = true; }
+        try {
+            for (const p of patches) {
+                await DataService.updateSOWItem(this._currentProjectId, p.id, {
+                    startDate: p.startDate, endDate: p.endDate, predecessors: p.predecessors
+                });
+            }
+            this._schedDraft = {};
+            UI.toast(`Schedule saved — ${patches.length} item(s) updated.`, 'success');
+            await this.open(this._currentProjectId, true);
+            this.switchTab('gantt');
+        } catch (err) {
+            UI.toast('' + err.message, 'error');
+            if (btn) { btn.textContent = 'Save changes'; btn.disabled = false; }
+        }
+    },
+
+    /** discardSchedule - throws the staged edits away by reloading. */
+    async discardSchedule() {
+        if (!this._schedDirtyCount()) return;
+        const ok = await Confirm.open('Discard changes?',
+            `${this._schedDirtyCount()} unsaved schedule change(s) will be lost.`);
+        if (!ok) return;
+        this._schedDraft = {};
+        await this.open(this._currentProjectId, true);
+        this.switchTab('gantt');
+    },
 
     /**
      * setSchedField - one edit, applied consistently:

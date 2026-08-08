@@ -11,8 +11,39 @@
 Object.assign(ProjectPage, {
 
     // ─── ESTIMATES ──────────────────────────────────────────────
+    /**
+     * _isSuper (v11 BATCH I1) - Super Admin requests are auto-approved by
+     * the backend, so a button that says "Submit for Approval" is telling
+     * them something untrue. The label follows what will actually happen.
+     */
+    _isSuper() { return (App.getUser() || {}).role === 'superadmin'; },
+
     renderEstimates(p) {
+        const isSuper = this._isSuper();
         const container = document.getElementById('proj-tab-estimates');
+
+        // ── v11 BATCH I1b: HEADINGS ARE FILTERED HERE TOO ──
+        // The backend already refuses to create or return a group for a
+        // heading. This repeats the check on the client for one reason:
+        // the frontend and the Apps Script backend deploy SEPARATELY, so
+        // a page can be a deploy ahead of its server. Without this, a
+        // title shows an estimate until the backend catches up — which
+        // is exactly what you were seeing.
+        //
+        // It is a display filter, not a data change. Nothing is deleted;
+        // the group simply is not drawn, and the backend removes the row
+        // itself on the next save.
+        const _headingIds = {};
+        (this._sowItems || []).forEach(x => {
+            if (x.isHeading || x.isTitle === true || String(x.isTitle).toUpperCase() === 'TRUE') {
+                _headingIds[String(x.id).trim()] = true;
+            }
+        });
+        // Skipped during render rather than filtered out of the array:
+        // every action on a card addresses its group by INDEX into
+        // this._estimatesData.groups, so re-indexing here would make the
+        // Approve button on one card act on a different estimate.
+        this._skipEstimate = g => !!_headingIds[String(g.sowId).trim()];
         const est = this._estimatesData || { groups: [] };
 
         const approvedMats = this._approvedMaterials || [];
@@ -20,6 +51,7 @@ Object.assign(ProjectPage, {
 
         let grandTotal = 0;
         (est.groups || []).forEach(g => {
+            if (this._skipEstimate(g)) return;
             // v5 (item 8): indirect costs derive from direct costs, so a
             // draft group recomputes them live before totalling. Locked
             // groups keep the frozen values persisted at approval time.
@@ -39,7 +71,7 @@ Object.assign(ProjectPage, {
                 ${(() => {
                     // v8 (6.9): once EVERY estimate group is approved, the
                     // project cost is final — unlock DUPA + Summary exports.
-                    const groups = est.groups || [];
+                    const groups = (est.groups || []).filter(g => !this._skipEstimate(g));
                     const allApproved = groups.length > 0 && groups.every(g => g.status === 'approved');
                     if (!allApproved) return '';
                     return `<div class="panel" style="margin-bottom:14px;background:var(--blueprint-tint);">
@@ -58,10 +90,11 @@ Object.assign(ProjectPage, {
 
                 <div id="estGroupsContainer">`;
 
-        if ((est.groups || []).length === 0) {
+        if ((est.groups || []).filter(g => !this._skipEstimate(g)).length === 0) {
             html += `<div class="empty"><p>No SOW groups. Add a new SOW group below.</p></div>`;
         } else {
             (est.groups || []).forEach((group, gIdx) => {
+                if (this._skipEstimate(group)) return;   // v11 BATCH I1b
                 const isApproved = group.status === 'approved';
                 const isPending = group.status === 'pending';
                 const isDraft = group.status === 'draft' || !group.status;
@@ -122,7 +155,7 @@ Object.assign(ProjectPage, {
                                     ₱${fmtMoney((group._total || 0))}
                                 </div>
                                 ${isDraft ? `<div class="eg-footer-actions" style="margin-top:12px;display:flex;justify-content:flex-end;border-top:1px dashed var(--line);padding-top:12px;">
-                                    <button class="btn-sm amber" onclick="ProjectPage.submitEstimateGroup('${gIdx}')">Submit for Approval</button>
+                                    <button class="btn-sm ${isSuper ? 'success' : 'amber'}" onclick="ProjectPage.submitEstimateGroup('${gIdx}')">${isSuper ? 'Approve Estimate' : 'Submit for Approval'}</button>
                                 </div>` : ''}
                             </div>
                         </div>`;
@@ -132,7 +165,12 @@ Object.assign(ProjectPage, {
         html += `
                 </div>
                 <div class="submit-row" style="margin-top:16px;">
-                    ${this._canEdit !== false ? `<button class="btn-primary" onclick="ProjectPage.addSOWGroup()">+ Add SOW Group</button>
+                    <!-- v11 BATCH I1: "+ Add SOW Group" removed. An estimate group
+                         is created automatically for every priced SOW item, so the
+                         button could only ever add one for an item that already had
+                         one, or for a heading — which is not estimable. It had no
+                         case left where it did something useful. -->
+                    ${this._canEdit !== false ? `
                     <button class="btn-ghost" onclick="ProjectPage.saveAllEstimates()">${Icon.save({size:14})} Save All Drafts</button>` : ''}
 
                 </div>`;
@@ -576,13 +614,20 @@ Object.assign(ProjectPage, {
             (group.equipment && group.equipment.length > 0) ||
             (group.indirect && group.indirect.length > 0);
         if (!hasData) { UI.toast('Add at least one item before submitting.', 'error'); return; }
-        const confirmed = await Confirm.open('Submit for Approval?',
-            `Submit ${group.sowId} — ${group.sowDescription} for approval?`);
+        // v11 BATCH I1: a Super Admin's submission is auto-approved by the
+        // backend, so asking them to "submit for approval" describes
+        // something that will not happen. The wording matches the outcome.
+        const isSuper = this._isSuper();
+        const confirmed = await Confirm.open(
+            isSuper ? 'Approve this estimate?' : 'Submit for Approval?',
+            isSuper
+                ? `Approve ${group.sowId} — ${group.sowDescription}? It locks immediately and becomes the contract basis for billing.`
+                : `Submit ${group.sowId} — ${group.sowDescription} for approval?`);
         if (!confirmed) return;
 
         const submitBtn = document.querySelector(`.est-group-card[data-group-idx="${gIdx}"] .eg-footer-actions button`);
         const originalLabel = submitBtn ? submitBtn.textContent : '';
-        if (submitBtn) { submitBtn.textContent = 'Submitting...'; submitBtn.disabled = true; }
+        if (submitBtn) { submitBtn.textContent = isSuper ? 'Approving...' : 'Submitting...'; submitBtn.disabled = true; }
 
         try {
             // v6.7 PERF: save ONLY the group being submitted — the old code
@@ -590,16 +635,28 @@ Object.assign(ProjectPage, {
             // project rewrote all four estimate sheets ten times over.
             await DataService.saveEstimates(this._currentProjectId, [group]);
             await DataService.submitEstimatesForApproval(this._currentProjectId, group.sowId);
-            group.status = 'pending';
             // v5 (item 3 FIX): mark the submitter locally too. Without this,
             // the immediate re-render didn't know who submitted, so the
             // Submit/Approve buttons flashed instead of the
             // "Submitted — awaiting approval" text until a full reload.
             group.submittedBy = (App.getUser() && App.getUser().email) || '';
             group.approvedBy = [];
-            this.renderEstimates(this._data);
-            this.renderSOWBudget(this._data);
-            UI.toast(`${group.sowId} submitted for approval.`, 'success');
+            // v11 BATCH I1: the backend auto-approves a Super Admin's
+            // submission. Reloading rather than assuming 'pending' means
+            // the card shows the state the server actually recorded — a
+            // locally assumed status that the server disagreed with was
+            // how the old flow showed "awaiting approval" on something
+            // already approved.
+            if (isSuper) {
+                await this.open(this._currentProjectId, true);
+                this.switchTab('estimates');
+                UI.toast(`${group.sowId} approved.`, 'success');
+            } else {
+                group.status = 'pending';
+                this.renderEstimates(this._data);
+                this.renderSOWBudget(this._data);
+                UI.toast(`${group.sowId} submitted for approval.`, 'success');
+            }
             this._updateApprovalBadge();
         } catch (err) {
             UI.toast('' + err.message, 'error');

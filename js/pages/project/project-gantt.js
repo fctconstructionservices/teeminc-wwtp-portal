@@ -177,6 +177,17 @@ Object.assign(ProjectPage, {
                 ${canEdit ? `<button class="btn-sm" style="margin-left:auto" onclick="ProjectPage.recalcSchedule()"
                     title="Re-apply every predecessor link from the top down">${Icon.refresh({size:12})} Recalculate chain</button>` : ''}
             </div>
+            <!-- v11 BATCH I2: the unsaved-changes bar. Schedule edits are
+                 staged locally and written in ONE go, so fixing four items
+                 no longer means four server round-trips redrawing the rows
+                 under your cursor. -->
+            <div class="sched-dirty" id="schedDirtyBar" style="display:none;">
+                ${Icon.warning({size:13})}
+                <span id="schedDirtyLabel"></span>
+                <span class="sd-hint">Nothing has been sent to the server yet.</span>
+                <button class="btn-sm" onclick="ProjectPage.discardSchedule()">Discard</button>
+                <button class="btn-sm primary" id="schedSaveBtn" onclick="ProjectPage.saveSchedule()">Save changes</button>
+            </div>
             <div class="gt" id="ganttBox">
                 <div class="gt-scroll" id="ganttScroll">
                     <div class="gt-grid" id="ganttGrid"></div>
@@ -199,6 +210,7 @@ Object.assign(ProjectPage, {
         this._ganttData = this._sowItems;
         this._renderGanttChart(p);
         this._wireGanttSplitter();
+        this._paintSchedDirty();
         // Open centred on today the first time this PROJECT's timeline is
         // drawn. Keyed on the project id, not a plain boolean, so opening
         // a second project re-centres instead of inheriting the scroll
@@ -700,15 +712,23 @@ ${this._gShort(hs)} → ${this._gShort(he)} · ${item.childCount} item(s)${rp ==
             const newStart = self._gFmt(ns), newEnd = self._gFmt(ne);
             if (newStart === item.startDate && newEnd === item.endDate) return;
 
-            try {
-                await DataService.updateSOWItem(self._currentProjectId, item.id, { startDate: newStart, endDate: newEnd });
-                item.startDate = newStart; item.endDate = newEnd;
-                UI.toast(`${item.id} moved: ${newStart} → ${newEnd}`, 'success');
-                self._renderGanttChart(self._data);   // recompute CPM + links + health
-            } catch (err) {
-                UI.toast('Failed to save dates: ' + err.message, 'error');
-                self._renderGanttChart(self._data);   // revert view
-            }
+            // v11 BATCH I2: a drag STAGES the change like every other
+            // schedule edit. Dragging four bars and then pressing Save
+            // once is the same shape of interaction as typing four
+            // durations — and it means a mis-drag can be discarded.
+            item.startDate = newStart;
+            item.endDate = newEnd;
+            self._schedDraft = self._schedDraft || {};
+            self._schedDraft[item.id] = true;
+            self._chainSuccessors().forEach(p => {
+                const t = (self._sowItems || []).find(x => x.id === p.id);
+                if (!t) return;
+                t.startDate = p.startDate;
+                t.endDate = p.endDate;
+                self._schedDraft[p.id] = true;
+            });
+            self._renderGanttChart(self._data);
+            self._paintSchedDirty();
         };
 
         const begin = (el, e, m) => {

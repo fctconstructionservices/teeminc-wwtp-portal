@@ -365,6 +365,11 @@ Object.assign(ProjectPage, {
                     <span class="sh-desc">${item.description || ''}</span>
                     <span class="sh-count">${item.childCount} item${item.childCount === 1 ? '' : 's'}</span>
                     <span class="sh-nums">
+                        <!-- v11 BATCH I1: the estimate was missing. Budget is
+                             what was allowed; the estimate is what was priced.
+                             A heading showing one without the other tells half
+                             the story, and it is the half that matters least. -->
+                        <span><em>Estimate</em><b>₱${fmtMoney(parseFloat(item.rollupEstimate) || 0)}</b></span>
                         <span><em>Budget</em><b>₱${fmtMoney(rb)}</b></span>
                         <span><em>Actual</em><b>₱${fmtMoney(ra)}</b></span>
                         <span class="${rv < 0 ? 'neg' : 'pos'}"><em>Variance</em><b>${rv < 0 ? '-' : '+'}₱${fmtMoney(Math.abs(rv))}</b></span>

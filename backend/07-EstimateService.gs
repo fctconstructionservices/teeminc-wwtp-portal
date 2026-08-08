@@ -31,10 +31,23 @@ function saveEstimates(projectId, groups) {
     if (row.projectId === projectId) bySow[row.sowId] = row;
   });
 
+  // ── v11 BATCH I1: HEADINGS ARE REFUSED HERE ──
+  // Filtering heading groups out on READ was not enough: this function
+  // recreates a group for whatever the client sends, so a title kept
+  // getting a fresh row on every save and the problem came straight
+  // back. The guard belongs on the WRITE, where it is authoritative
+  // whatever the client believes.
+  const headingIds = {};
+  buildSowTree_(readAll_('SOWItems').filter(function (x) {
+    return x.projectId === projectId;
+  })).forEach(function (x) { if (x.isHeading) headingIds[String(x.id).trim()] = true; });
+
   const gHeads = headers_('EstimateGroups');
   const targets = [];
   const newGroupRows = [];
+  const refused = [];
   (groups || []).forEach(function (g) {
+    if (headingIds[String(g.sowId).trim()]) { refused.push(g.sowId); return; }
     const row = bySow[g.sowId];
     if (row && (row.status === 'approved' || row.status === 'pending')) return;   // locked
     let groupId;
@@ -53,12 +66,27 @@ function saveEstimates(projectId, groups) {
     targets.push({ groupId: groupId, g: g });
   });
 
+  // Old data self-heals: a stale group belonging to a heading is removed
+  // ONLY when it is empty. One holding priced lines is left for a person
+  // to move — deleting money to tidy a display is not a trade worth
+  // making, and the SOW tab's "Check titles" reports those.
+  Object.keys(headingIds).forEach(function (sid) {
+    var row = bySow[sid];
+    if (!row) return;
+    var lines = 0;
+    ['EstimateMaterials', 'EstimateLabor', 'EstimateEquipment'].forEach(function (sheet) {
+      readAll_(sheet).forEach(function (r) { if (String(r.groupId) === String(row.id)) lines++; });
+    });
+    readAll_('EstimateIndirect').forEach(function (r) { if (String(r.groupId) === String(row.id)) lines++; });
+    if (lines === 0) deleteRow_('EstimateGroups', 'id', row.id);
+  });
+
   if (newGroupRows.length) {
     const gsh = sheet_('EstimateGroups');
     gsh.getRange(gsh.getLastRow() + 1, 1, newGroupRows.length, gHeads.length).setValues(newGroupRows);
     _invalidateRead_('EstimateGroups');
   }
-  if (!targets.length) return { success: true, saved: 0 };
+  if (!targets.length) return { success: true, saved: 0, refused: refused };
 
   const targetIds = {};
   targets.forEach(function (t) { targetIds[String(t.groupId)] = true; });
@@ -97,7 +125,7 @@ function saveEstimates(projectId, groups) {
     if (all.length) sh.getRange(2, 1, all.length, heads.length).setValues(all);
     _invalidateRead_(sheetName);
   });
-  return { success: true, saved: targets.length };
+  return { success: true, saved: targets.length, refused: refused };
 }
 
 
@@ -106,8 +134,24 @@ function submitEstimatesForApproval(projectId, sowId) {
   const g = readAll_('EstimateGroups').find(function (row) { return row.projectId === projectId && row.sowId === sowId; });
   if (!g) throw new Error('Estimate group not found');
   updateRow_('EstimateGroups', 'id', g.id, { status: 'pending', submittedBy: currentUserEmail_() });
+
+  // ── v11 BATCH I1: SUPER ADMIN AUTO-APPROVE ──
+  // Every other request type has behaved this way since Batch A, but
+  // estimates were missed — so a Super Admin submitted an estimate and
+  // then had to wait for approvers who, by the system's own rules,
+  // could never be needed. The approval routes through approveEstimates
+  // so the budget write-back and the activity log happen exactly as they
+  // do for a normal approval; short-circuiting the status would skip
+  // both and leave the SOW budget unwritten.
+  if (currentUserRole_() === 'superadmin') {
+    approveEstimates(projectId, sowId);
+    logActivity_('Estimate for ' + sowId + ' approved on submission by Super Admin ' +
+      currentUserName_(), 'g');
+    return { success: true, autoApproved: true };
+  }
+
   logActivity_('Estimate for ' + sowId + ' submitted for approval by ' + currentUserName_(), 'g');
-  return { success: true };
+  return { success: true, autoApproved: false };
 }
 
 function approveEstimates(projectId, sowId) {

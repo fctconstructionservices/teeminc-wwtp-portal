@@ -111,7 +111,7 @@ function sowNaturalKey_(id) {
  * PROGRESS IS WEIGHTED BY BUDGET, not averaged. A heading holding one
  * ₱980,000 item at 0% and two ₱50,000 items at 100% must not read 67%.
  */
-function buildSowTree_(items) {
+function buildSowTree_(items, estimateTotals) {
   var list = (items || []).map(function (s) { return s; });
   if (!list.length) return list;
 
@@ -135,12 +135,37 @@ function buildSowTree_(items) {
     // top for display purposes — a child with no heading is not an error.
     var dp = sowDirectParent_(s.id);
     s.parentId = (dp && byId[dp]) ? dp : '';
-    // v11 BATCH H5: a title flagged at creation is a heading even before
-    // anything sits under it. Without this, a freshly added title is
-    // indistinguishable from a priced item, so the Timeline reports
-    // "setup incomplete" and the Estimates tab waits for an estimate
-    // that will never come.
-    s.isHeading = kids.length > 0 || truthy_(s.isTitle);
+    // ── v11 BATCH I1: WHAT MAKES A HEADING ──
+    //
+    // Two rules, and the second is the one that fixes existing data.
+    //
+    // 1. A TITLE FLAGGED AT CREATION is always a heading, even before
+    //    anything sits under it. Without this a freshly added title is
+    //    indistinguishable from a priced item, so the Timeline reports
+    //    "setup incomplete" and the Estimates tab waits for an estimate
+    //    that will never come.
+    //
+    // 2. AN ITEM THAT HAS BEEN PRICED IS NEVER A HEADING, whatever sits
+    //    beneath it. Deriving purely from the ids was wrong for data
+    //    created before titles existed: an item numbered "1" with a real
+    //    estimate became a heading the moment someone added "1.1", and
+    //    its estimate vanished from the Estimates tab even though the
+    //    money was still in the sheet.
+    //
+    //    So a heading must have nothing of its own — no estimate, no
+    //    budget. That resolves the existing projects with NO migration:
+    //    a priced "1" keeps its estimate and simply gains indented
+    //    neighbours, and a genuine empty title still becomes a heading.
+    //
+    //    An explicit flag always wins, so anything the rule gets wrong
+    //    can be corrected from the SOW tab.
+    var ownEstimate = parseFloat(s.estimateTotal);
+    if (isNaN(ownEstimate) && estimateTotals) ownEstimate = parseFloat(estimateTotals[id]);
+    ownEstimate = isNaN(ownEstimate) ? 0 : ownEstimate;
+    var ownBudget = parseFloat(s.budget) || 0;
+
+    s.isHeading = truthy_(s.isTitle) ||
+      (kids.length > 0 && ownEstimate <= 0 && ownBudget <= 0);
     s.childCount = direct.length;
 
     var own = [s].concat(kids);
@@ -148,6 +173,14 @@ function buildSowTree_(items) {
       return a + (parseFloat(x.budget) || 0); }, 0) * 100) / 100;
     s.rollupActual = Math.round(own.reduce(function (a, x) {
       return a + (parseFloat(x.actual) || 0); }, 0) * 100) / 100;
+    // v11 BATCH I1: headings showed budget, actual, variance and progress
+    // but not the ESTIMATE — which is the figure the budget is supposed
+    // to be checked against, so its absence made the row half a story.
+    s.rollupEstimate = Math.round(own.reduce(function (a, x) {
+      var v = parseFloat(x.estimateTotal);
+      if (isNaN(v) && estimateTotals) v = parseFloat(estimateTotals[sowTrim_(x.id).replace(/\.+$/, '')]);
+      return a + (isNaN(v) ? 0 : v);
+    }, 0) * 100) / 100;
 
     var priced = own.filter(function (x) {
       return !(descendants[sowTrim_(x.id).replace(/\.+$/, '')] || []).length &&
