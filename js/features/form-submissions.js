@@ -28,6 +28,80 @@ function wireRequestBudgetCheck() {
     wireRequestBudgetCheck._done = true;
 }
 
+/**
+ * ── v11 BATCH H3: VENDOR LOOKUP ON LIQUIDATION ──
+ *
+ * The vendor name stays FREE TEXT. Most liquidations are for the corner
+ * hardware you buy from once, and forcing every one of those into the
+ * supplier list would fill it with names nobody will ever use again.
+ *
+ * But when the vendor IS on record, the TIN should not have to be
+ * looked up by hand — that is the field people leave blank, because
+ * they do not have it in front of them. So a datalist offers the
+ * suppliers you already have, and choosing one fills in the TIN.
+ *
+ * The match is case- and whitespace-insensitive, so a name typed by
+ * hand still matches a supplier record.
+ *
+ * The TIN is only overwritten when it is empty or still holds the value
+ * a previous match put there. Someone who typed a TIN by hand keeps it.
+ */
+var _liqSuppliers = [];
+var _liqAutoFilledTin = '';
+
+async function loadLiquidationVendors() {
+    if (_liqSuppliers.length) return;
+    if (!getSessionToken()) return;
+    try {
+        _liqSuppliers = (await DataService.getSuppliers()) || [];
+    } catch (err) {
+        _liqSuppliers = [];   // never block the form on this
+        return;
+    }
+    const dl = document.getElementById('liq-vendor-list');
+    if (!dl) return;
+    dl.innerHTML = _liqSuppliers
+        .filter(s => String(s.status || 'active').toLowerCase() !== 'inactive')
+        .map(s => `<option value="${String(s.name).replace(/"/g, '&quot;')}"></option>`)
+        .join('');
+}
+
+function matchLiquidationVendor() {
+    const nameEl = document.getElementById('liq-vendor');
+    const tinEl = document.getElementById('liq-tin');
+    const hint = document.getElementById('liq-vendor-hint');
+    if (!nameEl || !tinEl) return;
+
+    const typed = nameEl.value.trim().toLowerCase();
+    const hit = typed
+        ? _liqSuppliers.find(s => String(s.name || '').trim().toLowerCase() === typed)
+        : null;
+
+    if (hit) {
+        if (!tinEl.value.trim() || tinEl.value.trim() === _liqAutoFilledTin) {
+            tinEl.value = hit.tin || '';
+            _liqAutoFilledTin = hit.tin || '';
+        }
+        if (hint) {
+            hint.textContent = hit.tin
+                ? `On record — TIN filled from ${hit.name} (${hit.termsLabel || 'terms not set'}).`
+                : `On record, but no TIN is saved against ${hit.name}. Add it under Knowledge Base → Suppliers.`;
+            hint.style.color = hit.tin ? 'var(--green)' : 'var(--amber)';
+        }
+        return;
+    }
+
+    // Typed away from a match: clear only what we filled in.
+    if (tinEl.value.trim() && tinEl.value.trim() === _liqAutoFilledTin) {
+        tinEl.value = '';
+        _liqAutoFilledTin = '';
+    }
+    if (hint) {
+        hint.textContent = typed ? 'Not on the supplier list — enter the TIN by hand.' : '';
+        hint.style.color = 'var(--ink-soft)';
+    }
+}
+
 function setDateNeededMin() {
     const dateInput = document.getElementById('req-date');
     if (!dateInput) return;

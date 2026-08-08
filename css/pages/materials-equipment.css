@@ -166,3 +166,26 @@
         border-bottom: 1px solid #eee !important;
     }
 }
+
+/* ================================================================
+   v11 BATCH H3 — PERSONNEL PHOTO
+
+   A personnel record without a face is of limited use on site, where
+   the point is recognising who is being referred to.
+   ================================================================ */
+
+.prs-name-cell { display: flex; align-items: center; gap: 9px; }
+.prs-thumb {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid var(--line);
+    flex-shrink: 0;
+    background: var(--bg);
+}
+.field-hint { font-size: 11px; color: var(--ink-soft); margin: 4px 0 0; line-height: 1.45; }
+
+@media print {
+    .prs-thumb { display: none !important; }
+}

@@ -150,53 +150,93 @@ const MatPrintModal = {
         document.getElementById('matPrintModal').classList.remove('open');
         document.body.style.overflow = '';
     },
+    _e(v) {
+        return String(v == null ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    },
+
+    /**
+     * renderPrintView (v11 BATCH H3) - The material datasheet.
+     *
+     * ── WHAT WAS WRONG ──
+     * The heading read "Brand — Specifications". A brand is not an
+     * identifier and a specification string is not a name, so two
+     * different cements from the same supplier produced the same
+     * heading, and a material with no brand produced "Material — ".
+     *
+     * Worse: the two fields the request form marks REQUIRED — Material
+     * Name and Material Description — appeared NOWHERE in the datasheet.
+     * The record you were shown was missing the only two things you had
+     * to type to create it.
+     *
+     * The heading is now the ID and the description, and every field on
+     * the request form has a place here, in the order the form asks for
+     * them. Blank fields print as an em-dash rather than being dropped:
+     * on a SPEC SHEET "not specified" is information, unlike a request
+     * modal where an empty row is only noise.
+     */
     renderPrintView(m) {
-        const imgHtml = m.image ? `<img src="${m.image}" alt="${m.brand}" />` :
-            `<div class="no-img-placeholder">${Icon.package({size:28})}<br>No Image</div>`;
+        const e = this._e.bind(this);
+        const imgHtml = m.image
+            ? `<img src="${driveImgSrc(m.image)}" alt="${e(m.name || m.id)}"
+                    onerror="this.style.display='none'" />`
+            : `<div class="no-img-placeholder">${Icon.package({size:28})}<br>No Image</div>`;
+        const V = (label, val, full) =>
+            `<div class="dg-item${full ? ' full' : ''}"><span class="dg-label">${label}</span><span class="dg-value">${e(val) || '—'}</span></div>`;
+
         return `
                 <div class="detail-print-header">
                     <div class="dph-left">
-                        <h2>${m.brand || 'Material'} — ${m.specs || ''}</h2>
-                        <div class="dph-id">${m.id} · ${m.category || ''} ${m.subcategory ? '→ ' + m.subcategory : ''}</div>
+                        <h2>${e(m.id)} — ${e(m.desc || m.description || m.name) || 'Material'}</h2>
+                        <div class="dph-id">${e(m.name) || ''}${m.category ? ' · ' + e(m.category) : ''}${m.subcategory ? ' → ' + e(m.subcategory) : ''}</div>
                     </div>
                     <div class="dph-right">${imgHtml}</div>
                 </div>
+
                 <div class="print-section"><div class="ps-title">General Information</div>
                     <div class="detail-grid">
-                        <div class="dg-item"><span class="dg-label">Material ID</span><span class="dg-value">${m.id}</span></div>
-                        <div class="dg-item"><span class="dg-label">Category</span><span class="dg-value">${m.category || '—'}</span></div>
-                        <div class="dg-item"><span class="dg-label">Subcategory</span><span class="dg-value">${m.subcategory || '—'}</span></div>
-                        <div class="dg-item"><span class="dg-label">Unit of Measurement</span><span class="dg-value">${m.unit || '—'}</span></div>
+                        ${V('Material ID', m.id)}
+                        ${V('Material Name', m.name)}
+                        ${V('Description', m.desc || m.description, true)}
+                        ${V('Category', m.category)}
+                        ${V('Subcategory', m.subcategory)}
+                        ${V('Unit of Measurement', m.unit)}
                     </div>
                 </div>
-                <div class="print-section"><div class="ps-title">Material Identification</div>
+
+                <div class="print-section"><div class="ps-title">Identification and Sourcing</div>
                     <div class="detail-grid">
-                        <div class="dg-item"><span class="dg-label">Brand</span><span class="dg-value">${m.brand || '—'}</span></div>
-                        <div class="dg-item"><span class="dg-label">Model / Serial No.</span><span class="dg-value">${m.model || '—'}</span></div>
+                        ${V('Brand', m.brand)}
+                        ${V('Model / Serial No.', m.model)}
+                        ${V('Supplier', m.supplier)}
+                        ${V('Reference Rate', m.rate ? '₱' + fmtMoney(parseFloat(m.rate) || 0) + (m.unit ? ' / ' + e(m.unit) : '') : '')}
                     </div>
                 </div>
+
                 <div class="print-section"><div class="ps-title">Technical Specifications</div>
                     <div class="detail-grid">
-                        <div class="dg-item full"><span class="dg-label">Specifications</span><span class="dg-value">${m.specs || '—'}</span></div>
-                        <div class="dg-item"><span class="dg-label">Grade</span><span class="dg-value">${m.grade || '—'}</span></div>
-                        <div class="dg-item"><span class="dg-label">Size / Dimension</span><span class="dg-value">${m.size || '—'}</span></div>
-                        <div class="dg-item"><span class="dg-label">Length</span><span class="dg-value">${m.length || '—'}</span></div>
-                        <div class="dg-item"><span class="dg-label">Thickness</span><span class="dg-value">${m.thickness || '—'}</span></div>
-                        <div class="dg-item"><span class="dg-label">Weight</span><span class="dg-value">${m.weight || '—'}</span></div>
+                        ${V('Specifications', m.specs, true)}
+                        ${V('Grade', m.grade)}
+                        ${V('Size / Dimension', m.size)}
+                        ${V('Length', m.length)}
+                        ${V('Thickness', m.thickness)}
+                        ${V('Weight', m.weight)}
+                        ${V('Standard / Code Reference', m.standardCode, true)}
                     </div>
                 </div>
-                <div class="print-section"><div class="ps-title">Standard Codes</div>
-                    <div class="detail-grid">
-                        <div class="dg-item full"><span class="dg-label">Standard / Code Reference</span><span class="dg-value">${m.standardCode || '—'}</span></div>
-                    </div>
-                </div>
-                ${m.pdfUrl ? `<div class="print-section"><div class="ps-title">Documents</div><p style="font-size:12px;display:flex;align-items:center;gap:5px;">${Icon.fileText({size:14})} ${m.pdfUrl}</p></div>` : ''}
+
                 <div class="print-section"><div class="ps-title">Additional Information</div>
                     <div class="detail-grid">
-                        <div class="dg-item full"><span class="dg-label">Typical Use / Application</span><span class="dg-value">${m.application || '—'}</span></div>
-                        <div class="dg-item full"><span class="dg-label">Notes / Remarks</span><span class="dg-value">${m.notes || '—'}</span></div>
+                        ${V('Typical Use / Application', m.application, true)}
+                        ${V('Notes / Remarks', m.notes, true)}
+                        ${V('Status', m.status)}
+                        ${V('Requested By', m.requestedBy)}
                     </div>
                 </div>
+
+                ${AttachmentGallery.render(m.docsJSON || m.pdfUrl, 'Specification documents')}
+
                 <div class="print-actions">
                     <button class="btn-primary" onclick="PrintDoc.print()">${Icon.printer({size:14})} Print</button>
                     <button class="btn-ghost" onclick="MatPrintModal.close()">Close</button>
@@ -220,46 +260,85 @@ const EquipPrintModal = {
         document.getElementById('equipPrintModal').classList.remove('open');
         document.body.style.overflow = '';
     },
-    renderPrintView(e) {
-        const imgHtml = e.image ? `<img src="${e.image}" alt="${e.brand}" />` :
-            `<div class="no-img-placeholder">${Icon.wrench({size:28})}<br>No Image</div>`;
+    _e(v) {
+        return String(v == null ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    },
+
+    /**
+     * renderPrintView (v11 BATCH H3) - The equipment datasheet.
+     *
+     * Same fault as the material one: the heading was "Brand — Model",
+     * which is not an identifier — two identical excavators produced
+     * identical headings and there was no way to tell which record you
+     * had open. It leads with the equipment ID now.
+     *
+     * Every field the request form collects is present, in the order it
+     * is asked for. Blanks print as an em-dash: on a spec sheet, "not
+     * specified" is information.
+     */
+    renderPrintView(q) {
+        const e = this._e.bind(this);
+        const imgHtml = q.image
+            ? `<img src="${driveImgSrc(q.image)}" alt="${e(q.name || q.id)}"
+                    onerror="this.style.display='none'" />`
+            : `<div class="no-img-placeholder">${Icon.wrench({size:28})}<br>No Image</div>`;
+        const V = (label, val, full) =>
+            `<div class="dg-item${full ? ' full' : ''}"><span class="dg-label">${label}</span><span class="dg-value">${e(val) || '—'}</span></div>`;
+        const headline = q.desc || q.name ||
+            [q.brand, q.model].filter(Boolean).join(' ') || q.category || 'Equipment';
+
         return `
                 <div class="detail-print-header">
                     <div class="dph-left">
-                        <h2>${e.brand || 'Equipment'} ${e.model ? '— ' + e.model : ''}</h2>
-                        <div class="dph-id">${e.id} · ${e.category || ''} ${e.type ? '→ ' + e.type : ''}</div>
+                        <h2>${e(q.id)} — ${e(headline)}</h2>
+                        <div class="dph-id">${e(q.category) || ''}${q.ownership ? ' · ' + e(q.ownership) : ''}</div>
                     </div>
                     <div class="dph-right">${imgHtml}</div>
                 </div>
+
                 <div class="print-section"><div class="ps-title">General Information</div>
                     <div class="detail-grid">
-                        <div class="dg-item"><span class="dg-label">Equipment ID</span><span class="dg-value">${e.id}</span></div>
-                        <div class="dg-item"><span class="dg-label">Category / Type</span><span class="dg-value">${e.category || '—'}${e.type ? ' (' + e.type + ')' : ''}</span></div>
-                        <div class="dg-item"><span class="dg-label">Capacity / Rating</span><span class="dg-value">${e.capacity || '—'}</span></div>
-                        <div class="dg-item"><span class="dg-label">Unit</span><span class="dg-value">${e.unit || '—'}</span></div>
+                        ${V('Equipment ID', q.id)}
+                        ${V('Name', q.name)}
+                        ${V('Description', q.desc || q.description, true)}
+                        ${V('Category / Type', q.category || q.type)}
+                        ${V('Unit of Measurement', q.unit)}
                     </div>
                 </div>
-                <div class="print-section"><div class="ps-title">Equipment Identification</div>
+
+                <div class="print-section"><div class="ps-title">Identification and Sourcing</div>
                     <div class="detail-grid">
-                        <div class="dg-item"><span class="dg-label">Brand</span><span class="dg-value">${e.brand || '—'}</span></div>
-                        <div class="dg-item"><span class="dg-label">Model</span><span class="dg-value">${e.model || '—'}</span></div>
-                        <div class="dg-item"><span class="dg-label">Serial Number</span><span class="dg-value">${e.serial || '—'}</span></div>
+                        ${V('Brand', q.brand)}
+                        ${V('Model', q.model)}
+                        ${V('Serial No.', q.serial)}
+                        ${V('Supplier', q.supplier)}
+                        ${V('Reference Rate', q.rate ? '₱' + fmtMoney(parseFloat(q.rate) || 0) + (q.unit ? ' / ' + e(q.unit) : '') : '')}
                     </div>
                 </div>
-                <div class="print-section"><div class="ps-title">Technical Specifications</div>
+
+                <div class="print-section"><div class="ps-title">Specifications and Condition</div>
                     <div class="detail-grid">
-                        <div class="dg-item"><span class="dg-label">Power Source</span><span class="dg-value">${e.powerSource || '—'}</span></div>
-                        <div class="dg-item"><span class="dg-label">Ownership Type</span><span class="dg-value">${e.ownership || '—'}</span></div>
-                        <div class="dg-item"><span class="dg-label">Acquisition Date</span><span class="dg-value">${e.acquisitionDate || '—'}</span></div>
-                        <div class="dg-item"><span class="dg-label">Condition</span><span class="dg-value">${e.condition || '—'}</span></div>
+                        ${V('Capacity', q.capacity)}
+                        ${V('Power Source', q.powerSource)}
+                        ${V('Ownership', q.ownership)}
+                        ${V('Acquisition Date', q.acquisitionDate)}
+                        ${V('Condition', q.condition)}
                     </div>
                 </div>
-                ${e.manual ? `<div class="print-section"><div class="ps-title">Documents</div><p style="font-size:12px;display:flex;align-items:center;gap:5px;">${Icon.fileText({size:14})} ${e.manual}</p></div>` : ''}
+
                 <div class="print-section"><div class="ps-title">Additional Information</div>
                     <div class="detail-grid">
-                        <div class="dg-item full"><span class="dg-label">Notes / Remarks</span><span class="dg-value">${e.notes || '—'}</span></div>
+                        ${V('Operating Manual', q.manual, true)}
+                        ${V('Notes / Remarks', q.notes, true)}
+                        ${V('Status', q.status)}
+                        ${V('Requested By', q.requestedBy)}
                     </div>
                 </div>
+
+                ${AttachmentGallery.render(q.docsJSON, 'Supporting documents')}
+
                 <div class="print-actions">
                     <button class="btn-primary" onclick="PrintDoc.print()">${Icon.printer({size:14})} Print</button>
                     <button class="btn-ghost" onclick="EquipPrintModal.close()">Close</button>

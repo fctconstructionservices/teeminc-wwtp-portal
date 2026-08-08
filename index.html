@@ -601,9 +601,19 @@
                         <input type="text" id="liq-receipt" placeholder="e.g. 1234" />
                         <div class="error-msg">Receipt number is required.</div>
                     </div>
+                    <!-- v11 BATCH H3: free text OR a known supplier. A datalist
+                         keeps typing possible for the corner hardware you buy from
+                         once, while offering the suppliers you already have on
+                         record — and picking one fills in the TIN, which is the
+                         field people leave blank because they do not have it to
+                         hand. -->
                     <div class="field">
                         <label>Vendor Name</label>
-                        <input type="text" id="liq-vendor" placeholder="e.g. ABC Hardware Supply" />
+                        <input type="text" id="liq-vendor" list="liq-vendor-list" autocomplete="off"
+                               placeholder="Type a name, or pick a supplier on record"
+                               oninput="matchLiquidationVendor()" onchange="matchLiquidationVendor()" />
+                        <datalist id="liq-vendor-list"></datalist>
+                        <p class="field-hint" id="liq-vendor-hint"></p>
                     </div>
                     <div class="field">
                         <label>Vendor TIN Number</label>

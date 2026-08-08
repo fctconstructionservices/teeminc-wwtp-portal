@@ -102,6 +102,7 @@ function addPersonnel(data) {
     contactNumber: String(data.contactNumber || '').trim(),
     dailyRate: parseFloat(data.dailyRate) || 0,
     notes: String(data.notes || '').trim(),
+    image: String(data.image || ''),   // v11 BATCH H3
     status: 'active',
     addedBy: currentUserEmail_(),
     createdAt: new Date(),
@@ -127,6 +128,12 @@ function updatePersonnel(id, data) {
   if (data.contactNumber !== undefined) patch.contactNumber = String(data.contactNumber).trim();
   if (data.dailyRate !== undefined) patch.dailyRate = parseFloat(data.dailyRate) || 0;
   if (data.notes !== undefined) patch.notes = String(data.notes).trim();
+  // v11 BATCH H3: only written when a NEW photo was uploaded. Sending an
+  // empty string on every edit would wipe the existing one, which is
+  // how photo fields quietly disappear after a routine rate change.
+  if (data.image !== undefined && String(data.image).trim() !== '') {
+    patch.image = String(data.image).trim();
+  }
   if (data.status !== undefined) patch.status = String(data.status).toLowerCase() === 'inactive' ? 'inactive' : 'active';
   updateRow_('Personnel', 'id', id, patch);
   logActivity_('Personnel ' + id + ' updated by ' + currentUserName_(), 'blue', id);

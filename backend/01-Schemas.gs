@@ -139,8 +139,11 @@ const SCHEMAS = {
   // the Manpower role catalog above. Roles feed the Estimates (planning);
   // Personnel are the real names used for actual site execution.
   // status: 'active' | 'inactive' (operational data, no multi-sig needed).
+  // v11 BATCH H3: `image` appended — a personnel record without a face
+  // is of limited use on site, where the point is recognising who is
+  // being referred to.
   Personnel: ['id', 'name', 'role', 'classification', 'contactNumber', 'dailyRate',
-    'notes', 'status', 'addedBy', 'createdAt', 'updatedAt'],
+    'notes', 'status', 'addedBy', 'createdAt', 'updatedAt', 'image'],
 
   // v9 NEW: OVERTIME authorization. OT time in/out on a Daily Site
   // Record stays LOCKED until an approved OTRequest exists for that
