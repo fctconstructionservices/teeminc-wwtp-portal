@@ -271,6 +271,68 @@
     <!--  MATERIALS DATABASE PAGE                   -->
     <!-- ════════════════════════════════════════════ -->
     <!-- ════════════════════════════════════════════ -->
+    <!--  PURCHASE REQUESTS  (v11 BATCH G1)          -->
+    <!--                                             -->
+    <!--  Every purchase starts here. Cash advances   -->
+    <!--  remain for payroll, fuel and permits — but  -->
+    <!--  BUYING goes through a request so it can be  -->
+    <!--  checked against the estimate first.         -->
+    <!-- ════════════════════════════════════════════ -->
+    <section id="page-purchase-requests" class="page" aria-label="Purchase Requests">
+        <div class="wrap">
+            <div class="topbar">
+                <div class="mark">F</div>
+                <div class="brand">
+                    <div class="name">Purchase Requests</div>
+                    <div class="sub">Checked against your estimate before approval</div>
+                </div>
+                <div class="spacer"></div>
+                <button class="hamburger" onclick="toggleMenu()"></button>
+                <div class="actions" id="topActionsPR">
+                    <button class="theme-toggle" onclick="App.toggleTheme()"></button>
+                    <button onclick="App.navigate('home')">Back</button>
+                </div>
+            </div>
+            <div class="crumb"><button onclick="App.navigate('home')">Home</button> / Purchase Requests</div>
+
+            <div id="purchaseRequestsContent">
+                <div class="loading-overlay"><div class="loader"></div><p>Loading purchase requests...</p></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!--  PAYABLES  (v11 BATCH G2)                   -->
+    <!--                                             -->
+    <!--  Who you owe and when. Every due date is the -->
+    <!--  delivery date plus that supplier's terms.   -->
+    <!--  Paying here is CASH OUT, not cost — the     -->
+    <!--  cost landed when the goods were received.   -->
+    <!-- ════════════════════════════════════════════ -->
+    <section id="page-payables" class="page" aria-label="Payables">
+        <div class="wrap">
+            <div class="topbar">
+                <div class="mark">F</div>
+                <div class="brand">
+                    <div class="name">Payables</div>
+                    <div class="sub">Supplier obligations · Due dates · Aging</div>
+                </div>
+                <div class="spacer"></div>
+                <button class="hamburger" onclick="toggleMenu()"></button>
+                <div class="actions" id="topActionsPayables">
+                    <button class="theme-toggle" onclick="App.toggleTheme()"></button>
+                    <button onclick="App.navigate('home')">Back</button>
+                </div>
+            </div>
+            <div class="crumb"><button onclick="App.navigate('home')">Home</button> / Payables</div>
+
+            <div id="payablesContent">
+                <div class="loading-overlay"><div class="loader"></div><p>Loading payables...</p></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
     <!--  QUOTATIONS  (v11 BATCH F2)                 -->
     <!--                                             -->
     <!--  A quotation is a Projects row with status  -->
@@ -340,6 +402,7 @@
                 <button class="active" data-kb="materials" onclick="KnowledgeBasePage.switchTab('materials')">Materials</button>
                 <button data-kb="equipment" onclick="KnowledgeBasePage.switchTab('equipment')">Tools &amp; Equipment</button>
                 <button data-kb="manpower" onclick="KnowledgeBasePage.switchTab('manpower')">Manpower</button>
+                <button data-kb="suppliers" onclick="KnowledgeBasePage.switchTab('suppliers')">Suppliers</button>
                 <button data-kb="lessons" onclick="KnowledgeBasePage.switchTab('lessons')">Lessons Learned</button>
             </div>
 
@@ -356,6 +419,11 @@
             <div id="kb-tab-manpower" class="kb-tab-content">
                 <div id="manpowerContent">
                     <div class="loading-overlay"><div class="loader"></div><p>Loading manpower...</p></div>
+                </div>
+            </div>
+            <div id="kb-tab-suppliers" class="kb-tab-content">
+                <div id="suppliersContent">
+                    <div class="loading-overlay"><div class="loader"></div><p>Loading suppliers...</p></div>
                 </div>
             </div>
             <div id="kb-tab-lessons" class="kb-tab-content">
@@ -801,6 +869,8 @@
     <script src="js/pages/print-template.js"></script>
     <script src="js/pages/knowledge-base.js"></script>
     <script src="js/pages/quotations.js"></script>
+    <script src="js/pages/purchase-requests.js"></script>
+    <script src="js/pages/payables.js"></script>
     <script src="js/pages/finance.js"></script>
     <script src="js/pages/portfolio.js"></script>
     <script src="js/pages/materials.js"></script>

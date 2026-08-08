@@ -319,6 +319,21 @@ const ApprovalsPage = {
      */
     SECTIONS: [
         {
+            // v11 BATCH G1: every purchase now starts as a PR, so this is
+            // the busiest section. line2 surfaces the budget verdict right
+            // in the inbox — an approver should not have to open a request
+            // to learn it is over the estimate.
+            key: 'purchaseRequests', type: 'PurchaseRequest', title: 'Purchase Requests',
+            icon: () => Icon.package({ size: 16 }),
+            line1: r => `${r.description || 'Purchase request'} — ${r.scope || ''}`,
+            line2: r => [
+                r.route === 'cash' ? 'Cash purchase' : 'Purchase order',
+                (r.lines || []).length + ' item(s)',
+                r.dateNeeded ? 'needed ' + ApprovalsPage._date(r.dateNeeded) : '',
+                r.budgetState === 'over' ? '⚠ OVER the materials estimate'
+                    : r.budgetState === 'near' ? 'close to the estimate' : ''
+            ].filter(Boolean).join(' · ')
+        }, {
             key: 'cashAdvances', type: 'CashAdvance', title: 'Cash Advance Requests',
             icon: () => Icon.wallet({size:16}),
             line1: r => `${r.requestor || '—'} — ${r.projectId || '—'}`,
@@ -591,7 +606,8 @@ const ApprovalsPage = {
             CashAdvance: 'wallet', Liquidation: 'receipt', Estimate: 'ruler',
             Material: 'package', Equipment: 'wrench', DailyRecord: 'clipboardList',
             IncomingCash: 'incoming', CashRelease: 'outgoing', Manpower: 'users',
-            OTRequest: 'timer', Billing: 'spreadsheet'
+            OTRequest: 'timer', Billing: 'spreadsheet',
+            PurchaseRequest: 'package'   // v11 BATCH G1
         };
         const iconFor = t => {
             const name = ICON_BY_TYPE[t];

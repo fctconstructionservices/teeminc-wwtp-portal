@@ -359,7 +359,7 @@ const DataService = {
         // are defaulted so callers can index them without guarding.
         const KEYS = ['cashAdvances', 'releases', 'incomingCash', 'liquidations',
             'materials', 'equipment', 'manpower', 'estimates', 'billings',
-            'dailyRecords', 'otRequests'];
+            'dailyRecords', 'otRequests', 'purchaseRequests'];   // v11 BATCH G1
         const out = Object.assign({}, data);
         KEYS.forEach(k => { out[k] = data[k] || []; });
         // legacy convenience key: the cash-money subset, kept because
@@ -647,6 +647,81 @@ const DataService = {
     },
     async deleteQuotation(id) {
         return await gasCall('deleteQuotation', id);
+    },
+
+    // ── v11 BATCH G1: PROCUREMENT ──
+    async getSuppliers() {
+        return await gasCall('getSuppliers');
+    },
+    async addSupplier(data) {
+        return await gasCall('addSupplier', data);
+    },
+    async updateSupplier(id, data) {
+        return await gasCall('updateSupplier', id, data);
+    },
+    async deleteSupplier(id) {
+        return await gasCall('deleteSupplier', id);
+    },
+    async getPurchaseRequests(projectId) {
+        return await gasCall('getPurchaseRequests', projectId || '');
+    },
+    // The budget verdict is computed SERVER-SIDE so the warning shown to
+    // the requester and the one the approvers see cannot disagree.
+    async checkPrBudget(projectId, sowId, amount, excludePrId) {
+        return await gasCall('checkPrBudget', projectId, sowId, amount, excludePrId || '');
+    },
+    async submitPurchaseRequest(data) {
+        return await gasCall('submitPurchaseRequest', data);
+    },
+    async updatePurchaseRequest(id, data) {
+        return await gasCall('updatePurchaseRequest', id, data);
+    },
+    async submitDraftPurchaseRequest(id) {
+        return await gasCall('submitDraftPurchaseRequest', id);
+    },
+    async cancelPurchaseRequest(id, reason) {
+        return await gasCall('cancelPurchaseRequest', id, reason || '');
+    },
+    async deletePurchaseRequest(id) {
+        return await gasCall('deletePurchaseRequest', id);
+    },
+
+    // ── v11 BATCH G2: PO · RECEIVING · PAYABLES ──
+    async getPurchaseOrders(projectId) {
+        return await gasCall('getPurchaseOrders', projectId || '');
+    },
+    async createPurchaseOrder(data) {
+        return await gasCall('createPurchaseOrder', data);
+    },
+    async approvePurchaseOrder(id) {
+        return await gasCall('approvePurchaseOrder', id);
+    },
+    async cancelPurchaseOrder(id, reason) {
+        return await gasCall('cancelPurchaseOrder', id, reason || '');
+    },
+    // Receiving is a COST event: it moves the SOW's actual cost, the
+    // project's expenses and CPI, with no payment involved.
+    async receiveGoods(data) {
+        return await gasCall('receiveGoods', data);
+    },
+    async getReceipts(projectId) {
+        return await gasCall('getReceipts', projectId || '');
+    },
+    async cancelReceipt(id, reason) {
+        return await gasCall('cancelReceipt', id, reason || '');
+    },
+    async recordSupplierInvoice(data) {
+        return await gasCall('recordSupplierInvoice', data);
+    },
+    // Paying is CASH OUT, not cost — the cost landed on receipt.
+    async paySupplierInvoice(id, data) {
+        return await gasCall('paySupplierInvoice', id, data || {});
+    },
+    async cancelSupplierInvoice(id, reason) {
+        return await gasCall('cancelSupplierInvoice', id, reason || '');
+    },
+    async getPayables() {
+        return await gasCall('getPayables');
     },
     async addDrawing(data) {
         return await gasCall('addDrawing', data);

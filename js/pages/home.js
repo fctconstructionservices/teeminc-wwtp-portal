@@ -109,6 +109,10 @@ const HomePage = {
                 // v11 BATCH F2: work that is still being priced. Approvers and
                 // above only — a request-only user has no business seeing the
                 // company's margin on open bids.
+                // v11 BATCH G1: every purchase starts here now.
+                { id: 'purchase-requests', label: 'Purchase Requests', sub: 'Buy against a scope item', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
+                // v11 BATCH G2: supplier credit was invisible until it landed.
+                { id: 'payables', label: 'Payables', sub: 'Who you owe · Due dates', roles: ['superadmin', 'admin', 'approver'] },
                 { id: 'quotations', label: 'Quotations', sub: 'Bids · Revisions · Award', roles: ['superadmin', 'admin', 'approver'] },
                 { id: 'knowledge', label: 'Knowledge Base', sub: 'Materials · Equipment · Manpower · Lessons', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
                 { id: 'approvals', label: 'Approvals', sub: 'My requests & pending', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
@@ -154,10 +158,14 @@ const HomePage = {
                 const safetyClass = t.id === 'request' ? 'safety' : '';
                 const approvalClass = isApproval ? 'approval-ticket' : '';
                 const badgeHtml = isApproval ? `<span class="t-badge" id="approvalBadgeHome">${pendingCount}</span>` : '';
-                const borderStyle = t.id === 'quotations' ? 'border-color:var(--amber);' :
+                const borderStyle = t.id === 'payables' ? 'border-color:var(--red);' :
+                                    t.id === 'purchase-requests' ? 'border-color:var(--safety);' :
+                                    t.id === 'quotations' ? 'border-color:var(--amber);' :
                                     t.id === 'knowledge' ? 'border-color:var(--blueprint);' :
                                     isApproval ? 'border-color:var(--green);' : '';
-                const iconBg = t.id === 'quotations' ? 'background:var(--amber);color:#fff;' :
+                const iconBg = t.id === 'payables' ? 'background:var(--red);color:#fff;' :
+                               t.id === 'purchase-requests' ? 'background:var(--safety);color:#fff;' :
+                               t.id === 'quotations' ? 'background:var(--amber);color:#fff;' :
                                t.id === 'knowledge' ? 'background:var(--blueprint);color:#fff;' :
                                isApproval ? 'background:#E1F0E8;color:var(--green);' : '';
                 const iconEl = t.id === 'request' ? Icon.wallet({ size: 18 }) :
@@ -165,6 +173,8 @@ const HomePage = {
                                 t.id === 'release-cash' ? Icon.outgoing({ size: 18 }) :
                                 t.id === 'liquidate' ? Icon.receipt({ size: 18 }) :
                                 t.id === 'search' ? Icon.search({ size: 18 }) :
+                                t.id === 'payables' ? Icon.receipt({ size: 18 }) :
+                                t.id === 'purchase-requests' ? Icon.package({ size: 18 }) :
                                 t.id === 'quotations' ? Icon.fileText({ size: 18 }) :
                                 t.id === 'knowledge' ? Icon.folder({ size: 18 }) :
                                 t.id === 'approvals' ? Icon.checkCircle({ size: 18, color: 'currentColor' }) :

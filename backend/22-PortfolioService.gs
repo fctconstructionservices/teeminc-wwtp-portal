@@ -102,7 +102,13 @@ function getPortfolioData() {
       }
     });
 
-    var actualCost = allReleases.filter(function (r) {
+    // ── v11 BATCH G1: ACCRUAL ──
+    // Cost now comes from the shared helper (30-CostBasis.gs) so the
+    // portfolio's CPI matches the one on each project's own page. Cash
+    // released is kept separately below for the cash position, because
+    // under accrual those are no longer the same figure.
+    var actualCost = projectActualCost_(p.id);
+    var cashOut = allReleases.filter(function (r) {
       return r.projectId === p.id && r.status === 'Reviewed';
     }).reduce(function (s, r) { return s + (parseFloat(r.amount) || 0); }, 0);
 
@@ -224,7 +230,7 @@ function getPortfolioData() {
       collected: Math.round(collected),
       actualCost: Math.round(actualCost),
       funding: Math.round(funding),
-      cashPosition: Math.round(collected + funding - actualCost),
+      cashPosition: Math.round(collected + funding - cashOut),
       health: health,
       healthClass: healthClass
     });
