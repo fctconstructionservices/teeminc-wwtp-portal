@@ -727,8 +727,8 @@ ${this._gShort(hs)} → ${this._gShort(he)} · ${item.childCount} item(s)${rp ==
                 t.endDate = p.endDate;
                 self._schedDraft[p.id] = true;
             });
+            self._paintSchedDirty();   // v11 BATCH I2b: paint before redraw
             self._renderGanttChart(self._data);
-            self._paintSchedDirty();
         };
 
         const begin = (el, e, m) => {

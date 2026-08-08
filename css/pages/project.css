@@ -721,3 +721,119 @@
     .sched-dirty .sd-hint { flex-basis: 100%; }
     .sched-dirty .btn-sm.primary { margin-left: 0; }
 }
+
+/* v11 BATCH I2b — a staged schedule row.
+   Visible at a glance which items will be written on Save, so the
+   pending set is never a mystery. */
+.gt-cell-left.is-dirty { box-shadow: inset 3px 0 0 var(--amber); }
+.gt-cell-left.is-dirty .id { color: var(--amber); }
+
+/* ================================================================
+   v11 BATCH I2b — THE ENTRY FORM LOOKS LIKE THE PRINTED RECORD
+
+   Modelled on the Daily Site Record PDF: an uppercase section rule,
+   small-caps column headings, and rows as lines on a sheet. Someone
+   copying from the paper form reads straight down and finds the same
+   sections in the same order.
+
+   The rows themselves keep their existing markup — they carry the OT
+   lock, the personnel lookup and the per-row photo upload, and
+   rebuilding them as real tables would risk that for a border.
+   ================================================================ */
+
+#addRecordForm .daily-form-section {
+    border: none;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    background: none;
+    padding: 0 0 10px;
+    margin-bottom: 12px;
+}
+#addRecordForm .daily-form-section:last-of-type { border-bottom: none; }
+
+#addRecordForm .section-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Oswald', sans-serif;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: var(--blueprint);
+    padding-bottom: 5px;
+    border-bottom: 1.5px solid var(--blueprint);
+    margin-bottom: 8px;
+}
+#addRecordForm .section-label .rule { display: none; }
+
+/* Field labels become column headings: shown on the FIRST row only, so
+   a section of six rows does not repeat its headers six times — which
+   is what a printed form does, and why it stays readable. */
+#addRecordForm .entry-row {
+    border: none;
+    background: none;
+    padding: 3px 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    margin-bottom: 0;
+}
+#addRecordForm .entry-row:last-child { border-bottom: none; }
+#addRecordForm .entry-row .field label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 8px;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    font-weight: 400;
+}
+#addRecordForm .entry-row:not(:first-child) .field label { visibility: hidden; height: 0; margin: 0; }
+
+#addRecordForm .entry-row input,
+#addRecordForm .entry-row select,
+#addRecordForm .entry-row textarea {
+    border: 1px solid transparent;
+    background: none;
+    border-radius: 5px;
+    padding: 4px 6px;
+    font-size: 12.5px;
+}
+#addRecordForm .entry-row input:hover,
+#addRecordForm .entry-row select:hover { border-color: var(--line); }
+#addRecordForm .entry-row input:focus,
+#addRecordForm .entry-row select:focus {
+    border-color: var(--safety);
+    background: var(--surface);
+    outline: none;
+}
+#addRecordForm .entry-row input[type="number"] {
+    text-align: right;
+    font-family: 'IBM Plex Mono', monospace;
+}
+
+#addRecordForm .add-btn-row { padding-top: 7px; }
+#addRecordForm .add-btn-row .btn-sm {
+    background: none;
+    border: 1px dashed var(--line);
+    color: var(--ink-soft);
+}
+#addRecordForm .add-btn-row .btn-sm:hover {
+    border-color: var(--blueprint);
+    color: var(--blueprint);
+    border-style: solid;
+}
+
+@media (max-width: 820px) {
+    /* On a phone every row needs its own labels — there is no column to
+       read across, so hiding them would leave unlabelled boxes. */
+    #addRecordForm .entry-row:not(:first-child) .field label {
+        visibility: visible;
+        height: auto;
+        margin-bottom: 3px;
+    }
+    #addRecordForm .entry-row {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 8px;
+        margin-bottom: 8px;
+    }
+}

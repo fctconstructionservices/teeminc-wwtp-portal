@@ -172,8 +172,12 @@ Object.assign(ProjectPage, {
         const tip = `${item.id} — ${item.description || ''} · ${health ? health.label : ''}` +
             (t ? (t.critical ? ' · critical path' : ' · float ' + t.float + ' day(s)') : '');
 
+        // v11 BATCH I2b: a staged row is marked, so you can see at a glance
+        // which items will be written when you press Save.
+        const dirty = (this._schedDraft || {})[item.id] ? ' is-dirty' : '';
+
         return `
-            <div class="gt-cell-left" data-id="${esc(item.id)}" data-idx="${idx}"
+            <div class="gt-cell-left${dirty}" data-id="${esc(item.id)}" data-idx="${idx}"
                  style="--gt-indent:${((item.level || 1) - 1) * 14}px;">
                 <div class="gt-task ${crit ? 'is-critical' : ''}" title="${esc(tip)}">
                     <span class="dot" style="background:${health ? health.color : 'var(--ink-soft)'}"></span>
@@ -260,18 +264,30 @@ Object.assign(ProjectPage, {
                 }
             }
         } else if (field === 'start') {
+            // ── v11 BATCH I2b: START AND FINISH ARE THE ANCHORS ──
+            // Duration is DERIVED from them, not held constant. Moving a
+            // start with the finish fixed shortens the job — which is
+            // what "I can start later but must still finish on the 30th"
+            // means, and what the old behaviour (drag the finish along,
+            // keep the duration) quietly refused to express.
             const ns = this._sDay(value);
             if (!ns) { UI.toast('Enter a valid start date.', 'error'); return; }
             const s2 = this._sNextWork(ns);
             it.startDate = this._sFmt(s2);
-            it.endDate = this._sFmt(this._sAddWork(s2, dur));
+            // The finish only moves when the start has passed it — a
+            // finish before its own start is not a schedule.
+            if (!end || s2 > end) it.endDate = this._sFmt(this._sAddWork(s2, dur));
         } else if (field === 'dur') {
+            // Duration is the one field that MOVES the finish, because
+            // that is the only thing it can mean: the start is where you
+            // said it starts.
             const nd = parseInt(value, 10);
             if (!nd || nd < 1) { UI.toast('Duration must be at least 1 working day.', 'error'); return; }
             if (!start) start = this._sNextWork(new Date());
             it.startDate = this._sFmt(start);
             it.endDate = this._sFmt(this._sAddWork(start, nd));
         } else if (field === 'end') {
+            // Finish moves, start holds, duration follows.
             const ne = this._sDay(value);
             if (!ne) { UI.toast('Enter a valid finish date.', 'error'); return; }
             if (!start) start = this._sNextWork(new Date());
@@ -291,8 +307,23 @@ Object.assign(ProjectPage, {
             this._schedDraft[p.id] = true;
         });
 
-        this._renderGanttChart(this._data);
+        // ── v11 BATCH I2b: PAINT FIRST, THEN REDRAW ──
+        // These were the other way round. If the chart redraw threw for
+        // any reason, the staging silently never surfaced: the change was
+        // recorded but the Save bar never appeared, so it looked as
+        // though editing a field did nothing at all — while dragging a
+        // bar, which paints on a different path, worked.
+        //
+        // The bar is now updated before anything can fail, and the redraw
+        // is guarded so a rendering problem reports itself instead of
+        // swallowing the edit.
         this._paintSchedDirty();
+        try {
+            this._renderGanttChart(this._data);
+        } catch (err) {
+            console.error('Timeline redraw failed after staging an edit:', err);
+            UI.toast('The chart could not be redrawn, but your change is staged. Press Save changes.', 'error');
+        }
     },
 
     _schedDirtyCount() { return Object.keys(this._schedDraft || {}).length; },
@@ -300,7 +331,17 @@ Object.assign(ProjectPage, {
     /** _paintSchedDirty - the unsaved-changes bar. */
     _paintSchedDirty() {
         const bar = document.getElementById('schedDirtyBar');
-        if (!bar) return;
+        // A missing bar means the Timeline markup is older than this
+        // file. Say so rather than failing silently — a staged edit with
+        // no way to save it is the worst of both.
+        if (!bar) {
+            if (this._schedDirtyCount() && !this._warnedNoBar) {
+                this._warnedNoBar = true;
+                console.warn('schedDirtyBar not found — js/pages/project/project-gantt.js is out of date.');
+                UI.toast('Your changes are staged, but the Save bar is missing. Update project-gantt.js.', 'error');
+            }
+            return;
+        }
         const n = this._schedDirtyCount();
         bar.style.display = n ? 'flex' : 'none';
         const label = document.getElementById('schedDirtyLabel');

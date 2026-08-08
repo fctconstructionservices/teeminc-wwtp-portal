@@ -726,6 +726,72 @@ Object.assign(ProjectPage, {
     _estimateSummaryRows() {
         const p = this._data || {};
         const groups = (this._estimatesData && this._estimatesData.groups) || [];
+
+        // ── v11 BATCH I2b: THE EXPORTS PRINT THE TREE ──
+        // The screen showed the hierarchy but the PDF, the Excel and the
+        // DUPA printed a flat list — every SOW at the same level, titles
+        // among them as if they were priced items. A client reading the
+        // export could not tell a section heading from a work item.
+        //
+        // Rows are built by walking the PROJECT'S SOW ORDER (already
+        // depth-first from the server) rather than the estimate groups,
+        // so headings appear in place with their children beneath them.
+        // A heading carries no cost of its own — it totals what is under
+        // it, exactly as the SOW tab does.
+        const byGroup = {};
+        groups.forEach(g => { byGroup[String(g.sowId).trim()] = g; });
+
+        const costOf = g => {
+            const mat = (g.materials || []).reduce((s, m) => s + (parseFloat(m.cost) || 0), 0);
+            const lab = (g.labor || []).reduce((s, l) => s + (parseFloat(l.cost) || 0), 0)
+                      + (g.equipment || []).reduce((s, e) => s + (parseFloat(e.cost) || 0), 0);
+            const ind = (g.indirect || []).reduce((s, i) => s + (parseFloat(i.amount) || 0), 0);
+            let matCost, labCost;
+            if (mat > 0 && lab > 0) { matCost = mat + ind / 2; labCost = lab + ind / 2; }
+            else if (mat <= 0)      { matCost = 0;             labCost = lab + ind; }
+            else                    { matCost = mat + ind;     labCost = 0; }
+            return { matCost, labCost, total: matCost + labCost };
+        };
+
+        const sowItems = (p.sowItems || []).filter(s => !s.isMilestone);
+        if (sowItems.length) {
+            const rows = [];
+            sowItems.forEach(s => {
+                const sid = String(s.id).trim();
+                if (s.isHeading) {
+                    // Total everything beneath this heading, at any depth.
+                    let m = 0, l = 0;
+                    sowItems.forEach(k => {
+                        if (String(k.id).trim().indexOf(sid + '.') !== 0) return;
+                        const kg = byGroup[String(k.id).trim()];
+                        if (!kg) return;
+                        const c = costOf(kg);
+                        m += c.matCost; l += c.labCost;
+                    });
+                    rows.push({
+                        isHeading: true, level: s.level || 1,
+                        itemNo: s.id, description: s.description || '',
+                        qty: 0, unit: '', unitCost: 0,
+                        matCost: m, labCost: l, total: m + l
+                    });
+                    return;
+                }
+                const g = byGroup[sid];
+                if (!g) return;
+                const c = costOf(g);
+                const qty = parseFloat(s.qty) || 0;
+                rows.push({
+                    isHeading: false, level: s.level || 1,
+                    itemNo: s.id, description: g.sowDescription || s.description || '',
+                    qty: qty, unit: s.unit || '',
+                    unitCost: qty ? c.total / qty : 0,
+                    matCost: c.matCost, labCost: c.labCost, total: c.total
+                });
+            });
+            return rows;
+        }
+
+        // Fallback for a payload with no sowItems — flat, as before.
         return groups.map(g => {
             const sow = (p.sowItems || []).find(s => s.id === g.sowId) || {};
             const mat = (g.materials || []).reduce((s, m) => s + (parseFloat(m.cost) || 0), 0);
@@ -739,6 +805,7 @@ Object.assign(ProjectPage, {
             const total = matCost + labCost;
             const qty = parseFloat(sow.qty) || 0;
             return {
+                isHeading: false, level: 1,
                 itemNo: g.sowId,
                 description: g.sowDescription || sow.description || '',
                 qty: qty,
@@ -785,6 +852,10 @@ Object.assign(ProjectPage, {
                 th{background:#eef1f3;text-transform:uppercase;font-size:9.5px;letter-spacing:.04em;}
                 td.amt,th.amt{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
                 tr.total td{font-weight:700;background:#f6f4ec;}
+                /* v11 BATCH I2b — headings in the exported estimate */
+                tr.head td{background:#eef1f3;font-weight:700;}
+                h2.dupa-head{border-bottom:2px solid var(--pd-accent);color:var(--pd-accent);
+                    margin:18px 0 4px;font-size:12.5px;}
                 .grand{font-size:13px;font-weight:700;text-align:right;margin-top:8px;}
                 .break{page-break-inside:avoid;}
             `
@@ -801,8 +872,28 @@ Object.assign(ProjectPage, {
         let grand = 0;
         let body = `<h1>DUPA — Detailed Unit Price Analysis</h1>
             <div class="meta"><b>${p.name || this._currentProjectId}</b> · ${p.client || ''} · Generated ${new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</div>`;
-        groups.forEach(g => {
-            const sow = (p.sowItems || []).find(s => s.id === g.sowId) || {};
+        // v11 BATCH I2b: the DUPA walks the SOW ORDER so its sections come
+        // out under their headings, in the same sequence as the estimate
+        // summary and the SOW tab. Iterating the groups gave whatever
+        // order the sheet happened to hold.
+        const byGroupD = {};
+        groups.forEach(g => { byGroupD[String(g.sowId).trim()] = g; });
+        const ordered = (p.sowItems || []).length
+            ? (p.sowItems || []).filter(s => !s.isMilestone)
+                .map(s => ({ sow: s, g: byGroupD[String(s.id).trim()] }))
+            : groups.map(g => ({ sow: (p.sowItems || []).find(s => s.id === g.sowId) || {}, g: g }));
+
+        ordered.forEach(entry => {
+            const sow = entry.sow || {};
+            const g = entry.g;
+            // A heading has no line items to analyse; it prints as the
+            // section title the items beneath it sit under.
+            if (sow.isHeading) {
+                body += `<h2 class="dupa-head" style="margin-left:${((sow.level || 1) - 1) * 14}px">
+                    ${sow.id} — ${sow.description || ''}</h2>`;
+                return;
+            }
+            if (!g) return;
             const qty = parseFloat(sow.qty) || 0;
             const cat = (title, rows, cols) => {
                 if (!rows || !rows.length) return '';
@@ -816,7 +907,8 @@ Object.assign(ProjectPage, {
                 return h;
             };
             const money = v => '₱' + fmtMoney(parseFloat(v) || 0);
-            body += `<div class="break"><h2>${g.sowId} — ${g.sowDescription || sow.description || ''} <span style="font-weight:400;font-size:10.5px;">(${fmtNum(qty)} ${sow.unit || ''})</span></h2>`;
+            body += `<div class="break" style="margin-left:${((sow.level || 1) - 1) * 14}px">
+                <h2>${g.sowId} — ${g.sowDescription || sow.description || ''} <span style="font-weight:400;font-size:10.5px;">(${fmtNum(qty)} ${sow.unit || ''})</span></h2>`;
             body += cat('Materials', g.materials, [
                 { h: 'Material', f: r => r.name || '—' }, { h: 'Qty', f: r => fmtNum(parseFloat(r.qty) || 0), amt: true },
                 { h: 'Unit', f: r => r.unit || '' }, { h: 'Unit Price', f: r => money(r.price), amt: true }, { h: 'Amount', f: r => money(r.cost), amt: true }]);
@@ -844,7 +936,9 @@ Object.assign(ProjectPage, {
     printEstimateSummary() {
         const p = this._data || {};
         const rows = this._estimateSummaryRows();
-        const grand = rows.reduce((s, r) => s + r.total, 0);
+        // v11 BATCH I2b: leaves only — a heading's total is the sum of its
+        // children, so adding both would double the project figure.
+        const grand = rows.filter(r => !r.isHeading).reduce((s, r) => s + r.total, 0);
         let body = `<h1>Cost Estimate Summary</h1>
             <div class="meta"><b>${p.name || this._currentProjectId}</b> · ${p.client || ''} · Generated ${new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
             <table><thead><tr>
@@ -852,8 +946,21 @@ Object.assign(ProjectPage, {
                 <th class="amt">Unit Cost</th><th class="amt">Material Cost</th><th class="amt">Labor Cost</th><th class="amt">Total</th>
             </tr></thead><tbody>`;
         rows.forEach(r => {
+            const pad = ((r.level || 1) - 1) * 14;
+            if (r.isHeading) {
+                body += `<tr class="head">
+                    <td><b>${r.itemNo}</b></td>
+                    <td style="padding-left:${pad}px"><b>${r.description}</b></td>
+                    <td class="amt"></td><td></td><td class="amt"></td>
+                    <td class="amt"><b>₱${fmtMoney(r.matCost)}</b></td>
+                    <td class="amt"><b>₱${fmtMoney(r.labCost)}</b></td>
+                    <td class="amt"><b>₱${fmtMoney(r.total)}</b></td>
+                </tr>`;
+                return;
+            }
             body += `<tr>
-                <td>${r.itemNo}</td><td>${r.description}</td>
+                <td>${r.itemNo}</td>
+                <td style="padding-left:${pad}px">${r.description}</td>
                 <td class="amt">${fmtNum(r.qty)}</td><td>${r.unit}</td>
                 <td class="amt">₱${fmtMoney(r.unitCost)}</td>
                 <td class="amt">₱${fmtMoney(r.matCost)}</td>
@@ -861,9 +968,10 @@ Object.assign(ProjectPage, {
                 <td class="amt">₱${fmtMoney(r.total)}</td>
             </tr>`;
         });
+        const leaves = rows.filter(r => !r.isHeading);
         body += `<tr class="total"><td colspan="5">TOTAL</td>
-            <td class="amt">₱${fmtMoney(rows.reduce((s, r) => s + r.matCost, 0))}</td>
-            <td class="amt">₱${fmtMoney(rows.reduce((s, r) => s + r.labCost, 0))}</td>
+            <td class="amt">₱${fmtMoney(leaves.reduce((s, r) => s + r.matCost, 0))}</td>
+            <td class="amt">₱${fmtMoney(leaves.reduce((s, r) => s + r.labCost, 0))}</td>
             <td class="amt">₱${fmtMoney(grand)}</td></tr></tbody></table>
             `;   // v11 BATCH E: the signature row is no longer hard-coded here —
                  // PrintDoc appends the blocks defined in the print template,
@@ -883,13 +991,25 @@ Object.assign(ProjectPage, {
             [],
             ['Item No', 'Description', 'Qty', 'Unit', 'Unit Cost', 'Material Cost', 'Labor Cost', 'Total']
         ];
-        rows.forEach(r => aoa.push([r.itemNo, r.description, r.qty, r.unit,
-            Math.round(r.unitCost * 100) / 100, Math.round(r.matCost * 100) / 100,
-            Math.round(r.labCost * 100) / 100, Math.round(r.total * 100) / 100]));
-        aoa.push(['', 'TOTAL', '', '',
-            '', Math.round(rows.reduce((s, r) => s + r.matCost, 0) * 100) / 100,
-            Math.round(rows.reduce((s, r) => s + r.labCost, 0) * 100) / 100,
-            Math.round(rows.reduce((s, r) => s + r.total, 0) * 100) / 100]);
+        // v11 BATCH I2b: indented with leading spaces rather than a real
+        // outline. Excel's grouping is not worth the fragility here — a
+        // spreadsheet that opens correctly everywhere beats one that only
+        // looks right in one version of Excel.
+        const r2 = n => Math.round((n || 0) * 100) / 100;
+        rows.forEach(r => {
+            const pad = '    '.repeat(Math.max(0, (r.level || 1) - 1));
+            aoa.push(r.isHeading
+                ? [r.itemNo, pad + String(r.description).toUpperCase(), '', '', '',
+                   r2(r.matCost), r2(r.labCost), r2(r.total)]
+                : [r.itemNo, pad + r.description, r.qty, r.unit,
+                   r2(r.unitCost), r2(r.matCost), r2(r.labCost), r2(r.total)]);
+        });
+        // Leaves only — a heading already totals its children.
+        const leaves = rows.filter(r => !r.isHeading);
+        aoa.push(['', 'TOTAL', '', '', '',
+            r2(leaves.reduce((s, r) => s + r.matCost, 0)),
+            r2(leaves.reduce((s, r) => s + r.labCost, 0)),
+            r2(leaves.reduce((s, r) => s + r.total, 0))]);
         const ws = XLSX.utils.aoa_to_sheet(aoa);
         ws['!cols'] = [{ wch: 10 }, { wch: 42 }, { wch: 9 }, { wch: 7 }, { wch: 13 }, { wch: 15 }, { wch: 15 }, { wch: 15 }];
         const wb = XLSX.utils.book_new();

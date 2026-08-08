@@ -40,7 +40,6 @@ Object.assign(ProjectPage, {
                  form's header — one row of boxed fields — rather than as
                  another labelled panel. Someone filling this in usually has
                  the paper form in front of them, and a form is a grid. -->
-            ${this._dailyDataLists()}
             <div class="dr-formhead">
                 <div class="cell"><label>Date *</label>
                     <input type="date" id="dr-date" value="${today}" required onchange="ProjectPage.syncOTLock()" /></div>
@@ -93,7 +92,7 @@ Object.assign(ProjectPage, {
             </div>
             <div class="daily-form-section" id="materialsUsedSection">
                 <div class="section-label">Materials Used <span class="rule"></span></div>
-                <div id="materialsUsedEntries"><div class="entry-row"><div class="field"><label>Material (on-site only)</label><select class="mu-name" onchange="ProjectPage.syncUsedMaterialUnit(this)">${this._siteMaterialOptionsDaily()}</select></div><div class="field"><label>Qty Used</label><input type="number" class="mu-qty" min="0" /></div><div class="field"><label>Unit</label><input type="text" class="mu-unit" readonly placeholder="auto" /></div><div class="field"><label>Used For (SOW)</label><select class="mu-sow">${this._sowOptions()}</select></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'materialsUsed')">${Icon.close({size:13})}</button></div></div></div>
+                <div id="materialsUsedEntries"><div class="entry-row"><div class="field"><label>Material (on-site only)</label><input type="text" class="mu-name" autocomplete="off" placeholder="Type to search on-site stock" oninput="ProjectPage.syncUsedMaterialUnit(this)" onchange="ProjectPage.syncUsedMaterialUnit(this)" /></div><div class="field"><label>Qty Used</label><input type="number" class="mu-qty" min="0" /></div><div class="field"><label>Unit</label><input type="text" class="mu-unit" placeholder="Type or auto" /></div><div class="field"><label>Used For (SOW)</label><select class="mu-sow">${this._sowOptions()}</select></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'materialsUsed')">${Icon.close({size:13})}</button></div></div></div>
                 <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('materialsUsed')">+ Add Usage</button></div>
                 <div class="muted" style="font-size:11px;color:var(--ink-soft);margin-top:4px;">Deducted from site stock (delivered - used). You cannot log more than the quantity remaining.</div>
             </div>
@@ -180,6 +179,53 @@ Object.assign(ProjectPage, {
      * anything not on it can still be typed. What is in the database is
      * a convenience, not a gate.
      */
+    /**
+     * ── v11 BATCH I2b: BACK TO A REAL TYPEAHEAD ──
+     * I2 used a <datalist>, which was the wrong call: the browser owns
+     * it completely — no highlighting of what you typed, no control over
+     * how many rows appear, and on some browsers it will not open until
+     * you press the down arrow. Typeahead (js/core/typeahead.js) shows
+     * "Rebar 12mm" with the 12mm HIGHLIGHTED, so you can see why each
+     * row matched, and free text still saves.
+     */
+    _wireDailyTypeaheads(root) {
+        if (typeof Typeahead === 'undefined') return;
+        const scope = root || document.getElementById('addRecordForm');
+        if (!scope) return;
+        const self = this;
+
+        scope.querySelectorAll('.mp-person:not([data-ta])').forEach(inp => {
+            inp.dataset.ta = '1';
+            Typeahead.attach(inp,
+                () => ((self._data && self._data.personnel) || [])
+                    .map(p => ({ label: p.name, sub: p.role || '', value: p.name, data: p })),
+                () => self.syncPersonnelRole(inp));
+        });
+        scope.querySelectorAll('.mp-role:not([data-ta])').forEach(inp => {
+            inp.dataset.ta = '1';
+            Typeahead.attach(inp, () => Array.from(new Set(
+                ((self._data && self._data.personnel) || []).map(p => p.role).filter(Boolean))));
+        });
+        scope.querySelectorAll('.eq-name:not([data-ta])').forEach(inp => {
+            inp.dataset.ta = '1';
+            Typeahead.attach(inp, () => (self._approvedEquipment || []).map(e => ({
+                label: [e.brand, e.model].filter(Boolean).join(' ') || e.name || e.category || e.id,
+                sub: e.category || '', value: [e.brand, e.model].filter(Boolean).join(' ') || e.name || e.category || e.id
+            })));
+        });
+        scope.querySelectorAll('.mat-name:not([data-ta]), .mu-name:not([data-ta])').forEach(inp => {
+            inp.dataset.ta = '1';
+            Typeahead.attach(inp, () => (self._approvedMaterials || []).map(m => ({
+                label: m.name || m.desc || m.id,
+                sub: [m.brand, m.unit].filter(Boolean).join(' · '),
+                value: m.name || m.desc || m.id, data: m
+            })), () => {
+                if (inp.classList.contains('mat-name')) self.syncMaterialUnit(inp);
+                else self.syncUsedMaterialUnit(inp);
+            });
+        });
+    },
+
     _dataList(id, values) {
         const seen = {};
         const opts = (values || []).filter(v => {
@@ -191,7 +237,7 @@ Object.assign(ProjectPage, {
         return `<datalist id="${id}">${opts}</datalist>`;
     },
 
-    _dailyDataLists() {
+    _dailyDataLists_unused() {
         const d = this._data || {};
         return this._dataList('dl-personnel', ((d.personnel) || []).map(p => p.name)) +
                this._dataList('dl-roles', ((d.personnel) || []).map(p => p.role)) +
@@ -907,14 +953,29 @@ Object.assign(ProjectPage, {
     },
 
     /** syncUsedMaterialUnit (v6) - auto-fill unit + cap qty at remaining. */
-    syncUsedMaterialUnit(selectEl) {
-        const row = selectEl.closest('.entry-row');
+    /**
+     * syncUsedMaterialUnit (v11 BATCH I2b) - Name typed or picked → unit
+     * and the remaining-stock ceiling follow, when the name matches
+     * something on site. When it does not, what was typed is left alone:
+     * clearing it would punish someone for a material the stock list has
+     * not caught up with.
+     */
+    syncUsedMaterialUnit(inp) {
+        const row = inp.closest('.entry-row');
         if (!row) return;
-        const opt = selectEl.selectedOptions[0];
+        const typed = String(inp.value || '').trim().toLowerCase();
+        const hit = ((this._data && this._data.siteMaterials) || []).find(m =>
+            String(m.material || m.materialName || '').trim().toLowerCase() === typed);
         const unitEl = row.querySelector('.mu-unit');
         const qtyEl = row.querySelector('.mu-qty');
-        if (unitEl) unitEl.value = opt ? (opt.dataset.unit || '') : '';
-        if (qtyEl && opt && opt.dataset.remaining) qtyEl.max = opt.dataset.remaining;
+        if (hit) {
+            if (unitEl && hit.unit) unitEl.value = hit.unit;
+            if (qtyEl && hit.remaining !== undefined) qtyEl.max = hit.remaining;
+        } else if (qtyEl) {
+            // Nothing on site by that name — do not cap a quantity
+            // against a stock figure that does not exist.
+            qtyEl.removeAttribute('max');
+        }
     },
 
     addEntry(section) {
@@ -923,6 +984,13 @@ Object.assign(ProjectPage, {
         const template = container.querySelector('.entry-row');
         if (!template) return;
         const clone = template.cloneNode(true);
+        // A cloned row carries the wired flag but not the listeners, so
+        // it is cleared and rewired below. Without this the second row
+        // you add has no suggestions at all.
+        clone.querySelectorAll('[data-ta]').forEach(el => {
+            delete el.dataset.ta;
+            el._taWired = false;
+        });
         clone.querySelectorAll('input, textarea, select').forEach(el => {
             if (el.type === 'file') { el.value = '';
                 el.onchange = null; } else if (el.type === 'checkbox' || el.type === 'radio') { el
@@ -930,6 +998,7 @@ Object.assign(ProjectPage, {
         });
         clone.querySelectorAll('.image-preview-sm').forEach(el => el.remove());
         container.appendChild(clone);
+        this._wireDailyTypeaheads(clone);   // v11 BATCH I2b
         clone.querySelectorAll('input[type="file"]').forEach(el => {
             el.onchange = function(e) { ProjectPage.previewSmallImage(this, 'preview-' + Date
                 .now()); };
@@ -1156,6 +1225,7 @@ Object.assign(ProjectPage, {
         if (form && form.classList.contains('open')) {
             setTimeout(() => this.initDailySteps(), 30);   // v7.2
             this.syncOTLock();                             // v9: OT lock state
+            this._wireDailyTypeaheads();                   // v11 BATCH I2b
         }
         // v6.4: leaving the form ends edit mode and restores the button label
         if (form && !form.classList.contains('open')) {

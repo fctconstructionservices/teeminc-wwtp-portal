@@ -518,3 +518,48 @@
     /* remove-entry buttons need a real touch target */
     .daily-form-section .entry-row .btn-sm.danger { width: 100%; padding: 10px; }
 }
+/* ================================================================
+   v11 BATCH I2b — TYPEAHEAD (js/core/typeahead.js)
+
+   Replaces the <datalist> from I2. The browser owns a datalist
+   completely: no highlighting of what you typed, no control over how
+   many rows show, and on some browsers it will not open until you press
+   the down arrow. On a site form filled in at speed that is the
+   difference between a field that helps and one that gets ignored.
+   ================================================================ */
+
+.ta-box {
+    position: absolute;
+    z-index: 4000;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    max-height: 240px;
+    overflow-y: auto;
+    display: none;
+    padding: 3px;
+}
+.ta-item {
+    padding: 6px 9px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12.5px;
+    line-height: 1.35;
+}
+.ta-item:hover, .ta-item.is-active { background: var(--blueprint-tint); }
+.ta-label { display: block; }
+/* The reason this exists: you can see WHY each row matched. */
+.ta-label mark, .ta-sub mark {
+    background: rgba(225, 84, 18, .22);
+    color: inherit;
+    font-weight: 700;
+    padding: 0 1px;
+    border-radius: 2px;
+}
+.ta-sub {
+    display: block;
+    font-size: 10.5px;
+    color: var(--ink-soft);
+    margin-top: 1px;
+}
