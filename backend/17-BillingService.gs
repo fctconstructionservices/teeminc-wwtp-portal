@@ -20,8 +20,16 @@
  * modify a contract that must first be fully defined.
  */
 function contractReadiness_(projectId) {
-  var sows = readAll_('SOWItems').filter(function (s) {
-    return s.projectId === projectId && String(s.isMilestone) !== 'true';
+  // v11 BATCH H5: headings are excluded here too. They carry no estimate
+  // and no budget by design, so counting them would block billing on
+  // every project that uses a structured bill of quantities. The tree is
+  // built with the same helper the rest of the system uses, so this
+  // gate and the Timeline warning can never disagree.
+  var allSows = buildSowTree_(readAll_('SOWItems').filter(function (s) {
+    return s.projectId === projectId;
+  }));
+  var sows = allSows.filter(function (s) {
+    return String(s.isMilestone) !== 'true' && !s.isHeading;
   });
   var groups = readAll_('EstimateGroups').filter(function (g) { return g.projectId === projectId; });
   var bySow = {};
@@ -121,16 +129,32 @@ function createBilling(projectId, currentPct, period) {
   var gross = (pct - prevPct) / 100 * revised;
   var retention = gross * rp;
 
-  // ── v10 DOWNPAYMENT RECOUPMENT ──
+  // ── DOWNPAYMENT RECOUPMENT ──
   // A downpayment is an ADVANCE against the contract, not extra income.
-  // If it were not deducted here the client would pay for the same work
+  // If it were not deducted the client would pay for the same work
   // twice: once through the advance and again in full in this billing.
-  // Each progress billing therefore recoups dpPct x its own gross, and
-  // never more than the advance still outstanding.
+  //
+  // ── v11 BATCH H5: FULL RECOUPMENT AT THE FIRST PROGRESS BILLING ──
+  // v10 recouped dpPct × each billing's gross, spreading the advance
+  // across the whole job. That is one accepted practice, but it is not
+  // the one in use here, and it produced a net payable that looked right
+  // per billing while leaving the advance outstanding for months.
+  //
+  // The rule now: the ENTIRE outstanding advance is deducted from the
+  // FIRST progress billing, capped at what that billing can absorb.
+  // If the first billing is smaller than the advance, the remainder
+  // carries to the next one, and so on until it is worked off.
+  //
+  // The cap matters. Without it a ₱300,000 advance against a ₱200,000
+  // first billing would produce a NEGATIVE net payable — an invoice
+  // asking the client for a refund, which is not a billing, it is a
+  // credit note, and this system does not issue those.
   var dp = dpLedger_(projectId, proj);
   var recoup = 0;
   if (dp.outstanding > 0) {
-    recoup = Math.min(gross * dp.pct, dp.outstanding);
+    // never more than the advance, and never more than this billing
+    // is worth after retention
+    recoup = Math.min(dp.outstanding, Math.max(0, gross - retention));
   }
 
   var net = gross - retention - recoup;

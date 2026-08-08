@@ -24,10 +24,25 @@ Object.assign(ProjectPage, {
                 <button class="close-modal" onclick="document.getElementById('addSOWModal').remove()">${Icon.close({size:18})}</button>
                 <div class="print-header"><h2>Add SOW Item</h2></div>
                 <form id="addSOWForm" onsubmit="return ProjectPage.submitAddSOW(event)">
-                    <div class="field"><label>SOW ID *</label><input type="text" id="sow-id" placeholder="e.g. A.1, B.2" required /></div>
+                    <!-- v11 BATCH H5: a TITLE has to be declared, not guessed.
+                         A heading is normally recognised from the ids beneath
+                         it, but a title added before its children exist has
+                         none — so it looked like a priced item, demanded an
+                         estimate, and made the Timeline report "setup
+                         incomplete" the moment it was created. -->
+                    <div class="field"><label>What kind of item is this?</label>
+                        <div class="sow-kind">
+                            <label><input type="radio" name="sowkind" value="item" checked onchange="ProjectPage.toggleSowKind()" />
+                                <span><b>Priced item</b><em>Has a quantity, a budget and an estimate.</em></span></label>
+                            <label><input type="radio" name="sowkind" value="title" onchange="ProjectPage.toggleSowKind()" />
+                                <span><b>Title / heading</b><em>Groups the items beneath it. No quantity, no estimate — its money is their total.</em></span></label>
+                        </div>
+                    </div>
+                    <div class="field"><label>SOW ID *</label><input type="text" id="sow-id" placeholder="e.g. A.1, B.2" required />
+                        <p class="pr-hint" id="sow-id-hint">Items nest by ID: <b>1.1</b> and <b>1.2</b> sit under <b>1</b>.</p></div>
                     <div class="field"><label>Description *</label><input type="text" id="sow-desc" placeholder="Description of work" required /></div>
-                    <div class="field"><label>Quantity *</label><input type="number" id="sow-qty" step="0.01" min="0" required /></div>
-                    <div class="field"><label>Unit *</label>
+                    <div class="field sow-priced-only"><label>Quantity *</label><input type="number" id="sow-qty" step="0.01" min="0" required /></div>
+                    <div class="field sow-priced-only"><label>Unit *</label>
                         <select id="sow-unit" required>
                             <option value="">Select unit...</option>
                             <option value="pcs">pcs</option>
@@ -55,6 +70,98 @@ Object.assign(ProjectPage, {
         document.body.appendChild(modal);
     },
 
+    /**
+     * auditTitles (v11 BATCH H5) - For SOW items created before titles
+     * could be declared. Those were given an estimate group like any
+     * other item, so they still appear on the Estimates tab with a draft
+     * nobody can approve.
+     *
+     * Read-only until you press the button. Groups holding priced lines
+     * are NEVER removed automatically — an automated tidy-up that
+     * deletes money is worse than the mess it was cleaning.
+     */
+    async auditTitles() {
+        try {
+            const rows = await DataService.auditSowTitles(this._currentProjectId);
+            const e = v => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+            document.getElementById('titleAuditModal')?.remove();
+            const empty = (rows || []).filter(r => r.safeToRemove);
+            const priced = (rows || []).filter(r => !r.safeToRemove);
+
+            const m = document.createElement('div');
+            m.className = 'print-modal-overlay open';
+            m.id = 'titleAuditModal';
+            m.innerHTML = `
+                <div class="print-modal-content" style="max-width:620px;">
+                    <button class="close-modal" onclick="document.getElementById('titleAuditModal').remove()">${Icon.close({size:18})}</button>
+                    <div class="print-header"><h2>Titles carrying an estimate</h2>
+                        <div class="print-meta">A title groups the items beneath it — it has no estimate of its own</div></div>
+                    ${!rows.length ? '<div class="empty"><p>Nothing to clean up. No title on this project carries an estimate group.</p></div>' : `
+                    <table class="mini-table">
+                        <thead><tr><th>SOW</th><th>Description</th><th style="text-align:right">Lines</th>
+                            <th style="text-align:right">Value</th><th>Action</th></tr></thead>
+                        <tbody>${rows.map(r => `<tr>
+                            <td><b>${e(r.sowId)}</b></td>
+                            <td>${e(r.description)}</td>
+                            <td style="text-align:right">${r.lineCount}</td>
+                            <td style="text-align:right">${r.value ? '₱' + fmtMoney(r.value) : '—'}</td>
+                            <td>${r.safeToRemove
+                                ? '<span style="color:var(--green)">Empty — safe to remove</span>'
+                                : '<span style="color:var(--amber)">Move these lines first</span>'}</td>
+                        </tr>`).join('')}</tbody>
+                    </table>
+                    ${priced.length ? `<div class="pr-budget-box near" style="margin-top:12px;">
+                        <b>${Icon.warning({size:12})} ${priced.length} title(s) have work priced against them</b>
+                        <p>Those estimate lines belong on the items beneath the title. Move them on the
+                        Estimates tab, then run this again. Nothing priced will be deleted for you.</p>
+                    </div>` : ''}`}
+                    <div class="print-actions">
+                        ${empty.length ? `<button class="btn-primary" onclick="ProjectPage.cleanTitles()">
+                            Remove ${empty.length} empty group${empty.length === 1 ? '' : 's'} and mark as titles</button>` : ''}
+                        <button class="btn-ghost" onclick="document.getElementById('titleAuditModal').remove()">Close</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(m);
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
+
+    async cleanTitles() {
+        const ok = await Confirm.open('Clean up?',
+            'Empty estimate groups on titles will be removed and those items marked as titles. Anything with priced lines is left alone.');
+        if (!ok) return;
+        try {
+            const res = await DataService.cleanSowTitleEstimates(this._currentProjectId);
+            document.getElementById('titleAuditModal')?.remove();
+            UI.toast(`${res.removed.length} title(s) cleaned up.` +
+                (res.kept.length ? ` ${res.kept.length} left alone — they hold priced lines.` : ''), 'success');
+            await this.open(this._currentProjectId, true);
+            this.switchTab('sow');
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
+
+    /**
+     * toggleSowKind (v11 BATCH H5) - A title has no quantity and no unit,
+     * so those fields are hidden AND their `required` removed. Leaving
+     * them required but hidden makes the form refuse to submit with
+     * nothing visible to fix, which is the worst kind of dead end.
+     */
+    toggleSowKind() {
+        const isTitle = document.querySelector('input[name="sowkind"]:checked')?.value === 'title';
+        document.querySelectorAll('.sow-priced-only').forEach(el => {
+            el.style.display = isTitle ? 'none' : '';
+            el.querySelectorAll('input,select').forEach(f => {
+                if (isTitle) { f.removeAttribute('required'); f.value = ''; }
+                else f.setAttribute('required', 'required');
+            });
+        });
+        const hint = document.getElementById('sow-id-hint');
+        if (hint) {
+            hint.innerHTML = isTitle
+                ? 'Give it the shorter ID — <b>1</b> for a title, and its items become <b>1.1</b>, <b>1.2</b>.'
+                : 'Items nest by ID: <b>1.1</b> and <b>1.2</b> sit under <b>1</b>.';
+        }
+    },
+
     async submitAddSOW(e) {
         e.preventDefault();
         const id = document.getElementById('sow-id').value.trim();
@@ -62,12 +169,19 @@ Object.assign(ProjectPage, {
         const qty = parseFloat(document.getElementById('sow-qty').value) || 0;
         const unit = document.getElementById('sow-unit').value;
 
-        if (!id || !description || !qty || !unit) {
-            UI.toast('Please fill in all required fields.', 'error');
+        const isTitle = document.querySelector('input[name="sowkind"]:checked')?.value === 'title';
+
+        if (!id || !description || (!isTitle && (!qty || !unit))) {
+            UI.toast(isTitle
+                ? 'A title needs an ID and a description.'
+                : 'Please fill in all required fields.', 'error');
             return false;
         }
 
-        const confirmed = await Confirm.open('Add SOW?', `Add SOW ${id} - ${description} (${qty} ${unit})?`);
+        const confirmed = await Confirm.open(isTitle ? 'Add title?' : 'Add SOW?',
+            isTitle
+                ? `Add "${id} — ${description}" as a title? It will group the items whose IDs start with ${id}. — and carries no estimate of its own.`
+                : `Add SOW ${id} - ${description} (${qty} ${unit})?`);
         if (!confirmed) return false;
 
         const submitBtn = document.getElementById('addSOWSubmitBtn');
@@ -76,7 +190,10 @@ Object.assign(ProjectPage, {
         submitBtn.disabled = true;
 
         try {
-            await DataService.addSOWItem(this._currentProjectId, { id, description, qty, unit });
+            await DataService.addSOWItem(this._currentProjectId,
+                isTitle
+                    ? { id, description, qty: 0, unit: '', isTitle: true }
+                    : { id, description, qty, unit });
             UI.toast(`SOW ${id} added! You can add another.`, 'success');
             // v3: NO full page reload. The modal stays open with cleared
             // fields for rapid batch entry, and the SOW tab refreshes in
@@ -132,6 +249,26 @@ Object.assign(ProjectPage, {
     /**
      * renderSOWBudget - Enhanced with full Estimates integration
      */
+    /**
+     * toggleSowHeading (v11 BATCH H4) - Collapse state is per project and
+     * lives only for the session. Persisting it would mean writing to the
+     * sheet on every click, and the cost of re-expanding is one click.
+     */
+    toggleSowHeading(id) {
+        this._sowCollapsed = this._sowCollapsed || {};
+        this._sowCollapsed[id] = !this._sowCollapsed[id];
+        this.renderSOWBudget(this._data);
+    },
+
+    /** collapseAllSow - all headings shut, for scanning a long BOQ. */
+    collapseAllSow(shut) {
+        this._sowCollapsed = {};
+        if (shut) {
+            (this._sowItems || []).forEach(s => { if (s.isHeading) this._sowCollapsed[s.id] = true; });
+        }
+        this.renderSOWBudget(this._data);
+    },
+
     renderSOWBudget(p) {
         const container = document.getElementById('proj-tab-sow');
         const estimates = this._estimatesData || { groups: [] };
@@ -141,6 +278,12 @@ Object.assign(ProjectPage, {
             <div class="section-head">
                 <h2>Scope of Work Budget Control</h2>
                 <div class="rule"></div>
+                ${(this._sowItems || []).some(s => s.isHeading) ? `
+                    <button class="btn-sm" onclick="ProjectPage.collapseAllSow(false)">Expand all</button>
+                    <button class="btn-sm" onclick="ProjectPage.collapseAllSow(true)">Collapse all</button>` : ''}
+                ${(App.getUser() || {}).role === 'superadmin'
+                    ? `<button class="btn-sm" title="Find titles that still carry an estimate group"
+                        onclick="ProjectPage.auditTitles()">${Icon.search({size:12})} Check titles</button>` : ''}
                 ${this._canEdit !== false ? `<button class="btn-primary" onclick="ProjectPage.showAddSOWModal()" style="padding:4px 14px;font-size:11px;margin-left:auto;">+ Add SOW</button>` : ''}
                 <span class="badge">Click any SOW to see detailed breakdown</span>
             </div>
@@ -174,9 +317,63 @@ Object.assign(ProjectPage, {
             html += `<div class="empty"><p>No SOW items yet. Click "+ Add SOW" to create one.</p></div>`;
         }
 
+        // ── v11 BATCH H4: SOW HIERARCHY ──
+        // The tree is built on the SERVER (33-SowTree.gs) and arrives
+        // already ordered depth-first, so this only has to render it.
+        // Deriving the structure here as well is how two screens end up
+        // disagreeing about which item sits under which.
+        this._sowCollapsed = this._sowCollapsed || {};
+        const collapsed = this._sowCollapsed;
+        const hidden = item => {
+            let p = item.parentId;
+            const seen = {};
+            while (p && !seen[p]) {
+                if (collapsed[p]) return true;
+                seen[p] = true;
+                const par = sowItems.find(x => x.id === p);
+                p = par ? par.parentId : '';
+            }
+            return false;
+        };
+
         sowItems.forEach((item, idx) => {
+            // Totals count EVERY row exactly once — a heading contributes
+            // only its own budget, never its children's. This is what
+            // keeps the project total identical to what it was before the
+            // hierarchy existed.
             totalBudget += parseFloat(item.budget || 0);
             totalActual += parseFloat(item.actual || 0);
+
+            if (hidden(item)) return;
+
+            if (item.isHeading) {
+                // A heading is a different KIND of row, not an indented
+                // one: nothing to estimate, nothing to drag, and its
+                // money is a roll-up of what sits beneath it.
+                const rb = parseFloat(item.rollupBudget) || 0;
+                const ra = parseFloat(item.rollupActual) || 0;
+                const rv = rb - ra;
+                const rp = item.rollupProgress;
+                const own = parseFloat(item.budget) || 0;
+                html += `
+                <div class="sow-heading lvl-${item.level || 1}" style="padding-left:${((item.level || 1) - 1) * 18}px;">
+                    <button class="sow-twist" title="${collapsed[item.id] ? 'Expand' : 'Collapse'}"
+                        onclick="event.stopPropagation();ProjectPage.toggleSowHeading('${item.id}')">
+                        ${collapsed[item.id] ? Icon.chevronRight({size:12}) : Icon.arrowDown({size:12})}
+                    </button>
+                    <span class="sh-id">${item.id}</span>
+                    <span class="sh-desc">${item.description || ''}</span>
+                    <span class="sh-count">${item.childCount} item${item.childCount === 1 ? '' : 's'}</span>
+                    <span class="sh-nums">
+                        <span><em>Budget</em><b>₱${fmtMoney(rb)}</b></span>
+                        <span><em>Actual</em><b>₱${fmtMoney(ra)}</b></span>
+                        <span class="${rv < 0 ? 'neg' : 'pos'}"><em>Variance</em><b>${rv < 0 ? '-' : '+'}₱${fmtMoney(Math.abs(rv))}</b></span>
+                        <span><em>Progress</em><b>${rp == null ? '—' : rp.toFixed(0) + '%'}</b></span>
+                    </span>
+                    <span class="sh-rollup">roll-up${own > 0 ? ' · incl. ₱' + fmtMoney(own) + ' on this heading' : ''}</span>
+                </div>`;
+                return;
+            }
 
             const group = (estimates.groups || []).find(g => g.sowId === item.id);
             let itemEstimate = 0;
@@ -240,7 +437,9 @@ Object.assign(ProjectPage, {
             }
 
             html += `
-                <div class="sow-item" data-estimate-status="${estimateStatus}" onclick="ProjectPage.openSOWBreakdown('${item.id}')">
+                <div class="sow-item lvl-${item.level || 1}" data-estimate-status="${estimateStatus}"
+                     style="margin-left:${((item.level || 1) - 1) * 18}px;"
+                     onclick="ProjectPage.openSOWBreakdown('${item.id}')">
                     <div class="sow-header">
                         <div class="sow-desc">
                             <strong>${item.id}</strong> — ${item.description || '—'}

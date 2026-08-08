@@ -171,6 +171,9 @@ Object.assign(ProjectPage, {
                     ${this._gCompact ? Icon.chevronRight({size:12}) : Icon.arrowDown({size:12})} ${this._gCompact ? 'Show dates' : 'Hide dates'}
                 </button>
                 <button class="btn-sm" onclick="ProjectPage.ganttToday()">${Icon.calendar({size:12})} Go to today</button>
+                ${(this._sowItems || []).some(s => s.isHeading) ? `
+                    <button class="btn-sm" onclick="ProjectPage.collapseAllGantt(true)" title="Show headings only">Collapse all</button>
+                    <button class="btn-sm" onclick="ProjectPage.collapseAllGantt(false)">Expand all</button>` : ''}
                 ${canEdit ? `<button class="btn-sm" style="margin-left:auto" onclick="ProjectPage.recalcSchedule()"
                     title="Re-apply every predecessor link from the top down">${Icon.refresh({size:12})} Recalculate chain</button>` : ''}
             </div>
@@ -246,6 +249,19 @@ Object.assign(ProjectPage, {
      * no longer shows or hides a separate table, because the schedule
      * columns now live inside the pane.
      */
+    /** toggleGanttHeading (v11 BATCH H4) - collapse one heading. */
+    toggleGanttHeading(id) {
+        this._gCollapsed = this._gCollapsed || {};
+        this._gCollapsed[id] = !this._gCollapsed[id];
+        this._renderGanttChart(this._data);
+    },
+
+    collapseAllGantt(shut) {
+        this._gCollapsed = {};
+        if (shut) (this._sowItems || []).forEach(s => { if (s.isHeading) this._gCollapsed[s.id] = true; });
+        this._renderGanttChart(this._data);
+    },
+
     toggleSchedule() {
         this._gCompact = !this._gCompact;
         this.renderGantt(this._data);
@@ -434,10 +450,59 @@ Object.assign(ProjectPage, {
                 <div class="gt-ticks">${ticks}</div>
             </div>`;
 
+        // ── v11 BATCH H4: SOW HIERARCHY ──
+        // A heading has no dates of its own to drag. It gets a SUMMARY
+        // BAR — the bracket shape — spanning its earliest child to its
+        // latest, and collapsing it hides the detail beneath. On a
+        // sixty-line bill of quantities that is the difference between a
+        // readable chart and a wall of bars.
+        this._gCollapsed = this._gCollapsed || {};
+        const gCollapsed = this._gCollapsed;
+        const gHidden = it => {
+            let p = it.parentId;
+            const seen = {};
+            while (p && !seen[p]) {
+                if (gCollapsed[p]) return true;
+                seen[p] = true;
+                const par = items.find(x => x.id === p);
+                p = par ? par.parentId : '';
+            }
+            return false;
+        };
+        const gSpan = it => {
+            if (!it.isHeading) return [this._gDay(it.startDate), this._gDay(it.endDate)];
+            const kids = items.filter(k => String(k.id).indexOf(String(it.id) + '.') === 0);
+            const ss = [], ee = [];
+            kids.concat([it]).forEach(k => {
+                const a = this._gDay(k.startDate), b = this._gDay(k.endDate);
+                if (a) ss.push(a.getTime());
+                if (b) ee.push(b.getTime());
+            });
+            return ss.length && ee.length
+                ? [new Date(Math.min.apply(null, ss)), new Date(Math.max.apply(null, ee))]
+                : [null, null];
+        };
+
         items.forEach((item, idx) => {
+            if (gHidden(item)) return;
+
             const t = cpm.tById[item.id];
             const health = this._taskHealth(item);
             const critCls = t && t.critical ? 'is-critical' : '';
+
+            if (item.isHeading) {
+                const [hs, he] = gSpan(item);
+                const rp = item.rollupProgress;
+                const bar = (hs && he)
+                    ? `<div class="gt-summary" style="left:${x(hs)}px;width:${Math.max(10, (this._gDiffDays(hs, he) + 1) * DAY_W)}px"
+                            title="${item.id} — ${item.description || ''}
+${this._gShort(hs)} → ${this._gShort(he)} · ${item.childCount} item(s)${rp == null ? '' : ' · ' + rp.toFixed(0) + '%'}"></div>`
+                    : '';
+                html += this.renderScheduleHeadingCells(item)
+                     + `<div class="gt-cell-track is-heading" data-id="${item.id}" style="width:${trackW}px">${bar}</div>`;
+                return;
+            }
+
             const s = this._gDay(item.startDate), e = this._gDay(item.endDate);
 
             let inner = '';
@@ -720,7 +785,10 @@ Object.assign(ProjectPage, {
         const t = this._ganttMeta && this._ganttMeta.tById[sowId];
         const health = this._taskHealth(item);
         const group = ((this._estimatesData || {}).groups || []).find(g => g.sowId === sowId);
-        const others = (this._sowItems || []).filter(s => s.id !== sowId);
+        // v11 BATCH H5: a heading cannot be a predecessor. It has no dates
+        // of its own — its span is reported from its children — so linking
+        // to one would create a dependency on a date nobody set.
+        const others = (this._sowItems || []).filter(s => s.id !== sowId && !s.isHeading);
         const preds = String(item.predecessors || '').split(',').map(x => x.trim()).filter(Boolean);
 
         const resChips = (list, labelFn) => (list && list.length)

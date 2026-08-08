@@ -486,6 +486,38 @@ function getFinanceData() {
       const d = new Date(x); if (!isNaN(d)) spanDs.push(d);
     });
   });
+
+  // ── v11 BATCH H5: THE WINDOW MUST COVER THE MONEY, NOT JUST THE PLAN ──
+  // The span was built only from project and SOW dates. Any transaction
+  // that fell OUTSIDE that range simply never appeared on the chart —
+  // and money moving before a project's nominal start is completely
+  // normal: mobilisation, permits, a deposit paid while the contract was
+  // still being signed. A standing cost centre with no meaningful start
+  // date shows almost nothing at all.
+  //
+  // The chart is a record of cash, so its window is now driven by the
+  // cash. Every actual movement is included, which also means the
+  // running balance starts from the first real transaction rather than
+  // from an arbitrary planned date with money already behind it.
+  allReleases.forEach(function (r) {
+    if (low_(r.status) !== 'reviewed') return;
+    const d = new Date(r.releasedAt || r.createdAt);
+    if (!isNaN(d)) spanDs.push(d);
+  });
+  allIncoming.forEach(function (i) {
+    if (low_(i.status) !== 'approved') return;
+    const d = new Date(i.receivedAt || i.dateReceived || i.createdAt);
+    if (!isNaN(d)) spanDs.push(d);
+  });
+  if (ss_().getSheetByName('Billings')) {
+    readAll_('Billings').forEach(function (b) {
+      if (low_(b.status) === 'rejected') return;
+      [b.paidAt, b.submittedAt, b.createdAt].forEach(function (x) {
+        if (!x) return;
+        const d = new Date(x); if (!isNaN(d)) spanDs.push(d);
+      });
+    });
+  }
   let cfStart = new Date(Math.min.apply(null, spanDs.map(function (d) { return d.getTime(); })));
   let cfEnd = new Date(Math.max.apply(null, spanDs.map(function (d) { return d.getTime(); })));
   cfStart = new Date(cfStart.getFullYear(), cfStart.getMonth(), 1);

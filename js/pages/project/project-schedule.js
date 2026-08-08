@@ -119,6 +119,38 @@ Object.assign(ProjectPage, {
      * @param t      its CPM node (float, critical) — may be undefined
      * @param health the _taskHealth result, for the status dot
      */
+    /**
+     * renderScheduleHeadingCells (v11 BATCH H4) - The frozen-pane cell for
+     * a heading row.
+     *
+     * A heading carries NO editable schedule fields, and that is the
+     * point: it has no dates of its own. Its span is reported from its
+     * children, so offering a start date to type into would invite
+     * someone to set one that the chart then ignores.
+     */
+    renderScheduleHeadingCells(item) {
+        const esc = v => String(v == null ? '' : v)
+            .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        const collapsed = (this._gCollapsed || {})[item.id];
+        const rp = item.rollupProgress;
+        return `
+            <div class="gt-cell-left is-heading" data-id="${esc(item.id)}"
+                 style="--gt-indent:${((item.level || 1) - 1) * 14}px;">
+                <div class="gt-task is-heading">
+                    <button class="gt-twist" title="${collapsed ? 'Expand' : 'Collapse'}"
+                        onclick="event.stopPropagation();ProjectPage.toggleGanttHeading('${esc(item.id)}')">
+                        ${collapsed ? Icon.chevronRight({ size: 11 }) : Icon.arrowDown({ size: 11 })}
+                    </button>
+                    <span class="id">${esc(item.id)}</span>
+                    <span class="nm">${esc(item.description || '')}</span>
+                </div>
+                <div class="col-pred"><span class="gt-ro">${item.childCount} item(s)</span></div>
+                <div class="col-date"><span class="gt-ro">—</span></div>
+                <div class="col-dur"><span class="gt-ro">${rp == null ? '—' : rp.toFixed(0) + '%'}</span></div>
+                <div class="col-date"><span class="gt-ro">—</span></div>
+            </div>`;
+    },
+
     renderScheduleRowCells(item, idx, t, health) {
         const canEdit = this._canEdit !== false;
         const pred = this._predOf(item);
@@ -131,8 +163,9 @@ Object.assign(ProjectPage, {
         const esc = v => String(v == null ? '' : v)
             .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
+        // v11 BATCH H5: headings are excluded — see openTaskModal.
         const predOpts = (this._sowItems || [])
-            .filter(o => o.id !== item.id)
+            .filter(o => o.id !== item.id && !o.isHeading)
             .map(o => `<option value="${esc(o.id)}" ${pred === o.id ? 'selected' : ''}>${esc(o.id)} — ${esc((o.description || '').slice(0, 30))}</option>`)
             .join('');
 
@@ -140,7 +173,8 @@ Object.assign(ProjectPage, {
             (t ? (t.critical ? ' · critical path' : ' · float ' + t.float + ' day(s)') : '');
 
         return `
-            <div class="gt-cell-left" data-id="${esc(item.id)}" data-idx="${idx}">
+            <div class="gt-cell-left" data-id="${esc(item.id)}" data-idx="${idx}"
+                 style="--gt-indent:${((item.level || 1) - 1) * 14}px;">
                 <div class="gt-task ${crit ? 'is-critical' : ''}" title="${esc(tip)}">
                     <span class="dot" style="background:${health ? health.color : 'var(--ink-soft)'}"></span>
                     <span class="id">${esc(item.id)}</span>

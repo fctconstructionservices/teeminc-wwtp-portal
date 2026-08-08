@@ -303,6 +303,11 @@ const API_ACTIONS = {
   paySupplierInvoice: paySupplierInvoice,
   cancelSupplierInvoice: cancelSupplierInvoice,
   getPayables: getPayables,
+
+  // ── v11 BATCH H5: SOW TITLE MAINTENANCE ──
+  setSowItemKind: setSowItemKind,
+  auditSowTitles: auditSowTitles,
+  cleanSowTitleEstimates: cleanSowTitleEstimates,
   addDrawing: addDrawing,
   deleteDrawing: deleteDrawing,
   getDrawings: getDrawings,

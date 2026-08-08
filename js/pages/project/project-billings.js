@@ -340,11 +340,23 @@ Object.assign(ProjectPage, {
         const vatEx = totalAmt - vatTotal;
         const accomplishedPct = (b.currentPct || 0) - (b.prevPct || 0);
         const net = b.netAmount || 0;
+        // v11 BATCH H5: how much of the advance has been worked off,
+        // counting THIS billing. It answers the question a client asks
+        // immediately after seeing a recoupment line.
+        const dpRecoupedToDate = ((p.billings || [])
+            .filter(x => String(x.status || '').toLowerCase() !== 'rejected' &&
+                         String(x.billingNo || '') <= String(b.billingNo || ''))
+            .reduce((sm, x) => sm + (parseFloat(x.dpRecoupment) || 0), 0));
         const vat12 = net * 0.12;
         const totalWithVat = net + vat12;
 
         const overlay = document.createElement('div');
         overlay.id = 'swaModal';
+        // v11 BATCH H5: the global print rule hides every top-level element
+        // that is not a print modal. This overlay is not one — it has its
+        // own A4-landscape rules — so without this class it was hidden and
+        // the billing printed as a blank white page.
+        overlay.className = 'printable-overlay';
         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(28,35,33,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:24px;';
         overlay.innerHTML = `
         <style>
@@ -363,9 +375,11 @@ Object.assign(ProjectPage, {
             #swaModal .swa-sign .line{border-top:1px solid #1C2321;margin-top:34px;padding-top:4px;}
             @media print {
                 @page { size: A4 landscape; margin: 10mm; }
-                body * { visibility: hidden !important; }
-                #swaModal, #swaModal * { visibility: visible !important; }
-                #swaModal { position: absolute !important; inset: 0 !important; padding: 0 !important; background: #fff !important; overflow: visible !important; }
+                /* v11 BATCH H5: visibility:hidden leaves the hidden app
+                   OCCUPYING LAYOUT, which is what produced the blank first
+                   page everywhere else. The global stylesheet now hides
+                   with display:none; this only has to place the sheet. */
+                #swaModal { position: static !important; inset: auto !important; padding: 0 !important; background: #fff !important; overflow: visible !important; display: block !important; }
                 #swaModal .swa-sheet { border-radius: 0; max-width: none; padding: 0; }
                 #swaModal .swa-noprint { display: none !important; }
             }
@@ -418,6 +432,16 @@ Object.assign(ProjectPage, {
                 <div class="r"><span>Accomplished this period</span><b>${accomplishedPct.toFixed(2)}%</b></div>
                 <div class="r"><span>Amount equivalent to Accomplishment</span><b>₱${fmtMoney(b.grossAmount || 0)}</b></div>
                 <div class="r"><span>Less: Retention (${Math.round((p.retentionPct || 0.10) * 100)}%)</span><b>₱${fmtMoney(b.retentionAmount || 0)}</b></div>
+                <!-- v11 BATCH H5: the downpayment lines were missing entirely.
+                     A client reading this could not see why the net was lower
+                     than gross less retention, which is the single most common
+                     reason a billing gets queried. The DP context prints even
+                     when nothing was recouped this time, because "how much of
+                     the advance is left" is the question that follows. -->
+                ${(p.downpaymentPct || 0) > 0 ? `
+                <div class="r"><span>Downpayment received (${Math.round((p.downpaymentPct || 0) * 100)}% of contract)</span><b>₱${fmtMoney((p.contractValueRevised || 0) * (p.downpaymentPct || 0))}</b></div>
+                <div class="r"><span>Less: Downpayment recoupment</span><b>${(b.dpRecoupment || 0) > 0 ? '₱' + fmtMoney(b.dpRecoupment) : '—'}</b></div>
+                <div class="r"><span>Downpayment recouped to date</span><b>₱${fmtMoney(dpRecoupedToDate)} of ₱${fmtMoney((p.contractValueRevised || 0) * (p.downpaymentPct || 0))}</b></div>` : ''}
                 <div class="r"><span>Amount Due for this Billing</span><b>₱${fmtMoney(net)}</b></div>
                 <div class="r"><span>VAT (12%)</span><b>₱${fmtMoney(vat12)}</b></div>
                 <div class="r" style="border-bottom:2px solid #1C2321;"><span><b>Total Amount with VAT</b></span><b>₱${fmtMoney(totalWithVat)}</b></div>

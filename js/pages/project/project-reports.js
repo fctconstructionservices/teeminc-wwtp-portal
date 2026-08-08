@@ -56,6 +56,8 @@ Object.assign(ProjectPage, {
               render: p => self._rsSOW(p) },
             { id: 'schedule', label: 'Schedule', sub: 'Start, finish, duration, predecessor and status per item', group: 'Scope', def: false,
               render: p => self._rsSchedule(p) },
+            { id: 'gantt', label: 'Timeline chart', sub: 'The Gantt as one continuous chart, scaled to the page', group: 'Scope', def: false,
+              render: p => self._rsGantt(p) },
             { id: 'estimates', label: 'Estimate summary', sub: 'Approved estimate totals per SOW item', group: 'Scope', def: false,
               render: p => self._rsEstimates(p) },
             { id: 'variations', label: 'Variation orders', sub: 'Every VO with status and contract effect', group: 'Scope', def: false,
@@ -66,8 +68,10 @@ Object.assign(ProjectPage, {
             { id: 'cashflow', label: 'Cash requests', sub: 'Cash advances, releases and liquidations', group: 'Commercial', def: false,
               render: p => self._rsCash(p) },
 
-            { id: 'daily', label: 'Daily records', sub: 'One line per site day with manpower and weather', group: 'Site', def: false,
+            { id: 'daily', label: 'Daily records (summary)', sub: 'One line per site day with manpower and weather', group: 'Site', def: false,
               render: p => self._rsDaily(p) },
+            { id: 'dailyFull', label: 'Daily records (full detail)', sub: 'Every record in full — manpower, equipment, work, materials, issues, photos', group: 'Site', def: false,
+              render: p => self._rsDailyDetailed(p) },
             { id: 'manpower', label: 'Manpower summary', sub: 'Total man-days by role across the period', group: 'Site', def: false,
               render: p => self._rsManpower(p) },
             { id: 'equipment', label: 'Equipment on site', sub: 'Equipment assigned, with downtime if logged', group: 'Site', def: false,
@@ -77,8 +81,10 @@ Object.assign(ProjectPage, {
 
             { id: 'punchlist', label: 'Punchlist', sub: 'Open and closed defects with rectification status', group: 'Quality & Safety', def: false,
               render: p => self._rsPunchlist(p) },
-            { id: 'safety', label: 'Safety records', sub: 'Toolbox talks, inspections, incidents and near misses', group: 'Quality & Safety', def: false,
+            { id: 'safety', label: 'Safety records (summary)', sub: 'Toolbox talks, inspections, incidents and near misses', group: 'Quality & Safety', def: false,
               render: p => self._rsSafety(p) },
+            { id: 'safetyFull', label: 'Safety records (full detail)', sub: 'Every record with its persons, action taken and photographs', group: 'Quality & Safety', def: false,
+              render: p => self._rsSafetyDetailed(p) },
             { id: 'drawings', label: 'Drawings register', sub: 'Drawing numbers with current revision', group: 'Quality & Safety', def: false,
               render: p => self._rsDrawings(p) }
         ];
@@ -135,7 +141,12 @@ Object.assign(ProjectPage, {
             ['Start date', this._rDate(p.startDate)],
             ['Target completion', this._rDate(p.endDate)],
             ['Original contract value', this._rMoney(p.contractValue)],
-            ['Revised contract value', this._rMoney(p.contractValueRevised)],
+            // v11 BATCH H5: printing the same figure twice invites the
+            // question "which one is right?". A revised value is only
+            // shown when a variation order actually changed it.
+            ['Revised contract value',
+             (Math.abs((parseFloat(p.contractValueRevised) || 0) - (parseFloat(p.contractValue) || 0)) > 0.005)
+                ? this._rMoney(p.contractValueRevised) : ''],
             ['Retention', ((p.retentionPct || 0) * 100).toFixed(0) + '%'],
             ['Overall progress', (p.totalProgress || 0).toFixed(1) + '%']
         ]);
@@ -164,12 +175,87 @@ Object.assign(ProjectPage, {
         ]);
     },
 
+    /**
+     * _rpChart (v11 BATCH H5) - An inline SVG line chart.
+     *
+     * SVG rather than a chart library because the report opens in a NEW
+     * WINDOW: a library would have to be loaded there, and if the load
+     * failed or was slow the chart would print blank. SVG is in the
+     * document the moment it is written, and it prints at the printer's
+     * resolution rather than as a bitmap.
+     */
+    _rpChart(series, labels, opts) {
+        opts = opts || {};
+        const W = 720, H = 240, PADL = 62, PADB = 30, PADT = 12, PADR = 10;
+        const all = series.reduce((a, s) => a.concat(s.data.filter(v => v != null)), []);
+        if (!all.length) return '';
+        const max = Math.max.apply(null, all) * 1.08 || 1;
+        const n = Math.max(labels.length - 1, 1);
+        const x = i => PADL + (i / n) * (W - PADL - PADR);
+        const y = v => H - PADB - (v / max) * (H - PADB - PADT);
+
+        // Four gridlines: enough to read a value off, few enough not to
+        // fight the data for attention.
+        let grid = '';
+        for (let g = 0; g <= 4; g++) {
+            const v = max * g / 4;
+            grid += `<line x1="${PADL}" y1="${y(v)}" x2="${W - PADR}" y2="${y(v)}"
+                        stroke="#E5E1D6" stroke-width="1"/>
+                     <text x="${PADL - 6}" y="${y(v) + 3}" text-anchor="end"
+                        font-size="8" fill="#5B6360">${opts.pct ? v.toFixed(0) + '%' : '₱' + Math.round(v).toLocaleString()}</text>`;
+        }
+
+        // Only every nth label, so a 24-month series does not overprint.
+        const step = Math.ceil(labels.length / 12);
+        let xlab = '';
+        labels.forEach((l, i) => {
+            if (i % step) return;
+            xlab += `<text x="${x(i)}" y="${H - PADB + 12}" text-anchor="middle"
+                        font-size="8" fill="#5B6360">${this._rEsc(l)}</text>`;
+        });
+
+        const paths = series.map(s => {
+            const pts = s.data.map((v, i) => v == null ? null : `${x(i)},${y(v)}`).filter(Boolean);
+            if (!pts.length) return '';
+            return `<polyline points="${pts.join(' ')}" fill="none" stroke="${s.color}"
+                        stroke-width="2" stroke-linejoin="round" stroke-linecap="round"
+                        ${s.dashed ? 'stroke-dasharray="5 3"' : ''}/>`;
+        }).join('');
+
+        const legend = series.map((s, i) => `
+            <g transform="translate(${PADL + i * 140},${PADT})">
+                <line x1="0" y1="0" x2="16" y2="0" stroke="${s.color}" stroke-width="2"
+                    ${s.dashed ? 'stroke-dasharray="5 3"' : ''}/>
+                <text x="21" y="3" font-size="9" fill="#1C2321">${this._rEsc(s.name)}</text>
+            </g>`).join('');
+
+        return `<svg viewBox="0 0 ${W} ${H}" class="rp-chart" role="img"
+                    aria-label="${this._rEsc(opts.title || 'chart')}">
+            ${grid}${xlab}${paths}
+            <line x1="${PADL}" y1="${H - PADB}" x2="${W - PADR}" y2="${H - PADB}" stroke="#9aa4a0"/>
+            <line x1="${PADL}" y1="${PADT}" x2="${PADL}" y2="${H - PADB}" stroke="#9aa4a0"/>
+            ${legend}
+        </svg>`;
+    },
+
     _rsEVM(p) {
         const e = p.evm;
         if (!e || (!e.pv && !e.ev && !e.ac)) return '';
         const cpi = parseFloat(e.cpi) || 0, spi = parseFloat(e.spi) || 0;
         const read = (v, over, under) => v >= 1 ? over : under;
-        return this._rFacts('Earned Value', [
+
+        // v11 BATCH H5: the S-curve. Three numbers in a table tell you
+        // where the project stands; the curves tell you how it got there,
+        // which is what anyone reading a closeout report is looking for.
+        const chart = (e.labels && e.labels.length)
+            ? this._rpChart([
+                { name: 'Planned value (PV)', data: e.pvSeries || [], color: '#24455A', dashed: true },
+                { name: 'Earned value (EV)', data: e.evSeries || [], color: '#2F7A46' },
+                { name: 'Actual cost (AC)', data: e.acSeries || [], color: '#B23A2E' }
+              ], e.labels, { title: 'Earned value over time' })
+            : '';
+
+        const facts = this._rFacts('Earned Value', [
             ['Planned value (PV)', this._rMoney(e.pv)],
             ['Earned value (EV)', this._rMoney(e.ev)],
             ['Actual cost (AC)', this._rMoney(e.ac)],
@@ -178,29 +264,146 @@ Object.assign(ProjectPage, {
             ['CPI', cpi.toFixed(2) + ` <span class="rp-note">${read(cpi, 'under budget', 'over budget')}</span>`],
             ['SPI', spi.toFixed(2) + ` <span class="rp-note">${read(spi, 'ahead of schedule', 'behind schedule')}</span>`]
         ]);
+        if (!facts) return '';
+        return chart
+            ? facts.replace('</section>', `<div class="rp-chartwrap">${chart}</div></section>`)
+            : facts;
     },
 
     _rsSOW(p) {
         const items = p.sowItems || [];
-        let tb = 0, ta = 0;
+        let tb = 0, ta = 0, te = 0;
+        // v11 BATCH H5: the estimate column. Budget is what you allowed;
+        // the estimate is what you priced. Seeing them side by side is
+        // the whole point of a cost report — one without the other only
+        // tells you half of what happened.
+        // v11 BATCH H4: the report prints the same tree as the screen.
+        // Headings show their roll-up and are styled as headings; totals
+        // still count every row exactly once, so the printed total
+        // matches the one on the SOW tab.
         const rows = items.map(s => {
             const b = parseFloat(s.budget) || 0, a = parseFloat(s.actual) || 0;
-            tb += b; ta += a;
+            const est = parseFloat(s.estimateTotal) || 0;
+            tb += b; ta += a; te += est;
+
+            if (s.isHeading) {
+                const rb = parseFloat(s.rollupBudget) || 0;
+                const ra = parseFloat(s.rollupActual) || 0;
+                const rv = rb - ra;
+                const rp = s.rollupProgress;
+                const re = items.filter(x => String(x.id).indexOf(String(s.id) + '.') === 0)
+                    .concat([s])
+                    .reduce((sm, x) => sm + (parseFloat(x.estimateTotal) || 0), 0);
+                return [
+                    `<b>${this._rEsc(s.id)}</b>`,
+                    `<b class="rp-head">${this._rEsc(s.description)}</b>`,
+                    '', `<b>${this._rMoney(re)}</b>`,
+                    `<b>${this._rMoney(rb)}</b>`, `<b>${this._rMoney(ra)}</b>`,
+                    `<b class="${rv < 0 ? 'rp-bad' : ''}">${this._rMoney(rv)}</b>`,
+                    rp == null ? '—' : `<b>${rp.toFixed(0)}%</b>`
+                ];
+            }
+
             const v = b - a;
+            const indent = 'padding-left:' + (((s.level || 1) - 1) * 12) + 'px';
             return [
-                this._rEsc(s.id), this._rEsc(s.description),
+                this._rEsc(s.id),
+                `<span style="${indent};display:inline-block">${this._rEsc(s.description)}</span>`,
                 (parseFloat(s.qty) || 0) + ' ' + this._rEsc(s.unit || ''),
-                this._rMoney(b), this._rMoney(a),
+                this._rMoney(est), this._rMoney(b), this._rMoney(a),
                 `<span class="${v < 0 ? 'rp-bad' : ''}">${this._rMoney(v)}</span>`,
                 (parseFloat(s.progress) || 0).toFixed(0) + '%'
             ];
         });
         return this._rTable('Scope of Work and Budget',
-            [{h:'Item'},{h:'Description'},{h:'Quantity'},{h:'Budget',amt:true},{h:'Actual',amt:true},{h:'Variance',amt:true},{h:'% Done',amt:true}],
+            [{h:'Item'},{h:'Description'},{h:'Quantity'},{h:'Estimate',amt:true},
+             {h:'Budget',amt:true},{h:'Actual',amt:true},{h:'Variance',amt:true},{h:'% Done',amt:true}],
             rows,
-            ['TOTAL', '', '', this._rMoney(tb), this._rMoney(ta),
+            ['TOTAL', '', '', this._rMoney(te), this._rMoney(tb), this._rMoney(ta),
              `<span class="${tb - ta < 0 ? 'rp-bad' : ''}">${this._rMoney(tb - ta)}</span>`,
              (p.totalProgress || 0).toFixed(1) + '%']);
+    },
+
+    /**
+     * _rsGantt (v11 BATCH H5) - The timeline as a real chart on paper.
+     *
+     * Printed as ONE CONTINUOUS SVG, scaled so the whole project fits the
+     * page width. The on-screen Gantt scrolls horizontally; a scrolling
+     * chart printed as-is comes out truncated at the right edge, which is
+     * exactly the "putol" problem. Fitting the span to the page means the
+     * bars get shorter, never cut.
+     *
+     * Headings print as summary brackets, matching the screen.
+     */
+    _rsGantt(p) {
+        const items = (p.sowItems || []).filter(s => s.startDate || s.endDate || s.isHeading);
+        if (!items.length) return '';
+        const day = v => { const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+            return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; };
+        const diff = (a, b) => Math.round((b - a) / 86400000);
+
+        const spanOf = it => {
+            if (!it.isHeading) return [day(it.startDate), day(it.endDate)];
+            const kids = items.filter(k => String(k.id).indexOf(String(it.id) + '.') === 0);
+            const ss = [], ee = [];
+            kids.concat([it]).forEach(k => {
+                const a = day(k.startDate), b = day(k.endDate);
+                if (a) ss.push(a.getTime()); if (b) ee.push(b.getTime());
+            });
+            return ss.length && ee.length
+                ? [new Date(Math.min.apply(null, ss)), new Date(Math.max.apply(null, ee))] : [null, null];
+        };
+
+        const all = [];
+        items.forEach(it => { const [a, b] = spanOf(it); if (a) all.push(a.getTime()); if (b) all.push(b.getTime()); });
+        if (!all.length) return '';
+        const min = new Date(Math.min.apply(null, all));
+        const max = new Date(Math.max.apply(null, all));
+        const total = Math.max(diff(min, max), 1);
+
+        const LABEL = 190, W = 900, ROW = 15, PADT = 26;
+        const trackW = W - LABEL - 8;
+        const x = d => LABEL + (diff(min, d) / total) * trackW;
+        const H = PADT + items.length * ROW + 8;
+        const e = this._rEsc.bind(this);
+        const MN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+        // month ticks, so a bar's position means something
+        let ticks = '';
+        let c = new Date(min.getFullYear(), min.getMonth(), 1);
+        while (c <= max) {
+            const px = x(c < min ? min : c);
+            ticks += `<line x1="${px}" y1="${PADT - 8}" x2="${px}" y2="${H - 4}" stroke="#E5E1D6"/>
+                      <text x="${px + 2}" y="${PADT - 11}" font-size="7.5" fill="#5B6360">${MN[c.getMonth()]} ${String(c.getFullYear()).slice(2)}</text>`;
+            c = new Date(c.getFullYear(), c.getMonth() + 1, 1);
+        }
+
+        const rows = items.map((it, i) => {
+            const yy = PADT + i * ROW;
+            const [a, b] = spanOf(it);
+            const indent = ((it.level || 1) - 1) * 7;
+            const label = `<text x="${2 + indent}" y="${yy + 8}" font-size="7.5"
+                ${it.isHeading ? 'font-weight="700" fill="#24455A"' : 'fill="#1C2321"'}
+                >${e(String(it.id))} ${e(String(it.description || '').slice(0, 30))}</text>`;
+            if (!a || !b) return label;
+            const bx = x(a), bw = Math.max(2, x(b) - x(a));
+            if (it.isHeading) {
+                return label + `<rect x="${bx}" y="${yy + 3}" width="${bw}" height="4" fill="#24455A"/>
+                    <polygon points="${bx},${yy + 3} ${bx + 5},${yy + 3} ${bx},${yy + 11}" fill="#24455A"/>
+                    <polygon points="${bx + bw},${yy + 3} ${bx + bw - 5},${yy + 3} ${bx + bw},${yy + 11}" fill="#24455A"/>`;
+            }
+            const pct = Math.min(Math.max(parseFloat(it.progress) || 0, 0), 100);
+            const colour = pct >= 100 ? '#24455A' : pct > 0 ? '#2F7A46' : '#9aa4a0';
+            return label + `<rect x="${bx}" y="${yy + 2}" width="${bw}" height="8" rx="2" fill="${colour}" opacity="0.35"/>
+                <rect x="${bx}" y="${yy + 2}" width="${bw * pct / 100}" height="8" rx="2" fill="${colour}"/>`;
+        }).join('');
+
+        return `<section class="rp-sec rp-gantt"><h2>Timeline</h2>
+            <svg viewBox="0 0 ${W} ${H}" class="rp-chart" role="img" aria-label="Project timeline">
+                ${ticks}${rows}
+            </svg>
+            <p class="rp-note">Scaled to fit the page. Headings show as brackets spanning the items beneath them.</p>
+        </section>`;
     },
 
     _rsSchedule(p) {
@@ -270,6 +473,71 @@ Object.assign(ProjectPage, {
             [{h:'Type'},{h:'Reference'},{h:'Date'},{h:'Requestor'},{h:'Status'},{h:'Amount',amt:true}], rows);
     },
 
+    /**
+     * _rsDailyDetailed (v11 BATCH H5) - The full record for every site
+     * day, not a one-line summary.
+     *
+     * The summary table answers "which days did we work"; a client or an
+     * auditor asking for daily records wants what was actually done. Both
+     * are offered as separate sections so a long project can still print
+     * the short version when that is all that is needed.
+     */
+    _rsDailyDetailed(p) {
+        const recs = [...(p.dailyRecords || [])]
+            .filter(r => String(r.status || '').toLowerCase() !== 'rejected')
+            .sort((a, b) => new Date(a.date) - new Date(b.date));
+        if (!recs.length) return '';
+        const e = this._rEsc.bind(this);
+        const sub = (title, rows, cols) => {
+            if (!rows || !rows.length) return '';
+            return `<div class="rp-sub">${e(title)}</div>
+                <table class="rp-mini"><thead><tr>${cols.map(c =>
+                    `<th style="text-align:${c[2] || 'left'}">${e(c[0])}</th>`).join('')}</tr></thead>
+                <tbody>${rows.map(r => `<tr>${cols.map(c => {
+                    const v = c[3] ? c[3](r[c[1]], r) : e(r[c[1]] || '—');
+                    return `<td style="text-align:${c[2] || 'left'}">${v}</td>`;
+                }).join('')}</tr></tbody>`).join('')}</tbody></table>`;
+        };
+
+        return `<section class="rp-sec"><h2>Daily Site Records — full detail</h2>
+            ${recs.map(r => {
+                const mp = r.manpower || [];
+                const heads = mp.reduce((n, m) => n + (parseInt(m.count, 10) || 0), 0);
+                const wa = r.workAccomplished || [];
+                const photos = (r.photos || []).concat(wa.filter(w => w.image).map(w => ({
+                    url: w.image, name: (w.scope || '') + ' ' + (w.pct || 0) + '%'
+                })));
+                return `<div class="rp-day">
+                    <div class="rp-day-head">
+                        <b>${this._rDate(r.date)}</b>
+                        <span>${e(r.weatherAM) || '—'} / ${e(r.weatherPM) || '—'}</span>
+                        <span>${heads} worker(s)</span>
+                        <span>${e(r.createdByName || r.createdBy || '')}</span>
+                    </div>
+                    ${sub('Manpower', mp, [['Role', 'role'], ['AM', 'am', 'center'], ['PM', 'pm', 'center'],
+                        ['OT', 'ot', 'center'], ['Count', 'count', 'right', v => String(parseInt(v, 10) || 0)]])}
+                    ${sub('Equipment', r.equipment || [], [['Equipment', 'name', 'left', (v, x) => e(v || x.equipName || '—')],
+                        ['Hours', 'hours', 'right'], ['Status', 'status']])}
+                    ${sub('Work accomplished', wa, [['SOW', 'scope'], ['Location', 'location'],
+                        ['Description', 'description', 'left', (v, x) => e(v || x.desc || '')],
+                        ['%', 'pct', 'right', v => (parseFloat(v) || 0).toFixed(0) + '%']])}
+                    ${sub('Materials delivered', r.materialsDelivered || [], [['Material', 'material'],
+                        ['Qty', 'qty', 'right'], ['Unit', 'unit'], ['Supplier', 'supplier']])}
+                    ${sub('Materials used', r.materialsUsed || [], [['Material', 'material'],
+                        ['Qty', 'qty', 'right'], ['Unit', 'unit'], ['Used on', 'scope']])}
+                    ${sub('Issues and delays', r.issues || [], [['Issue', 'description', 'left', (v, x) => e(v || x.issue || '')],
+                        ['Hours lost', 'timeLost', 'right'], ['Action', 'action']])}
+                    ${sub('Visitors', r.visitors || [], [['Name', 'name'], ['Company', 'company'], ['Purpose', 'purpose']])}
+                    ${r.remarks ? `<div class="rp-sub">Remarks</div><p class="rp-rem">${e(r.remarks)}</p>` : ''}
+                    ${photos.length ? `<div class="rp-sub">Photos</div>
+                        <div class="rp-photos">${photos.slice(0, 8).map(ph => `
+                            <figure><img src="${e(ph.url)}" alt="" onerror="this.parentNode.style.display='none'" />
+                            <figcaption>${e(ph.name || '')}</figcaption></figure>`).join('')}</div>` : ''}
+                </div>`;
+            }).join('')}
+        </section>`;
+    },
+
     _rsDaily(p) {
         const recs = [...(p.dailyRecords || [])].sort((a, b) => new Date(a.date) - new Date(b.date));
         const rows = recs.map(r => {
@@ -317,13 +585,30 @@ Object.assign(ProjectPage, {
     },
 
     _rsMaterials(p) {
-        const rows = (p.siteMaterials || []).map(m => [
-            this._rEsc(m.materialName || m.material), this._rEsc(m.unit || '—'),
-            String(parseFloat(m.received) || 0), String(parseFloat(m.used) || 0),
-            String((parseFloat(m.received) || 0) - (parseFloat(m.used) || 0))
-        ]);
+        // v11 BATCH H5: three inflows are reported separately — deliveries
+        // logged in the daily reports, goods received against a purchase
+        // order, and transfers in. Rolling them into one "received"
+        // figure hides the double-count warning the site relies on.
+        const n = v => fmtMoney(parseFloat(v) || 0);
+        const rows = (p.siteMaterials || []).map(m => {
+            const del = parseFloat(m.delivered) || 0;
+            const po = parseFloat(m.receivedPO) || 0;
+            const tin = parseFloat(m.transferredIn) || 0;
+            const used = parseFloat(m.used) || 0;
+            const tout = parseFloat(m.transferredOut) || 0;
+            const onSite = parseFloat(m.remaining);
+            return [
+                this._rEsc(m.material || m.materialName) +
+                    (m.possibleDuplicate ? ' <span class="rp-note">possible duplicate entry</span>' : ''),
+                this._rEsc(m.unit || '—'),
+                n(del), n(po), n(tin), n(used), n(tout),
+                `<b>${n(isNaN(onSite) ? del + po + tin - used - tout : onSite)}</b>`
+            ];
+        });
         return this._rTable('Site Materials',
-            [{h:'Material'},{h:'Unit'},{h:'Received',amt:true},{h:'Used',amt:true},{h:'Balance',amt:true}], rows);
+            [{h:'Material'},{h:'Unit'},{h:'Delivered',amt:true},{h:'Received on PO',amt:true},
+             {h:'Transferred in',amt:true},{h:'Used',amt:true},{h:'Transferred out',amt:true},
+             {h:'On site',amt:true}], rows);
     },
 
     _rsPunchlist(p) {
@@ -333,6 +618,45 @@ Object.assign(ProjectPage, {
         ]);
         return this._rTable('Punchlist',
             [{h:'Ref'},{h:'SOW'},{h:'Description'},{h:'Severity'},{h:'Status'},{h:'Raised'}], rows);
+    },
+
+    /**
+     * _rsSafetyDetailed (v11 BATCH H5) - Every safety record in full,
+     * with its photographs.
+     *
+     * A safety summary counts incidents. An audit asks what happened,
+     * what was done about it, and shows the evidence — which is the one
+     * place in this system where a photograph is not decoration.
+     */
+    _rsSafetyDetailed(p) {
+        const recs = (p.safetyRecords || []).slice()
+            .sort((a, b) => String(a.recordDate).localeCompare(String(b.recordDate)));
+        if (!recs.length) return '';
+        const e = this._rEsc.bind(this);
+        return `<section class="rp-sec"><h2>Safety Records — full detail</h2>
+            ${recs.map(r => {
+                const pics = (r.attachments && r.attachments.length)
+                    ? r.attachments
+                    : (r.image ? [{ url: r.image, name: '' }] : []);
+                return `<div class="rp-day">
+                    <div class="rp-day-head">
+                        <b>${this._rDate(r.recordDate)}</b>
+                        <span>${e(r.recordType)}</span>
+                        ${r.severity ? `<span>${e(r.severity)}</span>` : ''}
+                        <span>${e(r.status)}</span>
+                    </div>
+                    <p class="rp-rem">${e(r.description)}</p>
+                    ${r.personsInvolved ? `<div class="rp-sub">Persons involved</div>
+                        <p class="rp-rem">${e(r.personsInvolved)}</p>` : ''}
+                    ${r.actionTaken ? `<div class="rp-sub">Action taken</div>
+                        <p class="rp-rem">${e(r.actionTaken)}</p>` : ''}
+                    ${pics.length ? `<div class="rp-sub">Photographs</div>
+                        <div class="rp-photos">${pics.map(ph => `
+                            <figure><img src="${e(ph.url)}" alt="" onerror="this.parentNode.style.display='none'" />
+                            <figcaption>${e(ph.name || '')}</figcaption></figure>`).join('')}</div>` : ''}
+                </div>`;
+            }).join('')}
+        </section>`;
     },
 
     _rsSafety(p) {
@@ -528,6 +852,32 @@ Object.assign(ProjectPage, {
                 /* Keep a heading with at least the first rows of its table. */
                 thead { display:table-header-group; }
                 tr { page-break-inside:avoid; }
+
+                /* v11 BATCH H5 — charts, daily detail and photographs */
+                .rp-chart { width:100%; height:auto; display:block; }
+                .rp-chartwrap { margin-top:10px; page-break-inside:avoid; }
+                .rp-gantt { page-break-inside:auto; }
+                .rp-head { color:var(--pd-accent); }
+                /* A day's record is a unit — splitting one across a page
+                   break makes it read as two half-days. */
+                .rp-day { page-break-inside:avoid; margin:0 0 14px; padding:0 0 10px;
+                    border-bottom:1px solid #E5E1D6; }
+                .rp-day-head { display:flex; gap:14px; align-items:baseline; flex-wrap:wrap;
+                    background:#F6F4EC; padding:4px 7px; font-size:11px; margin-bottom:6px; }
+                .rp-day-head b { font-family:'IBM Plex Mono',monospace; }
+                .rp-day-head span { color:#5B6360; font-size:10px; }
+                .rp-sub { font-family:'IBM Plex Mono',monospace; font-size:8px; text-transform:uppercase;
+                    letter-spacing:.08em; color:#5B6360; margin:6px 0 2px; }
+                .rp-mini { width:100%; border-collapse:collapse; font-size:9.5px; }
+                .rp-mini th { background:none; border:none; border-bottom:1px solid #E5E1D6;
+                    padding:2px 4px; font-size:8px; color:#5B6360; text-transform:uppercase; }
+                .rp-mini td { border:none; border-bottom:1px solid #F0EDE3; padding:2px 4px; }
+                .rp-rem { font-size:10.5px; line-height:1.5; margin:0; white-space:pre-wrap; }
+                .rp-photos { display:flex; flex-wrap:wrap; gap:6px; }
+                .rp-photos figure { margin:0; width:31%; }
+                .rp-photos img { width:100%; height:auto; max-height:52mm; object-fit:contain;
+                    border:1px solid #D6D2C4; }
+                .rp-photos figcaption { font-size:8px; color:#5B6360; text-align:center; margin-top:2px; }
             `
         }));
         w.document.close();
