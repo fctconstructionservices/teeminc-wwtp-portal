@@ -567,6 +567,25 @@ function approvePurchaseRequest(id) {
   return { success: true, status: 'Approved', route: 'cash', cashAdvanceId: caId };
 }
 
+/**
+ * cancelPurchaseRequest - Cancels the request AND whatever it created.
+ *
+ * ── v11 BATCH I3: THE CASH ADVANCE WENT WITH IT ──
+ * An approved cash-route PR generates its own cash advance, which in
+ * turn produces a cash release. Cancelling the request used to change
+ * only the request: the advance stayed approved and the release stayed
+ * sitting in Release Cash, waiting to be handed over for a purchase
+ * that had been called off. Someone would have released real money
+ * against a cancelled request, and nothing in the system would have
+ * objected.
+ *
+ * Cancelling therefore walks the chain it created and rejects it.
+ *
+ * WHAT IT WILL NOT DO: reverse money that has already moved. A release
+ * marked Reviewed means the cash is out; that is a liquidation or a
+ * return, not a cancellation, and the request is refused with the
+ * reason rather than being half-undone.
+ */
 function cancelPurchaseRequest(id, reason) {
   var pr = readAll_('PurchaseRequests').find(function (p) { return p.id === id; });
   if (!pr) throw new Error('Purchase request not found.');
@@ -574,13 +593,61 @@ function cancelPurchaseRequest(id, reason) {
   if (low_(pr.status) === 'ordered' || low_(pr.status) === 'closed') {
     throw new Error('This request has already been ordered against and cannot be cancelled.');
   }
+
+  var caId = String(pr.cashAdvanceId || '').trim();
+  var releasesCancelled = 0;
+  var advanceCancelled = false;
+
+  if (caId) {
+    var releases = readAll_('CashRelease').filter(function (r) {
+      return String(r.originalRequestId) === caId;
+    });
+
+    // Cash already handed over cannot be un-handed by cancelling a form.
+    var spent = releases.filter(function (r) { return low_(r.status) === 'reviewed'; });
+    if (spent.length) {
+      var amt = spent.reduce(function (a, r) { return a + (parseFloat(r.amount) || 0); }, 0);
+      throw new Error('Cash advance ' + caId + ' has already been released (' + fmtMoney_(amt) +
+        '). Cancelling the request would not bring that money back — liquidate it or record a return first. ' +
+        'Nothing has been changed.');
+    }
+
+    releases.forEach(function (r) {
+      if (low_(r.status) === 'rejected') return;
+      updateRow_('CashRelease', 'id', r.id, {
+        status: 'Rejected',
+        description: String(r.description || '') + ' — cancelled with ' + id
+      });
+      releasesCancelled++;
+    });
+
+    var ca = readAll_('CashAdvanceRequests').find(function (c) { return c.id === caId; });
+    if (ca && low_(ca.status) !== 'rejected') {
+      updateRow_('CashAdvanceRequests', 'id', caId, {
+        status: 'Rejected',
+        description: String(ca.description || '') + ' — cancelled with ' + id
+      });
+      advanceCancelled = true;
+    }
+  }
+
   updateRow_('PurchaseRequests', 'id', id, {
     status: 'Cancelled',
     cancelReason: String(reason || ''),
     updatedAt: new Date()
   });
-  logActivity_('Purchase request ' + id + ' cancelled' + (reason ? ' — ' + reason : ''), 'a', id);
-  return { success: true };
+
+  logActivity_('Purchase request ' + id + ' cancelled' + (reason ? ' — ' + reason : '') +
+    (advanceCancelled ? '; cash advance ' + caId + ' rejected' : '') +
+    (releasesCancelled ? '; ' + releasesCancelled + ' pending cash release(s) rejected' : ''),
+    'a', id);
+
+  return {
+    success: true,
+    cashAdvanceCancelled: advanceCancelled,
+    releasesCancelled: releasesCancelled,
+    cashAdvanceId: caId
+  };
 }
 
 /** deletePurchaseRequest - Super Admin, drafts and cancelled only. */
