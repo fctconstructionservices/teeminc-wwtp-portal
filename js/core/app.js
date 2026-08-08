@@ -122,6 +122,7 @@ const App = {
         if (page === 'knowledge') await KnowledgeBasePage.load(this._kbTab || 'materials');
         if (page === 'quotations') await QuotationsPage.load();   // v11 BATCH F2
         if (page === 'purchase-requests') await PurchaseRequestsPage.load();   // v11 BATCH G1
+        if (page === 'payables') await PayablesPage.load();   // v11 BATCH G2
         if (page === 'approvals') await ApprovalsPage.load();
         if (page === 'print-template') await PrintTemplatePage.load();
         if (page === 'release-cash') {

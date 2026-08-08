@@ -544,8 +544,25 @@ function getFinanceData() {
     return [new Date(m.year, m.month, 1), new Date(m.year, m.month + 1, 0)];
   });
   const projRaw = allocProjected_(monthBuckets);
+
+  // ── v11 BATCH G2: SUPPLIER CREDIT IS NOW IN THE FORECAST ──
+  // This forecast has never known about money owed to suppliers — it
+  // only ever saw cash already released, so a large payable was
+  // invisible until the day it landed. Every unpaid invoice balance is
+  // now a dated outflow in the month it falls due.
+  //
+  // These are COMMITTED, unlike the Gantt-derived projection, which is
+  // an estimate of future spend. A payable is not a forecast: it is a
+  // bill with a date on it.
+  const payableByMonth = payableOutflowByMonth_();
+  const payableOutflow = months.map(function (m) {
+    return Math.round(payableByMonth[m.year + '-' + m.month] || 0);
+  });
+
   const projectedOutflow = months.map(function (m, i) {
-    return (m.year * 12 + m.month) >= nowKeyCf ? Math.round(projRaw[i]) : null;
+    return (m.year * 12 + m.month) >= nowKeyCf
+      ? Math.round(projRaw[i] + (payableOutflow[i] || 0))
+      : null;
   });
 
   // Weekly: 6 weeks back + 10 weeks forward from this week's Monday
@@ -591,6 +608,9 @@ function getFinanceData() {
     inflow: inflow,
     outflow: outflow,
     projectedOutflow: projectedOutflow,
+    // v11 BATCH G2: broken out so the chart can show what part of the
+    // projection is a committed bill rather than an estimate.
+    payableOutflow: payableOutflow,
     nowIndex: months.findIndex(function (m) { return m.year * 12 + m.month === nowKeyCf; }),
     openingBalance: openBefore_(new Date(months[0].year, months[0].month, 1)),
     weekly: {

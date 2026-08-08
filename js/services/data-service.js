@@ -685,6 +685,44 @@ const DataService = {
     async deletePurchaseRequest(id) {
         return await gasCall('deletePurchaseRequest', id);
     },
+
+    // ── v11 BATCH G2: PO · RECEIVING · PAYABLES ──
+    async getPurchaseOrders(projectId) {
+        return await gasCall('getPurchaseOrders', projectId || '');
+    },
+    async createPurchaseOrder(data) {
+        return await gasCall('createPurchaseOrder', data);
+    },
+    async approvePurchaseOrder(id) {
+        return await gasCall('approvePurchaseOrder', id);
+    },
+    async cancelPurchaseOrder(id, reason) {
+        return await gasCall('cancelPurchaseOrder', id, reason || '');
+    },
+    // Receiving is a COST event: it moves the SOW's actual cost, the
+    // project's expenses and CPI, with no payment involved.
+    async receiveGoods(data) {
+        return await gasCall('receiveGoods', data);
+    },
+    async getReceipts(projectId) {
+        return await gasCall('getReceipts', projectId || '');
+    },
+    async cancelReceipt(id, reason) {
+        return await gasCall('cancelReceipt', id, reason || '');
+    },
+    async recordSupplierInvoice(data) {
+        return await gasCall('recordSupplierInvoice', data);
+    },
+    // Paying is CASH OUT, not cost — the cost landed on receipt.
+    async paySupplierInvoice(id, data) {
+        return await gasCall('paySupplierInvoice', id, data || {});
+    },
+    async cancelSupplierInvoice(id, reason) {
+        return await gasCall('cancelSupplierInvoice', id, reason || '');
+    },
+    async getPayables() {
+        return await gasCall('getPayables');
+    },
     async addDrawing(data) {
         return await gasCall('addDrawing', data);
     },

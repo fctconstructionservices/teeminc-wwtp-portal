@@ -424,6 +424,49 @@ function getProjectData(projectId) {
       if (String(d.date) > String(siteMap[key].lastMovement)) siteMap[key].lastMovement = d.date;
     });
   });
+  // ── v11 BATCH G2: GOODS RECEIVED AGAINST A PURCHASE ORDER ──
+  // Stock now has TWO inflow sources: the daily report (informal
+  // deliveries, small buys, anything without a PO) and PO receipts.
+  //
+  // THE RISK THIS CREATES, stated plainly: if someone logs a delivery in
+  // the daily report AND receives it against the PO, the stock doubles.
+  // One balance, two sources, and no way for the sheet to know they are
+  // the same truck.
+  //
+  // So each PO-sourced quantity is tracked SEPARATELY as `receivedPO`
+  // rather than being folded into `delivered`, and a same-material
+  // same-day overlap is flagged on the row. The site can then see the
+  // duplicate instead of the balance silently drifting — which is the
+  // failure mode that would otherwise take months to notice.
+  const poReceipts = ss_().getSheetByName('Receipts')
+    ? readAll_('Receipts').filter(function (r) {
+        return r.projectId === projectId && low_(r.status) !== 'cancelled';
+      })
+    : [];
+  poReceipts.forEach(function (r) {
+    safeParse_(r.linesJSON, []).forEach(function (l) {
+      const k = l.itemName;
+      if (!k) return;
+      if (!siteMap[k]) siteMap[k] = { material: k, unit: l.unit || '', delivered: 0, used: 0, lastMovement: '' };
+      siteMap[k].receivedPO = (siteMap[k].receivedPO || 0) + (parseFloat(l.qty) || 0);
+      if (!siteMap[k].unit && l.unit) siteMap[k].unit = l.unit;
+      const d = fmtDate_(r.receiptDate);
+      if (String(d) > String(siteMap[k].lastMovement)) siteMap[k].lastMovement = d;
+      // same material received on a PO and logged in a daily report on
+      // the same date is almost certainly one delivery entered twice
+      (siteMap[k]._poDates = siteMap[k]._poDates || {})[d] = true;
+    });
+  });
+  dailyRecords.forEach(function (d) {
+    if (d.status === 'rejected') return;
+    (d.materialsDelivered || []).forEach(function (m) {
+      const row = siteMap[m.material];
+      if (row && row._poDates && row._poDates[String(d.date)]) {
+        row.possibleDuplicate = true;
+      }
+    });
+  });
+
   // v6.9: completed transfers move stock in and out of this site, so the
   // balance is Delivered + In − Used − Out.
   const projTransfers = readAll_('Transfers').filter(function (tr) {
@@ -445,7 +488,13 @@ function getProjectData(projectId) {
     const row = siteMap[k];
     row.transferredIn = row.transferredIn || 0;
     row.transferredOut = row.transferredOut || 0;
-    row.remaining = Math.max(row.delivered + row.transferredIn - row.used - row.transferredOut, 0);
+    row.receivedPO = row.receivedPO || 0;
+    row.possibleDuplicate = !!row.possibleDuplicate;
+    delete row._poDates;
+    // v11 BATCH G2: PO receipts are a third inflow alongside daily-report
+    // deliveries and transfers in.
+    row.remaining = Math.max(
+      row.delivered + row.receivedPO + row.transferredIn - row.used - row.transferredOut, 0);
     return row;
   }).sort(function (a, b) { return a.material < b.material ? -1 : 1; });
 

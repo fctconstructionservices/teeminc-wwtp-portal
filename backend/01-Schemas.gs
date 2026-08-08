@@ -195,6 +195,34 @@ const SCHEMAS = {
   PRLines: ['id', 'prId', 'materialId', 'itemName', 'unit', 'qty', 'rate', 'amount',
     'qtyOrdered', 'qtyReceived', 'notes', 'sortOrder'],
 
+  // ── v11 BATCH G2: PO · RECEIVING · PAYABLES ──
+  // `overPrBy` records how far a PO exceeded its purchase request; a PO
+  // over tolerance is HELD rather than issued, because issuing it and
+  // asking forgiveness later is how the PR control quietly dies.
+  PurchaseOrders: ['id', 'prId', 'projectId', 'sowId', 'supplierId',
+    'grossAmount', 'netAmount', 'vatAmount', 'expectedDate', 'deliverTo', 'notes',
+    'status', 'overPrBy', 'issuedBy', 'issuedAt', 'createdAt', 'updatedAt'],
+  POLines: ['id', 'poId', 'prLineId', 'materialId', 'itemName', 'unit',
+    'qty', 'rate', 'amount', 'qtyReceived', 'sortOrder'],
+
+  // A receipt is a COST EVENT: saving one moves the SOW's actual cost,
+  // CPI and the project's expenses. `netAmount` is what hits cost —
+  // net of recoverable input VAT — while `grossAmount` is what the
+  // supplier is actually owed.
+  Receipts: ['id', 'poId', 'prId', 'projectId', 'sowId', 'supplierId',
+    'receiptDate', 'deliveryRef', 'grossAmount', 'netAmount', 'vatAmount',
+    'linesJSON', 'notes', 'status', 'receivedBy', 'createdAt', 'updatedAt'],
+
+  // The debt. Kept separate from the receipt because goods routinely
+  // arrive weeks before the invoice. `dueDate` runs from the DELIVERY
+  // date, not the invoice date — otherwise a slow-invoicing supplier
+  // quietly extends their own credit.
+  SupplierInvoices: ['id', 'poId', 'prId', 'projectId', 'sowId', 'supplierId',
+    'invoiceNo', 'invoiceDate', 'deliveryDate', 'dueDate',
+    'grossAmount', 'netAmount', 'vatAmount', 'paidAmount',
+    'receiptIdsJSON', 'paymentsJSON', 'notes', 'status', 'paidDate',
+    'recordedBy', 'createdAt', 'updatedAt'],
+
   // ── v11 BATCH F2: QUOTATIONS ──
   // A quotation owns a Projects row with status 'Quotation' (see
   // 28-QuotationService.gs), so `projectId` is the id that row — and the

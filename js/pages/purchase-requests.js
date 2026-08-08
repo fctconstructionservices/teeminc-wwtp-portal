@@ -137,8 +137,8 @@ const PurchaseRequestsPage = {
         const isMine = String(p.requestorEmail || '').toLowerCase() === String(user.email || '').toLowerCase();
 
         const bs = { ok: '', near: 'near', over: 'over', 'no-estimate': 'none' }[p.budgetState] || '';
-        const bLabel = { ok: 'Within estimate', near: 'Close to estimate',
-                         over: 'Over estimate', 'no-estimate': 'No estimate to check' }[p.budgetState] || '';
+        const bLabel = { ok: 'Within budget', near: 'Close to budget',
+                         over: 'Over budget', 'no-estimate': 'Not checked' }[p.budgetState] || '';
 
         let actions = '';
         if (st === 'draft' && isMine) {
@@ -146,10 +146,13 @@ const PurchaseRequestsPage = {
                 <button class="btn-sm" onclick="PurchaseRequestsPage.openForm('${e(p.id)}')">${Icon.pencil({size:12})}</button>`;
         } else if (st === 'pending') {
             actions = `<span class="pr-note">Awaiting approval</span>`;
+        } else if (st === 'ordered') {
+            actions = `<span class="pr-note">Fully ordered</span>
+                <button class="btn-sm" onclick="PurchaseRequestsPage.openPoList('${e(p.id)}')">View orders</button>`;
         } else if (st === 'approved') {
             actions = p.route === 'cash'
                 ? `<span class="pr-note">Cash advance ${e(p.cashAdvanceId || '')} created</span>`
-                : `<button class="btn-sm" disabled style="opacity:.55;cursor:not-allowed;" title="Purchase orders arrive in the next batch">Raise PO</button>`;
+                : `<button class="btn-sm primary" onclick="PurchaseRequestsPage.openPoForm('${e(p.id)}')">Raise PO</button>`;
         }
         if (['draft', 'pending', 'approved'].includes(st) && isMine) {
             actions += `<button class="btn-sm danger" onclick="PurchaseRequestsPage.cancel('${e(p.id)}')">Cancel</button>`;
@@ -192,8 +195,8 @@ const PurchaseRequestsPage = {
                         ${e(p.status)} · ${p.route === 'cash' ? 'Cash purchase' : 'Purchase order'}</div></div>
 
                 ${p.budgetMessage ? `<div class="pr-budget-box ${p.budgetState}">
-                    <b>${{ok:'Within the estimate',near:'Close to the estimate',
-                          over:'Over the estimate','no-estimate':'No estimate to check against'}[p.budgetState] || ''}</b>
+                    <b>${{ok:'Within budget',near:'Close to budget',
+                          over:'Over budget','no-estimate':'Not checked against a budget'}[p.budgetState] || ''}</b>
                     <p>${e(p.budgetMessage)}</p>
                 </div>` : ''}
 
@@ -397,9 +400,16 @@ const PurchaseRequestsPage = {
         if (!pid || !sow || total <= 0) { box.innerHTML = ''; return; }
         try {
             const b = await DataService.checkPrBudget(pid, sow, total);
-            const title = { ok: 'Within the estimate', near: 'Close to the estimate',
-                            over: 'Over the estimate for ' + sow,
-                            'no-estimate': 'No estimate to check against' }[b.state] || '';
+            // v11 BATCH G1.1: the heading names the BASIS actually used —
+            // materials lines, the whole estimate, or the SOW budget —
+            // because a figure whose origin is unexplained gets argued
+            // with instead of acted on.
+            const basisWord = { materials: 'materials estimate', estimate: 'estimate',
+                                budget: 'SOW budget' }[b.basis] || 'budget';
+            const title = { ok: 'Within the ' + basisWord,
+                            near: 'Close to the ' + basisWord,
+                            over: 'Over the ' + basisWord + ' for ' + sow,
+                            'no-estimate': 'Nothing to check against' }[b.state] || '';
             const pct = b.budget > 0 ? Math.min(100, Math.round(b.committed / b.budget * 100)) : 0;
             const pctThis = b.budget > 0 ? Math.min(100 - pct, Math.round(b.requested / b.budget * 100)) : 0;
             box.innerHTML = `
@@ -411,7 +421,7 @@ const PurchaseRequestsPage = {
                             <div class="pr-bar-this" style="left:${pct}%;width:${pctThis}%"></div></div>
                         <div class="pr-bar-nums">
                             <span>Committed ${this._peso(b.committed)} · this request ${this._peso(b.requested)}</span>
-                            <span>Estimated ${this._peso(b.budget)}</span>
+                            <span>${this._esc(b.basisLabel || 'budget')} ${this._peso(b.budget)}</span>
                         </div>` : ''}
                 </div>`;
         } catch (err) { box.innerHTML = ''; }
@@ -464,6 +474,287 @@ const PurchaseRequestsPage = {
         try {
             const res = await DataService.submitDraftPurchaseRequest(id);
             UI.toast(res.autoApproved ? `${id} submitted and auto-approved.` : `${id} submitted for approval.`, 'success');
+            await this.load();
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
+
+    // ─── PURCHASE ORDERS (v11 BATCH G2) ─────────────────────────
+    // A PR can become SEVERAL POs — ten items and three suppliers
+    // winning different lines is normal. Each PR line tracks how much is
+    // already ordered so what remains stays visible instead of being
+    // silently forgotten or ordered twice.
+
+    _poPr: null,
+
+    async openPoForm(prId) {
+        const p = this._get(prId);
+        if (!p) return;
+        this._poPr = p;
+        const e = this._esc.bind(this);
+        if (!this._suppliers.length) {
+            this._suppliers = await DataService.getSuppliers().catch(() => []);
+        }
+        const active = this._suppliers.filter(s => s.status !== 'inactive');
+        if (!active.length) {
+            UI.toast('Add a supplier first — Knowledge Base → Suppliers. Their payment terms set the due date.', 'error');
+            return;
+        }
+
+        const remaining = (p.lines || []).map(l => ({
+            ...l, remaining: (parseFloat(l.qty) || 0) - (parseFloat(l.qtyOrdered) || 0)
+        })).filter(l => l.remaining > 0.0001);
+
+        if (!remaining.length) {
+            UI.toast('Every line on this request has already been ordered.', 'error');
+            return;
+        }
+
+        document.getElementById('poFormModal')?.remove();
+        const m = document.createElement('div');
+        m.className = 'print-modal-overlay open';
+        m.id = 'poFormModal';
+        m.innerHTML = `
+            <div class="print-modal-content" style="max-width:700px;">
+                <button class="close-modal" onclick="document.getElementById('poFormModal').remove()">${Icon.close({size:18})}</button>
+                <div class="print-header"><h2>Raise purchase order</h2>
+                    <div class="print-meta">From ${e(p.id)} — ${e(p.title)} · ${e(p.sowId)}</div></div>
+
+                <div class="db-form-grid">
+                    <div class="field"><label>Supplier *</label>
+                        <select id="po-supplier" onchange="PurchaseRequestsPage.poTerms()">
+                            ${active.map(s => `<option value="${e(s.id)}" data-terms="${e(s.termsLabel)}"
+                                ${p.preferredSupplierId === s.id ? 'selected' : ''}>${e(s.name)} — ${e(s.termsLabel)}</option>`).join('')}
+                        </select>
+                        <p class="pr-hint" id="po-terms"></p></div>
+                    <div class="field"><label>Expected delivery</label>
+                        <input type="date" id="po-expected" value="${e(p.dateNeeded)}" /></div>
+                </div>
+                <div class="field"><label>Deliver to</label>
+                    <input type="text" id="po-deliver" value="${e(p.deliverTo)}" /></div>
+
+                <div class="print-section"><div class="ps-title">Items to order</div>
+                    <p style="font-size:11.5px;color:var(--ink-soft);margin:0 0 8px;">
+                        Order all of it, or just the lines this supplier is winning. Whatever you leave
+                        can go on another order to someone else.
+                    </p>
+                    <div style="overflow-x:auto;"><table class="ps-table">
+                        <thead><tr><th>Item</th><th>Unit</th><th class="amt">Unordered</th>
+                            <th class="amt">Order qty</th><th class="amt">Unit price</th><th class="amt">Amount</th></tr></thead>
+                        <tbody>${remaining.map((l, i) => `<tr>
+                            <td>${e(l.itemName)}</td><td>${e(l.unit)}</td>
+                            <td class="amt">${fmtMoney(l.remaining)}</td>
+                            <td class="amt"><input type="number" class="po-q" data-id="${e(l.id)}" data-i="${i}"
+                                min="0" max="${l.remaining}" step="any" value="${l.remaining}"
+                                oninput="PurchaseRequestsPage.poCalc()" /></td>
+                            <td class="amt"><input type="number" class="po-r" data-i="${i}" min="0" step="any"
+                                value="${parseFloat(l.rate) || 0}" oninput="PurchaseRequestsPage.poCalc()" /></td>
+                            <td class="amt po-amt" data-i="${i}">—</td></tr>`).join('')}</tbody>
+                        <tfoot><tr><td colspan="5">Order total</td><td class="amt" id="po-total">—</td></tr></tfoot>
+                    </table></div>
+                    <div id="po-warn"></div>
+                </div>
+
+                <div class="field"><label>Notes to the supplier</label><textarea id="po-notes" rows="2"></textarea></div>
+
+                <div class="print-actions">
+                    <button class="btn-primary" onclick="PurchaseRequestsPage.submitPo()">Raise purchase order</button>
+                    <button class="btn-ghost" onclick="document.getElementById('poFormModal').remove()">Cancel</button>
+                </div>
+            </div>`;
+        document.body.appendChild(m);
+        this.poTerms();
+        this.poCalc();
+    },
+
+    poTerms() {
+        const o = document.getElementById('po-supplier')?.selectedOptions[0];
+        const el = document.getElementById('po-terms');
+        if (el && o) el.textContent = `Payment terms: ${o.dataset.terms}. The due date is worked out from the delivery date.`;
+    },
+
+    /**
+     * poCalc - running total, plus the PO-vs-PR tolerance warning shown
+     * BEFORE submitting. A PO more than 5% over its request is held for
+     * approval rather than issued, and it is better to learn that here
+     * than after pressing the button.
+     */
+    poCalc() {
+        let total = 0;
+        document.querySelectorAll('.po-q').forEach(q => {
+            const i = q.dataset.i;
+            const r = document.querySelector(`.po-r[data-i="${i}"]`);
+            const amt = (parseFloat(q.value) || 0) * (parseFloat(r?.value) || 0);
+            total += amt;
+            const cell = document.querySelector(`.po-amt[data-i="${i}"]`);
+            if (cell) cell.textContent = this._peso(amt);
+        });
+        const el = document.getElementById('po-total');
+        if (el) el.textContent = this._peso(total);
+
+        const warn = document.getElementById('po-warn');
+        const pr = this._poPr;
+        if (!warn || !pr) return;
+        const prTotal = parseFloat(pr.totalAmount) || 0;
+        if (prTotal > 0 && total > prTotal * 1.05) {
+            warn.innerHTML = `<div class="pr-budget-box over" style="margin-top:10px;">
+                <b>${Icon.warning({size:12})} Over the purchase request</b>
+                <p>This order is ${this._peso(total)} against a request of ${this._peso(prTotal)} —
+                more than 5% over. It will be <b>held for approval</b> rather than issued, and cannot be
+                received against until someone else releases it.</p></div>`;
+        } else { warn.innerHTML = ''; }
+    },
+
+    async submitPo() {
+        const pr = this._poPr;
+        if (!pr) return;
+        const lines = [];
+        document.querySelectorAll('.po-q').forEach(q => {
+            const qty = parseFloat(q.value) || 0;
+            if (qty <= 0) return;
+            const r = document.querySelector(`.po-r[data-i="${q.dataset.i}"]`);
+            lines.push({ prLineId: q.dataset.id, qty: qty, rate: parseFloat(r?.value) || 0 });
+        });
+        if (!lines.length) { UI.toast('Enter a quantity for at least one item.', 'error'); return; }
+        const v = x => (document.getElementById(x)?.value || '').trim();
+        try {
+            const res = await DataService.createPurchaseOrder({
+                prId: pr.id, supplierId: v('po-supplier'), expectedDate: v('po-expected'),
+                deliverTo: v('po-deliver'), notes: v('po-notes'), lines: lines
+            });
+            document.getElementById('poFormModal')?.remove();
+            UI.toast(res.heldForApproval
+                ? `${res.id} raised but HELD — it exceeds the request and needs another approver.`
+                : `${res.id} raised for ${this._peso(res.grossAmount)}. If delivered today it would fall due ${res.dueDateIfDeliveredToday}.`,
+                res.heldForApproval ? 'error' : 'success');
+            await this.load();
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
+
+    async openPoList(prId) {
+        try {
+            const all = await DataService.getPurchaseOrders();
+            const pos = (all || []).filter(p => p.prId === prId);
+            const e = this._esc.bind(this);
+            document.getElementById('poListModal')?.remove();
+            const m = document.createElement('div');
+            m.className = 'print-modal-overlay open';
+            m.id = 'poListModal';
+            m.innerHTML = `
+                <div class="print-modal-content" style="max-width:700px;">
+                    <button class="close-modal" onclick="document.getElementById('poListModal').remove()">${Icon.close({size:18})}</button>
+                    <div class="print-header"><h2>Purchase orders</h2>
+                        <div class="print-meta">Raised against ${e(prId)}</div></div>
+                    ${pos.length ? `<table class="ps-table">
+                        <thead><tr><th>PO</th><th>Supplier</th><th class="amt">Gross</th>
+                            <th class="amt">Received</th><th>Status</th><th></th></tr></thead>
+                        <tbody>${pos.map(p => `<tr>
+                            <td>${e(p.id)}<div class="muted">${e(p.termsLabel)}</div></td>
+                            <td>${e(p.supplierName)}</td>
+                            <td class="amt">${this._peso(p.grossAmount)}</td>
+                            <td class="amt">${p.receivedPct}%</td>
+                            <td><span class="stamp">${e(p.status)}</span></td>
+                            <td>${['issued','partly received'].includes(String(p.status).toLowerCase())
+                                ? `<button class="btn-sm primary" onclick="PurchaseRequestsPage.openReceive('${e(p.id)}')">Receive</button>` : ''}
+                                ${String(p.status).toLowerCase() === 'pending approval'
+                                ? `<button class="btn-sm success" onclick="PurchaseRequestsPage.approvePo('${e(p.id)}')">Approve overrun</button>` : ''}</td>
+                        </tr>`).join('')}</tbody></table>`
+                        : '<div class="empty"><p>No purchase orders yet.</p></div>'}
+                    <div class="print-actions">
+                        <button class="btn-ghost" onclick="document.getElementById('poListModal').remove()">Close</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(m);
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
+
+    async approvePo(id) {
+        try {
+            await DataService.approvePurchaseOrder(id);
+            UI.toast(`${id} released — it can now be received against.`, 'success');
+            document.getElementById('poListModal')?.remove();
+            await this.load();
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
+
+    /**
+     * openReceive - RECEIVING IS A COST EVENT. The moment this saves,
+     * the SOW's actual cost moves, CPI moves and the project's expenses
+     * move — no payment required. The modal says so, because a person
+     * ticking off a delivery note should know it is an accounting entry.
+     */
+    async openReceive(poId) {
+        try {
+            const all = await DataService.getPurchaseOrders();
+            const po = (all || []).find(p => p.id === poId);
+            if (!po) { UI.toast('Purchase order not found.', 'error'); return; }
+            const e = this._esc.bind(this);
+            const outstanding = (po.lines || []).map(l => ({
+                ...l, remaining: (parseFloat(l.qty) || 0) - (parseFloat(l.qtyReceived) || 0)
+            })).filter(l => l.remaining > 0.0001);
+            if (!outstanding.length) { UI.toast('Everything on this order has been received.', 'error'); return; }
+
+            document.getElementById('grnModal')?.remove();
+            const m = document.createElement('div');
+            m.className = 'print-modal-overlay open';
+            m.id = 'grnModal';
+            m.innerHTML = `
+                <div class="print-modal-content" style="max-width:660px;">
+                    <button class="close-modal" onclick="document.getElementById('grnModal').remove()">${Icon.close({size:18})}</button>
+                    <div class="print-header"><h2>Receive goods</h2>
+                        <div class="print-meta">${e(po.id)} · ${e(po.supplierName)} · ${e(po.projectName)} · ${e(po.sowId)}</div></div>
+
+                    <div class="pay-explain" style="margin-bottom:12px;">
+                        <b>This books cost against ${e(po.sowId)}.</b>
+                        <p>Saving this moves the scope item's actual cost, the project's expenses and CPI —
+                        no payment needed. Record only what physically arrived.</p>
+                    </div>
+
+                    <div class="db-form-grid">
+                        <div class="field"><label>Delivery date</label>
+                            <input type="date" id="grn-date" value="${new Date().toISOString().slice(0,10)}" /></div>
+                        <div class="field"><label>Delivery receipt no.</label>
+                            <input type="text" id="grn-ref" placeholder="DR / waybill number" /></div>
+                    </div>
+
+                    <div style="overflow-x:auto;"><table class="ps-table">
+                        <thead><tr><th>Item</th><th>Unit</th><th class="amt">Outstanding</th>
+                            <th class="amt">Received now</th></tr></thead>
+                        <tbody>${outstanding.map(l => `<tr>
+                            <td>${e(l.itemName)}</td><td>${e(l.unit)}</td>
+                            <td class="amt">${fmtMoney(l.remaining)}</td>
+                            <td class="amt"><input type="number" class="grn-q" data-id="${e(l.id)}"
+                                min="0" max="${l.remaining}" step="any" value="${l.remaining}" /></td>
+                        </tr>`).join('')}</tbody>
+                    </table></div>
+
+                    <div class="field" style="margin-top:10px;"><label>Notes</label>
+                        <textarea id="grn-notes" rows="2" placeholder="Short delivery, damage, substitutions"></textarea></div>
+
+                    <div class="print-actions">
+                        <button class="btn-primary" onclick="PurchaseRequestsPage.submitReceive('${e(po.id)}')">Record delivery</button>
+                        <button class="btn-ghost" onclick="document.getElementById('grnModal').remove()">Cancel</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(m);
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
+
+    async submitReceive(poId) {
+        const lines = [];
+        document.querySelectorAll('.grn-q').forEach(q => {
+            const qty = parseFloat(q.value) || 0;
+            if (qty > 0) lines.push({ poLineId: q.dataset.id, qty: qty });
+        });
+        if (!lines.length) { UI.toast('Enter what actually arrived.', 'error'); return; }
+        const v = x => (document.getElementById(x)?.value || '').trim();
+        try {
+            const res = await DataService.receiveGoods({
+                poId: poId, receiptDate: v('grn-date'), deliveryRef: v('grn-ref'),
+                notes: v('grn-notes'), lines: lines
+            });
+            document.getElementById('grnModal')?.remove();
+            document.getElementById('poListModal')?.remove();
+            UI.toast(`Delivery recorded. ${this._peso(res.netAmount)} of cost booked; payable due ${res.dueDate}.`, 'success');
             await this.load();
         } catch (err) { UI.toast('' + err.message, 'error'); }
     },

@@ -302,6 +302,37 @@
     </section>
 
     <!-- ════════════════════════════════════════════ -->
+    <!--  PAYABLES  (v11 BATCH G2)                   -->
+    <!--                                             -->
+    <!--  Who you owe and when. Every due date is the -->
+    <!--  delivery date plus that supplier's terms.   -->
+    <!--  Paying here is CASH OUT, not cost — the     -->
+    <!--  cost landed when the goods were received.   -->
+    <!-- ════════════════════════════════════════════ -->
+    <section id="page-payables" class="page" aria-label="Payables">
+        <div class="wrap">
+            <div class="topbar">
+                <div class="mark">F</div>
+                <div class="brand">
+                    <div class="name">Payables</div>
+                    <div class="sub">Supplier obligations · Due dates · Aging</div>
+                </div>
+                <div class="spacer"></div>
+                <button class="hamburger" onclick="toggleMenu()"></button>
+                <div class="actions" id="topActionsPayables">
+                    <button class="theme-toggle" onclick="App.toggleTheme()"></button>
+                    <button onclick="App.navigate('home')">Back</button>
+                </div>
+            </div>
+            <div class="crumb"><button onclick="App.navigate('home')">Home</button> / Payables</div>
+
+            <div id="payablesContent">
+                <div class="loading-overlay"><div class="loader"></div><p>Loading payables...</p></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
     <!--  QUOTATIONS  (v11 BATCH F2)                 -->
     <!--                                             -->
     <!--  A quotation is a Projects row with status  -->
@@ -839,6 +870,7 @@
     <script src="js/pages/knowledge-base.js"></script>
     <script src="js/pages/quotations.js"></script>
     <script src="js/pages/purchase-requests.js"></script>
+    <script src="js/pages/payables.js"></script>
     <script src="js/pages/finance.js"></script>
     <script src="js/pages/portfolio.js"></script>
     <script src="js/pages/materials.js"></script>

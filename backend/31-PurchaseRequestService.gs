@@ -50,23 +50,85 @@ function nextPrNumber_() {
 }
 
 /**
- * sowMaterialBudget_ - The estimated MATERIALS cost for one SOW item,
- * from its approved estimate. This is what a purchase is measured
- * against — not the SOW's whole budget, which also covers labour,
- * equipment and indirects that a material purchase has no claim on.
+ * sowMaterialBudget_ - What a purchase against this SOW item should be
+ * measured against.
+ *
+ * ── v11 BATCH G1.1 FIX ───────────────────────────────────────
+ * The first version summed ONLY the estimate's MATERIALS lines. The
+ * reasoning was sound — a material purchase has no claim on the labour
+ * and equipment in the estimate — but it fails badly in practice:
+ *
+ *   · an estimate priced as a lump sum, or as labour and equipment with
+ *     materials folded in, has no materials lines at all
+ *   · so the total came back 0, the check reported "no estimate", and
+ *     the control silently did nothing on exactly the scope items that
+ *     were properly estimated
+ *
+ * It now DEGRADES instead of giving up, and reports which basis it
+ * used so the number on screen is never unexplained:
+ *
+ *   1. materials lines, when they exist   — the most precise
+ *   2. the estimate group total           — when the estimate is not
+ *                                           broken down by category
+ *   3. the SOW item's own budget          — when there is no estimate
+ *                                           but there is a budget
+ *   4. nothing to check against
+ *
+ * Returns { amount, basis, label } or null.
+ *
+ * Ids are TRIMMED on both sides. A SOW id typed into a sheet with a
+ * trailing space matches nothing, and that failure is invisible.
  */
 function sowMaterialBudget_(projectId, sowId) {
+  var key = String(sowId == null ? '' : sowId).trim();
+  if (!key) return null;
+
   var groups = readAll_('EstimateGroups').filter(function (g) {
-    return g.projectId === projectId && String(g.sowId) === String(sowId);
+    return String(g.projectId).trim() === String(projectId).trim() &&
+           String(g.sowId).trim() === key;
   });
-  if (!groups.length) return null;   // null means "no estimate to check against"
-  var ids = {};
-  groups.forEach(function (g) { ids[String(g.id)] = true; });
-  var total = 0;
-  readAll_('EstimateMaterials').forEach(function (m) {
-    if (ids[String(m.groupId)]) total += parseFloat(m.cost) || 0;
+
+  if (groups.length) {
+    var ids = {};
+    groups.forEach(function (g) { ids[String(g.id)] = true; });
+
+    var mat = 0;
+    readAll_('EstimateMaterials').forEach(function (m) {
+      if (ids[String(m.groupId)]) mat += parseFloat(m.cost) || 0;
+    });
+    if (mat > 0) {
+      return { amount: r2_(mat), basis: 'materials',
+               label: 'the materials in its estimate' };
+    }
+
+    // No materials lines — fall back to the whole estimate rather than
+    // reporting "no estimate" on a scope item that plainly has one.
+    var whole = 0;
+    ['EstimateLabor', 'EstimateEquipment'].forEach(function (sheet) {
+      readAll_(sheet).forEach(function (r) {
+        if (ids[String(r.groupId)]) whole += parseFloat(r.cost) || 0;
+      });
+    });
+    readAll_('EstimateIndirect').forEach(function (r) {
+      if (ids[String(r.groupId)]) whole += parseFloat(r.amount) || 0;
+    });
+    if (whole > 0) {
+      return { amount: r2_(whole), basis: 'estimate',
+               label: 'its full estimate (no separate materials lines)' };
+    }
+  }
+
+  // No usable estimate: fall back to the SOW's own budget.
+  var sow = readAll_('SOWItems').find(function (x) {
+    return String(x.projectId).trim() === String(projectId).trim() &&
+           String(x.id).trim() === key;
   });
-  return r2_(total);
+  var budget = sow ? parseFloat(sow.budget) || 0 : 0;
+  if (budget > 0) {
+    return { amount: r2_(budget), basis: 'budget',
+             label: 'its SOW budget (no estimate priced yet)' };
+  }
+  return null;
 }
 
 /**
@@ -84,10 +146,11 @@ function sowMaterialCommitted_(projectId, sowId, excludePrId) {
   ensureSheet_('PRLines');
 
   var counted = { pending: true, approved: true, ordered: true };
+  var key = String(sowId == null ? '' : sowId).trim();
   var prIds = {};
   readAll_('PurchaseRequests').forEach(function (pr) {
-    if (pr.projectId !== projectId) return;
-    if (String(pr.sowId) !== String(sowId)) return;
+    if (String(pr.projectId).trim() !== String(projectId).trim()) return;
+    if (String(pr.sowId).trim() !== key) return;
     if (excludePrId && pr.id === excludePrId) return;
     if (!counted[low_(pr.status)]) return;
     prIds[pr.id] = true;
@@ -108,45 +171,71 @@ function sowMaterialCommitted_(projectId, sowId, excludePrId) {
  * state: 'no-estimate' | 'ok' | 'near' | 'over'
  */
 function checkPrBudget(projectId, sowId, requested, excludePrId) {
-  readMany_(['EstimateGroups', 'EstimateMaterials', 'PurchaseRequests', 'PRLines']);
+  readMany_(['EstimateGroups', 'EstimateMaterials', 'EstimateLabor',
+    'EstimateEquipment', 'EstimateIndirect', 'SOWItems',
+    'PurchaseRequests', 'PRLines']);
   var req = r2_(requested);
-  var budget = sowMaterialBudget_(projectId, sowId);
+  var key = String(sowId == null ? '' : sowId).trim();
+  var b = sowMaterialBudget_(projectId, key);
 
-  if (budget === null || budget <= 0) {
+  if (!b || b.amount <= 0) {
+    // v11 BATCH G1.1: say what was actually looked for and what was
+    // found. The old message claimed no APPROVED estimate existed —
+    // which this function never checked — and gave no way to tell
+    // whether the estimate was missing, empty, or simply not matching
+    // on the id.
+    var groupExists = readAll_('EstimateGroups').some(function (g) {
+      return String(g.projectId).trim() === String(projectId).trim() &&
+             String(g.sowId).trim() === key;
+    });
+    var sowExists = readAll_('SOWItems').some(function (x) {
+      return String(x.projectId).trim() === String(projectId).trim() &&
+             String(x.id).trim() === key;
+    });
+    var why = !sowExists
+      ? 'No SOW item "' + key + '" was found on this project — check the id matches exactly, including any trailing dot or space.'
+      : groupExists
+        ? 'An estimate exists for ' + key + ' but every line on it prices at zero, and the SOW item has no budget set either.'
+        : 'There is no estimate for ' + key + ' and no budget on the SOW item.';
     return {
-      state: 'no-estimate', budget: 0, committed: 0, requested: req, after: req, overBy: 0,
-      message: 'No approved materials estimate exists for ' + sowId +
-        ', so this request cannot be checked against a budget. Approve the estimate first if you want that control.'
+      state: 'no-estimate', basis: 'none', basisLabel: '',
+      budget: 0, committed: 0, requested: req, after: req, overBy: 0,
+      message: why + ' This request cannot be checked against anything, so it will go for approval unchecked.'
     };
   }
 
-  var committed = sowMaterialCommitted_(projectId, sowId, excludePrId);
+  var budget = b.amount;
+  var committed = sowMaterialCommitted_(projectId, key, excludePrId);
   var after = r2_(committed + req);
   var pct = Math.round(after / budget * 1000) / 10;
+  var against = fmtMoney_(budget) + ' — ' + b.label;
 
   if (after > budget) {
     return {
-      state: 'over', budget: budget, committed: committed, requested: req, after: after,
+      state: 'over', basis: b.basis, basisLabel: b.label,
+      budget: budget, committed: committed, requested: req, after: after,
       overBy: r2_(after - budget), pct: pct,
-      message: 'This request puts materials spend on ' + sowId + ' at ' + fmtMoney_(after) +
-        ' against an estimated ' + fmtMoney_(budget) + ' — over by ' + fmtMoney_(after - budget) +
+      message: 'This request puts committed spend on ' + key + ' at ' + fmtMoney_(after) +
+        ' against ' + against + ' — over by ' + fmtMoney_(after - budget) +
         '. It can still be submitted, but approvers will see this and the overrun will need a variation order or a reason.'
     };
   }
   if (after > budget * 0.9) {
     return {
-      state: 'near', budget: budget, committed: committed, requested: req, after: after,
+      state: 'near', basis: b.basis, basisLabel: b.label,
+      budget: budget, committed: committed, requested: req, after: after,
       overBy: 0, pct: pct,
-      message: 'This brings materials spend on ' + sowId + ' to ' + fmtMoney_(after) + ' of ' +
-        fmtMoney_(budget) + ' estimated — ' + pct + '%. Only ' + fmtMoney_(budget - after) +
+      message: 'This brings committed spend on ' + key + ' to ' + fmtMoney_(after) + ' of ' +
+        against + ' — ' + pct + '%. Only ' + fmtMoney_(budget - after) +
         ' is left for the rest of this scope item.'
     };
   }
   return {
-    state: 'ok', budget: budget, committed: committed, requested: req, after: after,
+    state: 'ok', basis: b.basis, basisLabel: b.label,
+    budget: budget, committed: committed, requested: req, after: after,
     overBy: 0, pct: pct,
-    message: 'Materials spend on ' + sowId + ' becomes ' + fmtMoney_(after) + ' of ' +
-      fmtMoney_(budget) + ' estimated — ' + pct + '%.'
+    message: 'Committed spend on ' + key + ' becomes ' + fmtMoney_(after) + ' of ' +
+      against + ' — ' + pct + '%.'
   };
 }
 
