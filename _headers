@@ -1,0 +1,25 @@
+# Cloudflare Pages headers (v12)
+#
+# The app is a static site talking to Google Apps Script, so there is no
+# server of ours to configure — these are the only headers we control.
+
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), camera=()
+
+# The bundle is rebuilt by tools/build-css.js on every change, and
+# Cloudflare serves it from the deployment that produced it — but a
+# browser holding a stale bundle against new markup is exactly how a
+# "the fonts look wrong" report happens. Short cache, revalidated.
+/css/bundle.css
+  Cache-Control: public, max-age=300, must-revalidate
+
+/js/*
+  Cache-Control: public, max-age=300, must-revalidate
+
+# Never cache the shell: it names every script file, so a stale copy
+# pins every one of them.
+/index.html
+  Cache-Control: no-cache

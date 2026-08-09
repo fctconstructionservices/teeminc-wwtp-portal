@@ -1,0 +1,8 @@
+# Cloudflare Pages redirects (v12)
+#
+# The app is a SINGLE PAGE — navigation is handled in JavaScript and
+# there is no server-side route for /projects or /payables. Without
+# this, a refresh on any screen other than the root returns a 404.
+#
+# 200 rather than 301: the URL stays where the person left it.
+/*    /index.html   200

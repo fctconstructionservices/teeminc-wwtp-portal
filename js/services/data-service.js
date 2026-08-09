@@ -13,7 +13,18 @@
 //  wrapper method here — pages never call fetch() directly.
 // ================================================================
 
-const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbwoInhyBINQwtEw66Dh94xT1q6L9aC225NtN86FSygY1PiaUbfBTPhciShCor-puMuc/exec';
+// v12: the URL lives in js/core/config.js — the one file that differs
+// between companies. Hardcoding it here is what would force a fork of
+// the whole repository to stand up a second company.
+//
+// The fallback is deliberate and loud: an empty string would fail with
+// an unhelpful network error, so a missing config says what is wrong.
+const GAS_API_URL = (typeof CONFIG !== 'undefined' && CONFIG.apiUrl)
+    ? CONFIG.apiUrl
+    : (function () {
+        console.error('js/core/config.js is missing or has no apiUrl — the app cannot reach its backend.');
+        return '';
+    })();
 
 /**
  * getCurrentUserEmail - Retrieves the current user's email from localStorage

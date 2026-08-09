@@ -144,6 +144,44 @@ module.exports = function (t) {
         });
     });
 
+    // ── one codebase, many companies ─────────────────────────
+    t.describe('nothing is hardcoded to one company', () => {
+        t.it('the backend URL appears only in config.js', () => {
+            // Anywhere else and standing up a second company means
+            // forking the repository, which means every future fix has
+            // to be applied twice.
+            const offenders = jsFiles.filter(f => {
+                const rel = path.relative(t.ROOT, f).replace(/\\/g, '/');
+                if (rel === 'js/core/config.js') return false;
+                return /script\.google\.com\/macros/.test(fs.readFileSync(f, 'utf8'));
+            }).map(f => path.relative(t.ROOT, f));
+            t.ok(offenders.length === 0, 'hardcoded backend URL in: ' + offenders.join(', '));
+        });
+
+        t.it('config.js is loaded before data-service.js', () => {
+            const c = html.indexOf('js/core/config.js');
+            const d = html.indexOf('js/services/data-service.js');
+            t.ok(c > -1 && d > -1 && c < d,
+                'data-service reads CONFIG at load time, so config must come first');
+        });
+
+        t.it('every data-cfg key resolves to something in CONFIG', () => {
+            const cfg = t.read('js/core/config.js');
+            const keys = [...html.matchAll(/data-cfg="([^"]+)"/g)].map(m => m[1]);
+            t.ok(keys.length > 0, 'no branding is config-driven at all');
+            const bad = keys.filter(k => {
+                const leaf = k.split('.').pop();
+                return !new RegExp('\\b' + leaf + '\\s*:').test(cfg);
+            });
+            t.ok(bad.length === 0, 'data-cfg keys with no value in CONFIG: ' + bad.join(', '));
+        });
+
+        t.it('Cloudflare needs the SPA fallback', () => {
+            t.ok(t.exists('_redirects'),
+                'without /* -> /index.html 200, refreshing on any screen returns a 404');
+        });
+    });
+
     // ── language ─────────────────────────────────────────────
     t.describe('product strings are English', () => {
         t.it('no Tagalog in user-facing labels', () => {

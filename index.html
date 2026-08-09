@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>FCTC ERP System v3</title>
+    <title data-cfg="company.appName">FCTC Operations Board</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <!-- v12: Barlow Condensed display, Public Sans body, Roboto Mono numbers.
          Oswald, Inter and IBM Plex Mono stay loaded as fallbacks so anything
@@ -116,8 +116,8 @@
     <!-- ════════════════════════════════════════════ -->
     <section id="page-login" class="page active" aria-label="Login">
         <div class="login-card">
-            <div class="login-mark">FCTC</div>
-            <h1>FCTC ERP System</h1>
+            <div class="login-mark" data-cfg="company.short">FCTC</div>
+            <h1 data-cfg="company.appName">FCTC Operations Board</h1>
             <p class="sub">Sign in to continue</p>
             <form id="loginForm" onsubmit="return handleLogin(event)">
                 <div class="field" id="login-email-field">
@@ -133,7 +133,7 @@
                 <button type="submit" class="login-btn">Log In</button>
             </form>
             <p class="login-note">
-                For FCTC Construction Services internal use only.
+                <span data-cfg="company.notice">For FCTC Construction Services internal use only.</span>
                 <small><strong>Under Development: </strong>Under Development</small>
             </p>
         </div>
@@ -147,7 +147,7 @@
             <div class="topbar">
                 <div class="mark">F</div>
                 <div class="brand">
-                    <div class="name">FCTC ERP System</div>
+                    <div class="name" data-cfg="company.appName">FCTC Operations Board</div>
                     <div class="sub" id="home-user-label">Managing Partner — D. Fabon</div>
                 </div>
                 <div class="spacer"></div>
@@ -881,6 +881,7 @@
     <script src="js/core/print-doc.js"></script>
     <script src="js/core/typeahead.js"></script>
     <script src="js/core/nav.js"></script>
+    <script src="js/core/config.js"></script>
     <script src="js/services/data-service.js"></script>
     <script src="js/pages/home.js"></script>
     <script src="js/pages/project/project-core.js"></script>
