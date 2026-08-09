@@ -1,0 +1,9 @@
+{
+  "name": "fctc-portal",
+  "compatibility_date": "2025-01-01",
+  "assets": {
+    "directory": "./",
+    "not_found_handling": "single-page-application",
+    "exclude": [".git/**", ".wrangler/**", "backend/**", "tools/**", "docs/**", "deploy/**", "tests/**"]
+  }
+}
