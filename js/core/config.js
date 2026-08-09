@@ -49,11 +49,11 @@ const CONFIG = {
 
     /** company - what the app calls itself. */
     company: {
-        short: 'FCTC',
-        name: 'FCTC Construction Services',
-        appName: 'FCTC Operations Board',
+        short: 'TEEM Inc',
+        name: 'Technical Experts on Environmental Management Inc. - WWTP Division',
+        appName: 'Wastewater Treatment Plant Division',
         // Shown on the login screen under the sign-in button.
-        notice: 'For FCTC Construction Services internal use only.'
+        notice: 'Wastewater Treatment Plant Division ERP System'
     },
 
     /**
