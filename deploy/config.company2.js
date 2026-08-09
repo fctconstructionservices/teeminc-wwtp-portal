@@ -1,5 +1,5 @@
 // ================================================================
-//  deploy/config.teem.js — YOUR SECOND COMPANY
+//  deploy/config.company2.js — YOUR SECOND COMPANY
 //
 //  Copy this file, rename it for the company (config.abc.js), and fill
 //  in the four things marked CHANGE THIS. Nothing else in the whole
