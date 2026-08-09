@@ -45,15 +45,15 @@ const CONFIG = {
      * apiUrl - the Apps Script Web App /exec URL for THIS company.
      * Each company has its own deployment reading its own spreadsheet.
      */
-    apiUrl: 'https://script.google.com/macros/s/AKfycbyIuNjph0XC0Jd4yc777cOXrBnzt1rtv8rvzI8X0WISEtuz31CBJmTngv9c7Wcte1Xp_g/exec',
+    apiUrl: 'https://script.google.com/macros/s/AKfycbwoInhyBINQwtEw66Dh94xT1q6L9aC225NtN86FSygY1PiaUbfBTPhciShCor-puMuc/exec',
 
     /** company - what the app calls itself. */
     company: {
-        short: 'TEEM',
-        name: 'TEEM Inc.',
-        appName: 'TEEM Inc. - WWTP Division ERP System',
+        short: 'FCTC',
+        name: 'FCTC Construction Services',
+        appName: 'FCTC Operations Board',
         // Shown on the login screen under the sign-in button.
-        notice: 'Wastewater Treatment Plant Division of TEEM Inc. — for internal use only.',
+        notice: 'For FCTC Construction Services internal use only.'
     },
 
     /**
@@ -69,7 +69,7 @@ const CONFIG = {
      * fastest way to know which company you are about to post a cash
      * advance against.
      */
-    accent: '#1F7A8C'   // null keeps the stylesheet default (amber)
+    accent: null   // null keeps the stylesheet default (amber)
 };
 
 /**

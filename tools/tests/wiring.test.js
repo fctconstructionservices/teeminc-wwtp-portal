@@ -176,6 +176,36 @@ module.exports = function (t) {
             t.ok(bad.length === 0, 'data-cfg keys with no value in CONFIG: ' + bad.join(', '));
         });
 
+        t.it('every deploy config defines the same shape as the live one', () => {
+            // A second company whose config is missing a key the app
+            // reads shows a blank where a name should be — and only on
+            // that company's site, so you would not see it.
+            const live = t.read('js/core/config.js');
+            const keys = ['apiUrl', 'company', 'currency', 'accent',
+                          'short', 'name', 'appName', 'notice'];
+            const dir = path.join(t.ROOT, 'deploy');
+            if (!fs.existsSync(dir)) return;
+            fs.readdirSync(dir).filter(f => f.endsWith('.js')).forEach(f => {
+                const c = fs.readFileSync(path.join(dir, f), 'utf8');
+                const missing = keys.filter(k => !new RegExp('\\b' + k + '\\s*:').test(c));
+                t.ok(missing.length === 0,
+                    `deploy/${f} is missing: ${missing.join(', ')}`);
+                t.ok(/function applyConfig/.test(c),
+                    `deploy/${f} has no applyConfig — the branding would never be written`);
+            });
+        });
+
+        t.it('no deploy config still holds the placeholder URL', () => {
+            const dir = path.join(t.ROOT, 'deploy');
+            if (!fs.existsSync(dir)) return;
+            const unfilled = fs.readdirSync(dir)
+                .filter(f => f.endsWith('.js') && f !== 'config.company2.js')
+                .filter(f => /PASTE_THE_NEW_EXEC_URL_HERE/.test(
+                    fs.readFileSync(path.join(dir, f), 'utf8')));
+            t.ok(unfilled.length === 0,
+                'these would deploy pointing at nothing: ' + unfilled.join(', '));
+        });
+
         t.it('Cloudflare needs the SPA fallback', () => {
             t.ok(t.exists('_redirects'),
                 'without /* -> /index.html 200, refreshing on any screen returns a 404');
