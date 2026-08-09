@@ -63,7 +63,7 @@ Object.assign(ProjectPage, {
             </div>
             <div class="daily-form-section" id="equipmentSection">
                 <div class="section-label">Equipment on Site <span class="rule"></span></div>
-                <div id="equipmentEntries"><div class="entry-row"><div class="field"><label>Equipment</label><select class="eq-name">${this._equipmentOptionsDaily()}</select></div><div class="field"><label>Qty</label><input type="number" class="eq-qty" placeholder="1" min="0" /></div><div class="field"><label>Status</label><select class="eq-status"><option>Operational</option><option>Idle</option><option>Under Repair</option><option>Breakdown</option><option>Standby</option></select></div><div class="field"><label>Remarks</label><input type="text" class="eq-remarks" placeholder="Optional" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'equipment')">${Icon.close({size:13})}</button></div></div></div>
+                <div id="equipmentEntries"><div class="entry-row"><div class="field"><label>Equipment</label><input type="text" class="eq-name" autocomplete="off" placeholder="Type or pick" /></div><div class="field"><label>Qty</label><input type="number" class="eq-qty" placeholder="1" min="0" /></div><div class="field"><label>Status</label><select class="eq-status"><option>Operational</option><option>Idle</option><option>Under Repair</option><option>Breakdown</option><option>Standby</option></select></div><div class="field"><label>Remarks</label><input type="text" class="eq-remarks" placeholder="Optional" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'equipment')">${Icon.close({size:13})}</button></div></div></div>
                 <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('equipment')">+ Add Equipment</button></div>
             </div>
             <div class="daily-form-section" id="workSection">
@@ -87,12 +87,12 @@ Object.assign(ProjectPage, {
             </div>
             <div class="daily-form-section" id="materialsSection">
                 <div class="section-label">Materials Delivered <span class="rule"></span></div>
-                <div id="materialsEntries"><div class="entry-row"><div class="field"><label>Material</label><select class="mat-name" onchange="ProjectPage.syncMaterialUnit(this)">${this._materialOptionsDaily()}</select></div><div class="field"><label>Qty</label><input type="number" class="mat-qty" min="0" /></div><div class="field"><label>Unit</label><input type="text" class="mat-unit" readonly placeholder="auto" title="Filled automatically from the material database" /></div><div class="field"><label>Supplier / DR No.</label><input type="text" class="mat-supplier" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'materials')">${Icon.close({size:13})}</button></div></div></div>
+                <div id="materialsEntries"><div class="entry-row"><div class="field"><label>Material</label><input type="text" class="mat-name" autocomplete="off" placeholder="Type or pick" oninput="ProjectPage.syncMaterialUnit(this)" onchange="ProjectPage.syncMaterialUnit(this)" /></div><div class="field"><label>Qty</label><input type="number" class="mat-qty" min="0" /></div><div class="field"><label>Unit</label><input type="text" class="mat-unit" placeholder="Type or auto" title="Filled from the material database when the name matches; type it when it does not" /></div><div class="field"><label>Supplier / DR No.</label><input type="text" class="mat-supplier" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'materials')">${Icon.close({size:13})}</button></div></div></div>
                 <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('materials')">+ Add Material</button></div>
             </div>
             <div class="daily-form-section" id="materialsUsedSection">
                 <div class="section-label">Materials Used <span class="rule"></span></div>
-                <div id="materialsUsedEntries"><div class="entry-row"><div class="field"><label>Material (on-site only)</label><select class="mu-name" onchange="ProjectPage.syncUsedMaterialUnit(this)">${this._siteMaterialOptionsDaily()}</select></div><div class="field"><label>Qty Used</label><input type="number" class="mu-qty" min="0" /></div><div class="field"><label>Unit</label><input type="text" class="mu-unit" readonly placeholder="auto" /></div><div class="field"><label>Used For (SOW)</label><select class="mu-sow">${this._sowOptions()}</select></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'materialsUsed')">${Icon.close({size:13})}</button></div></div></div>
+                <div id="materialsUsedEntries"><div class="entry-row"><div class="field"><label>Material (on-site only)</label><input type="text" class="mu-name" autocomplete="off" placeholder="Type to search on-site stock" oninput="ProjectPage.syncUsedMaterialUnit(this)" onchange="ProjectPage.syncUsedMaterialUnit(this)" /></div><div class="field"><label>Qty Used</label><input type="number" class="mu-qty" min="0" /></div><div class="field"><label>Unit</label><input type="text" class="mu-unit" placeholder="Type or auto" /></div><div class="field"><label>Used For (SOW)</label><select class="mu-sow">${this._sowOptions()}</select></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'materialsUsed')">${Icon.close({size:13})}</button></div></div></div>
                 <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('materialsUsed')">+ Add Usage</button></div>
                 <div class="muted" style="font-size:11px;color:var(--ink-soft);margin-top:4px;">Deducted from site stock (delivered - used). You cannot log more than the quantity remaining.</div>
             </div>
@@ -111,14 +111,11 @@ Object.assign(ProjectPage, {
                 <div id="photosEntries"><div class="entry-row"><div class="field"><label>Photo</label><input type="file" accept="image/*" class="photo-input" data-photo onchange="ProjectPage.previewSmallImage(this,'photo-preview-${Date.now()}')" /></div><div class="field"><label>Caption</label><input type="text" class="photo-caption" placeholder="e.g. Liner welding at NF2 cell 2" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'photos')">${Icon.close({size:13})}</button></div></div></div>
                 <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('photos')">+ Add Photo</button></div>
             </div>
-            <!-- v11 BATCH H4: signature blocks, matching the printed form.
-                 On screen they are a reminder of who has to sign; when the
-                 record is printed they are the lines that get signed. -->
-            <div class="dr-signrow">
-                <div class="dr-sign"><div class="ln"></div><div class="lb">Prepared by</div></div>
-                <div class="dr-sign"><div class="ln"></div><div class="lb">Checked by</div></div>
-                <div class="dr-sign"><div class="ln"></div><div class="lb">Approved by</div></div>
-            </div>
+            <!-- v11 BATCH I2: the signature blocks are gone from the ENTRY
+                 form. Nobody signs a screen, and they took up space on a
+                 form people fill in on a phone. They still belong on the
+                 printed record, where they are lines that get signed —
+                 the print template's signature blocks handle that. -->
             <div class="submit-row" id="dailyStepNav" hidden>
                 <button class="btn-ghost" id="dsbPrev" onclick="ProjectPage.dailyStep(-1)">← Back</button>
                 <button class="btn-primary" id="dsbNext" onclick="ProjectPage.dailyStep(1)">Next →</button>
@@ -168,6 +165,176 @@ Object.assign(ProjectPage, {
         if (open) html += '</optgroup>';
         return html;
     },
+    /**
+     * ── v11 BATCH I2: TYPE OR PICK ──
+     *
+     * These three fields were <select> only. That is wrong for a site
+     * form: the person filling it in is copying from paper, and the name
+     * or material in front of them is often not in the database yet —
+     * a new hire, a one-off delivery, a substitute item. A dropdown with
+     * no match leaves them with nowhere to put it, so either the record
+     * is wrong or it does not get entered at all.
+     *
+     * A datalist gives both: the catalogue is offered as you type, and
+     * anything not on it can still be typed. What is in the database is
+     * a convenience, not a gate.
+     */
+    /**
+     * ── v11 BATCH I2b: BACK TO A REAL TYPEAHEAD ──
+     * I2 used a <datalist>, which was the wrong call: the browser owns
+     * it completely — no highlighting of what you typed, no control over
+     * how many rows appear, and on some browsers it will not open until
+     * you press the down arrow. Typeahead (js/core/typeahead.js) shows
+     * "Rebar 12mm" with the 12mm HIGHLIGHTED, so you can see why each
+     * row matched, and free text still saves.
+     */
+    _wireDailyTypeaheads(root) {
+        // ── v11 BATCH I3: LOUD, AND WIRED BY DELEGATION ──
+        //
+        // Two faults made the suggestions vanish completely.
+        //
+        // 1. This returned SILENTLY when Typeahead was not loaded. Since
+        //    the <select> elements had already been replaced with plain
+        //    inputs, the result was a form with no dropdown AND no
+        //    suggestions — and nothing anywhere saying why. A missing
+        //    dependency must complain.
+        //
+        // 2. Wiring happened only when the form was opened, so it
+        //    depended on that one call happening at the right moment.
+        //    A single delegated listener on the form container is wired
+        //    once and covers every row, including ones added later,
+        //    whatever order things render in.
+        if (typeof Typeahead === 'undefined') {
+            if (!this._warnedNoTypeahead) {
+                this._warnedNoTypeahead = true;
+                console.error('Typeahead is not loaded — add <script src="js/core/typeahead.js"> to index.html.');
+                UI.toast('Suggestions are unavailable: js/core/typeahead.js is not loaded. You can still type values in.', 'error');
+            }
+            return;
+        }
+        // ── v11 BATCH I4 FIX: THE ID WAS WRONG ──
+        // This looked for `dailyAddForm`. The element is `dailyAddForm`.
+        // getElementById returned null every time, so the wiring bailed
+        // on its very first line and NOTHING was ever attached — which is
+        // why the suggestions never appeared no matter how many times the
+        // logic behind them was corrected.
+        //
+        // The same wrong id was in the stylesheet, so the printed-form
+        // layout from I2b never applied either. One typo, two features.
+        const scope = root || document.getElementById('dailyAddForm');
+        if (!scope) {
+            // Do not fail silently again. If the form cannot be found the
+            // wiring can do nothing, and that must be visible.
+            if (!this._warnedNoForm) {
+                this._warnedNoForm = true;
+                console.error('Daily record form (#dailyAddForm) not found — typeahead not wired.');
+            }
+            return;
+        }
+        const self = this;
+
+        // Delegation: attach on first focus, wherever the row came from.
+        const form = document.getElementById('dailyAddForm');
+        if (form && !form._taDelegated) {
+            form._taDelegated = true;
+            form.addEventListener('focusin', ev => {
+                const t = ev.target;
+                if (!t || t.tagName !== 'INPUT' || t.dataset.ta) return;
+                if (t.matches('.mp-person, .mp-role, .eq-name, .mat-name, .mu-name')) {
+                    self._wireDailyTypeaheads(t.closest('.entry-row') || form);
+                }
+            });
+        }
+
+        scope.querySelectorAll('.mp-person:not([data-ta])').forEach(inp => {
+            inp.dataset.ta = '1';
+            Typeahead.attach(inp,
+                () => ((self._data && self._data.personnel) || [])
+                    .map(p => ({ label: p.name, sub: p.role || '', value: p.name, data: p })),
+                () => self.syncPersonnelRole(inp));
+        });
+        scope.querySelectorAll('.mp-role:not([data-ta])').forEach(inp => {
+            inp.dataset.ta = '1';
+            Typeahead.attach(inp, () => Array.from(new Set(
+                ((self._data && self._data.personnel) || []).map(p => p.role).filter(Boolean))));
+        });
+        scope.querySelectorAll('.eq-name:not([data-ta])').forEach(inp => {
+            inp.dataset.ta = '1';
+            // The catalogue stores the display value in `name`; brand and
+            // model are extra context, not the identity. Building the
+            // label from brand+model first meant an item with neither
+            // fell through to its id, which is not a name anyone types.
+            Typeahead.attach(inp, () => (self._approvedEquipment || []).map(e => {
+                const label = e.name || [e.brand, e.model].filter(Boolean).join(' ') || e.category || e.id;
+                return { label: label, value: label,
+                         sub: [e.brand, e.model, e.category].filter(Boolean).join(' · ') };
+            }));
+        });
+        scope.querySelectorAll('.mat-name:not([data-ta])').forEach(inp => {
+            inp.dataset.ta = '1';
+            Typeahead.attach(inp, () => (self._approvedMaterials || []).map(m => {
+                const label = m.name || m.desc || m.id;
+                return { label: label, value: label,
+                         sub: [m.brand, m.unit].filter(Boolean).join(' · '), data: m };
+            }), () => self.syncMaterialUnit(inp));
+        });
+
+        // Materials USED searches what is actually on site, not the whole
+        // catalogue, and shows the remaining balance — you cannot consume
+        // something that was never delivered, and the crew should see the
+        // stock figure before typing a quantity against it.
+        scope.querySelectorAll('.mu-name:not([data-ta])').forEach(inp => {
+            inp.dataset.ta = '1';
+            Typeahead.attach(inp, () => ((self._data && self._data.siteMaterials) || [])
+                .filter(m => (parseFloat(m.remaining) || 0) > 0)
+                .map(m => {
+                    const label = m.material || m.materialName || '';
+                    return { label: label, value: label,
+                             sub: `${fmtMoney(m.remaining)} ${m.unit || ''} on site`, data: m };
+                }), () => self.syncUsedMaterialUnit(inp));
+        });
+    },
+
+    _dataList(id, values) {
+        const seen = {};
+        const opts = (values || []).filter(v => {
+            const k = String(v || '').trim().toLowerCase();
+            if (!k || seen[k]) return false;
+            seen[k] = true;
+            return true;
+        }).map(v => `<option value="${String(v).replace(/"/g, '&quot;')}"></option>`).join('');
+        return `<datalist id="${id}">${opts}</datalist>`;
+    },
+
+    _dailyDataLists_unused() {
+        const d = this._data || {};
+        return this._dataList('dl-personnel', ((d.personnel) || []).map(p => p.name)) +
+               this._dataList('dl-roles', ((d.personnel) || []).map(p => p.role)) +
+               this._dataList('dl-equipment', (this._approvedEquipment || [])
+                    .map(e => [e.brand, e.model].filter(Boolean).join(' ') || e.name || e.category)) +
+               this._dataList('dl-materials', (this._approvedMaterials || [])
+                    .map(m => m.name || m.desc));
+    },
+
+    /**
+     * _personnelUnit (v11 BATCH I2) - Name typed or picked → role filled
+     * from the Personnel DB when it matches, left alone when it does not.
+     * Overwriting a role somebody typed would punish them for entering a
+     * person the database has not caught up with.
+     */
+    syncPersonnelRole(inp) {
+        const row = inp.closest('.entry-row');
+        if (!row) return;
+        const roleInp = row.querySelector('.mp-role');
+        const idInp = row.querySelector('.mp-person-id');
+        const typed = String(inp.value || '').trim().toLowerCase();
+        const hit = ((this._data && this._data.personnel) || [])
+            .find(p => String(p.name || '').trim().toLowerCase() === typed);
+        if (idInp) idInp.value = hit ? hit.id : '';
+        if (roleInp && hit && hit.role) roleInp.value = hit.role;
+        this.updateManpowerTotal();
+    },
+
     /** _personnelOptions (v9) - Active people from the Personnel DB.
      *  data-role carries the trade so the row auto-fills. */
     _personnelOptions(selectedId) {
@@ -183,8 +350,13 @@ Object.assign(ProjectPage, {
     _manpowerRowHTML() {
         return `<div class="entry-row" style="display:block;border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;background:var(--bg);">
             <div style="display:grid;grid-template-columns:2fr 1.2fr 70px 30px;gap:8px;align-items:end;">
-                <div class="field"><label>Personnel *</label><select class="mp-person" onchange="ProjectPage.syncPersonnelRole(this)">${this._personnelOptions()}</select></div>
-                <div class="field"><label>Trade / Role</label><input type="text" class="mp-role" readonly placeholder="auto" /></div>
+                <div class="field"><label>Personnel *</label>
+                    <input type="text" class="mp-person" autocomplete="off"
+                           placeholder="Type a name, or pick one on record"
+                           oninput="ProjectPage.syncPersonnelRole(this)" onchange="ProjectPage.syncPersonnelRole(this)" />
+                    <input type="hidden" class="mp-person-id" /></div>
+                <div class="field"><label>Trade / Role</label>
+                    <input type="text" class="mp-role" placeholder="Type or pick" /></div>
                 <div class="field"><label># Present</label><input type="number" class="mp-count" value="1" min="0" /></div>
                 <button class="btn-sm danger" style="margin-bottom:6px;" onclick="ProjectPage.removeEntry(this,'manpower')">${Icon.close({size:12})}</button>
             </div>
@@ -197,16 +369,6 @@ Object.assign(ProjectPage, {
                 <div class="field"><label style="font-size:9px;color:var(--amber,#C2860F);">OT Out ${Icon.lock({size:11})}</label><input type="time" class="mp-ot-out" disabled title="Needs an approved OT request for this date" /></div>
             </div>
         </div>`;
-    },
-
-    /** syncPersonnelRole (v9) - Person selected → role auto-fills. */
-    syncPersonnelRole(sel) {
-        const row = sel.closest('.entry-row');
-        if (!row) return;
-        const roleInp = row.querySelector('.mp-role');
-        const opt = sel.selectedOptions[0];
-        if (roleInp) roleInp.value = opt ? (opt.dataset.role || '') : '';
-        this.updateManpowerTotal();
     },
 
     /** _otForDate (v9) - The APPROVED OT request covering a date. */
@@ -332,13 +494,22 @@ Object.assign(ProjectPage, {
         return '<option value="">Select material...</option>' +
             list.map(m => `<option value="${(m.name || '').replace(/"/g, '&quot;')}" data-unit="${(m.unit || '').replace(/"/g, '&quot;')}">${m.name}${m.brand ? ' — ' + m.brand : ''}</option>`).join('');
     },
-    /** syncMaterialUnit (v3) - Auto-fills the Unit from the selected material. */
-    syncMaterialUnit(selectEl) {
-        const row = selectEl.closest('.entry-row');
+    /**
+     * syncMaterialUnit (v11 BATCH I2) - Fills the unit when the typed
+     * name matches a catalogue material, and LEAVES IT ALONE when it
+     * does not. Clearing a unit somebody typed would punish them for
+     * entering a material the database has not caught up with — which
+     * is the whole reason the field takes free text again.
+     */
+    syncMaterialUnit(inp) {
+        const row = inp.closest('.entry-row');
         if (!row) return;
         const unitInput = row.querySelector('.mat-unit');
-        const opt = selectEl.selectedOptions[0];
-        if (unitInput) unitInput.value = (opt && opt.dataset.unit) || '';
+        if (!unitInput) return;
+        const typed = String(inp.value || '').trim().toLowerCase();
+        const hit = (this._approvedMaterials || []).find(m =>
+            String(m.name || m.desc || '').trim().toLowerCase() === typed);
+        if (hit && hit.unit) unitInput.value = hit.unit;
     },
 
     gatherDailyFormData() {
@@ -368,19 +539,26 @@ Object.assign(ProjectPage, {
             weatherPM: document.getElementById('dr-weather-pm').value.trim(),
             // v9: attendance rows — person (from Personnel DB) + times
             manpower: (function () {
+                // v11 BATCH I2: the NAME is now what is typed, and the id is
+                // recorded only when it matches somebody on file. Keying on
+                // the id alone would silently drop every row for a person
+                // the Personnel database has not caught up with — which is
+                // most of the reason free text was wanted back.
                 const rows = getRows('manpower', {
-                    personnelId: '.mp-person', role: '.mp-role', count: '.mp-count',
+                    name: '.mp-person', personnelId: '.mp-person-id', role: '.mp-role', count: '.mp-count',
                     amIn: '.mp-am-in', amOut: '.mp-am-out', pmIn: '.mp-pm-in', pmOut: '.mp-pm-out',
                     otIn: '.mp-ot-in', otOut: '.mp-ot-out'
                 });
                 const people = (ProjectPage._data && ProjectPage._data.personnel) || [];
                 return rows.map(r => {
-                    const pp = people.find(x => x.id === r.personnelId);
-                    r.name = pp ? pp.name : '';
-                    if (pp && !r.role) r.role = pp.role || '';
+                    const typed = String(r.name || '').trim().toLowerCase();
+                    const pp = people.find(x =>
+                        (r.personnelId && x.id === r.personnelId) ||
+                        String(x.name || '').trim().toLowerCase() === typed);
+                    if (pp) { r.personnelId = pp.id; if (!r.role) r.role = pp.role || ''; }
                     if (!r.count) r.count = '1';
                     return r;
-                }).filter(r => r.personnelId || r.role);   // skip fully empty rows
+                }).filter(r => String(r.name || '').trim() || String(r.role || '').trim());
             })(),
             equipment: getRows('equipment', { name: '.eq-name', qty: '.eq-qty', status: '.eq-status', remarks: '.eq-remarks' }),
             workAccomplished: getRows('work', { location: '.wk-location', scope: '.wk-scope', description: '.wk-desc', percentComplete: '.wk-pct', image: '.wk-image' }),
@@ -756,26 +934,33 @@ Object.assign(ProjectPage, {
                 const isApprover = App.isApprover();
 
                 if (r.status === 'draft') {
-                    // v6.4: drafts are editable/deletable by their creator
-                    // (super admin can also delete); frozen once submitted.
-                    // v6.6: and you must be an editor on the project.
-                    if (isCreator && this._canEdit !== false) {
+                    // v6.4: drafts are editable/deletable by their creator;
+                    // frozen once submitted. v6.6: and you must be an editor.
+                    // v11 BATCH I1: a Super Admin can edit and delete ANY
+                    // record, not only their own drafts. Being able to delete
+                    // something you are not allowed to correct is the wrong
+                    // way round — it pushes people to delete and re-enter.
+                    if ((isCreator || isSuperAdmin) && this._canEdit !== false) {
                         actionsHtml = `
                             <button class="btn-sm primary" onclick="ProjectPage.submitDailyForApproval('${r.id}')">Submit</button>
                             <button class="btn-sm" title="Edit this draft" onclick="ProjectPage.editDailyRecord('${r.id}')">${Icon.pencil({size:12})}</button>
                             <button class="btn-sm danger" title="Delete this draft" onclick="ProjectPage.deleteDailyRecordUI('${r.id}')">${Icon.trash({size:12})}</button>`;
-                    } else if (isSuperAdmin) {
-                        actionsHtml = `<button class="btn-sm danger" title="Delete this draft" onclick="ProjectPage.deleteDailyRecordUI('${r.id}')">${Icon.trash({size:12})}</button>`;
                     } else {
                         actionsHtml = `<span class="dr-note">Creator only</span>`;
                     }
                 } else if (r.status === 'pending') {
-                    if (isCreator) {
-                        actionsHtml = `<span class="dr-note">Awaiting approval</span>`;
-                    } else if (isSuperAdmin) {
+                    // v11 BATCH I1: Super Admin is checked FIRST. Previously a
+                    // Super Admin who had submitted the record themselves fell
+                    // into the creator branch and saw only "Awaiting approval"
+                    // — waiting on approvers who, by the system's own rules,
+                    // they did not need.
+                    if (isSuperAdmin) {
                         actionsHtml = `
-                            <button class="btn-sm success" onclick="ProjectPage.forceApproveDailyRecord('${r.id}')">Force Approve</button>
-                            <button class="btn-sm danger" onclick="ProjectPage.forceRejectDailyRecord('${r.id}')">Force Reject</button>`;
+                            <button class="btn-sm success" onclick="ProjectPage.forceApproveDailyRecord('${r.id}')">Approve</button>
+                            <button class="btn-sm danger" onclick="ProjectPage.forceRejectDailyRecord('${r.id}')">Reject</button>
+                            <button class="btn-sm" title="Edit" onclick="ProjectPage.editDailyRecord('${r.id}')">${Icon.pencil({size:12})}</button>`;
+                    } else if (isCreator) {
+                        actionsHtml = `<span class="dr-note">Awaiting approval</span>`;
                     } else if (isApprover) {
                         actionsHtml = `
                             <button class="btn-sm success" onclick="ProjectPage.approveDailyRecord('${r.id}')">Approve</button>
@@ -807,6 +992,8 @@ Object.assign(ProjectPage, {
                         <td>${statusBadge}</td>
                         <td class="dr-actions" onclick="event.stopPropagation()">
                             ${actionsHtml}
+                            ${isSuperAdmin && r.status !== 'draft'
+                                ? `<button class="btn-sm danger" title="Delete this record (Super Admin)" onclick="ProjectPage.deleteDailyRecordUI('${r.id}')">${Icon.trash({size:12})}</button>` : ''}
                             <button class="btn-sm" title="Open full record" onclick="ProjectPage.viewRecordById('${r.id}')">${Icon.search({size:12})}</button>
                         </td>
                     </tr>`;
@@ -835,14 +1022,29 @@ Object.assign(ProjectPage, {
     },
 
     /** syncUsedMaterialUnit (v6) - auto-fill unit + cap qty at remaining. */
-    syncUsedMaterialUnit(selectEl) {
-        const row = selectEl.closest('.entry-row');
+    /**
+     * syncUsedMaterialUnit (v11 BATCH I2b) - Name typed or picked → unit
+     * and the remaining-stock ceiling follow, when the name matches
+     * something on site. When it does not, what was typed is left alone:
+     * clearing it would punish someone for a material the stock list has
+     * not caught up with.
+     */
+    syncUsedMaterialUnit(inp) {
+        const row = inp.closest('.entry-row');
         if (!row) return;
-        const opt = selectEl.selectedOptions[0];
+        const typed = String(inp.value || '').trim().toLowerCase();
+        const hit = ((this._data && this._data.siteMaterials) || []).find(m =>
+            String(m.material || m.materialName || '').trim().toLowerCase() === typed);
         const unitEl = row.querySelector('.mu-unit');
         const qtyEl = row.querySelector('.mu-qty');
-        if (unitEl) unitEl.value = opt ? (opt.dataset.unit || '') : '';
-        if (qtyEl && opt && opt.dataset.remaining) qtyEl.max = opt.dataset.remaining;
+        if (hit) {
+            if (unitEl && hit.unit) unitEl.value = hit.unit;
+            if (qtyEl && hit.remaining !== undefined) qtyEl.max = hit.remaining;
+        } else if (qtyEl) {
+            // Nothing on site by that name — do not cap a quantity
+            // against a stock figure that does not exist.
+            qtyEl.removeAttribute('max');
+        }
     },
 
     addEntry(section) {
@@ -851,6 +1053,13 @@ Object.assign(ProjectPage, {
         const template = container.querySelector('.entry-row');
         if (!template) return;
         const clone = template.cloneNode(true);
+        // A cloned row carries the wired flag but not the listeners, so
+        // it is cleared and rewired below. Without this the second row
+        // you add has no suggestions at all.
+        clone.querySelectorAll('[data-ta]').forEach(el => {
+            delete el.dataset.ta;
+            el._taWired = false;
+        });
         clone.querySelectorAll('input, textarea, select').forEach(el => {
             if (el.type === 'file') { el.value = '';
                 el.onchange = null; } else if (el.type === 'checkbox' || el.type === 'radio') { el
@@ -858,6 +1067,7 @@ Object.assign(ProjectPage, {
         });
         clone.querySelectorAll('.image-preview-sm').forEach(el => el.remove());
         container.appendChild(clone);
+        this._wireDailyTypeaheads(clone);   // v11 BATCH I2b
         clone.querySelectorAll('input[type="file"]').forEach(el => {
             el.onchange = function(e) { ProjectPage.previewSmallImage(this, 'preview-' + Date
                 .now()); };
@@ -1084,6 +1294,7 @@ Object.assign(ProjectPage, {
         if (form && form.classList.contains('open')) {
             setTimeout(() => this.initDailySteps(), 30);   // v7.2
             this.syncOTLock();                             // v9: OT lock state
+            this._wireDailyTypeaheads();                   // v11 BATCH I2b
         }
         // v6.4: leaving the form ends edit mode and restores the button label
         if (form && !form.classList.contains('open')) {
@@ -1156,7 +1367,7 @@ Object.assign(ProjectPage, {
         };
 
         fill('manpower', r.manpower, {
-            personnelId: '.mp-person', role: '.mp-role', count: '.mp-count',
+            name: '.mp-person', personnelId: '.mp-person-id', role: '.mp-role', count: '.mp-count',
             amIn: '.mp-am-in', amOut: '.mp-am-out', pmIn: '.mp-pm-in', pmOut: '.mp-pm-out',
             otIn: '.mp-ot-in', otOut: '.mp-ot-out'
         });

@@ -987,12 +987,22 @@ const PurchaseRequestsPage = {
     },
 
     async cancel(id) {
+        const p = this._get(id);
+        // v11 BATCH I3: say what else will be cancelled. A cash-route
+        // request has a cash advance and a pending release behind it, and
+        // cancelling those is not something to discover afterwards.
+        const extra = (p && p.cashAdvanceId)
+            ? ` Cash advance ${p.cashAdvanceId} and any pending cash release for it will be rejected too.`
+            : '';
         const ok = await Confirm.open(`Cancel ${id}?`,
-            'The request will be closed and cannot be ordered against. It stays on record.');
+            'The request will be closed and cannot be ordered against. It stays on record.' + extra);
         if (!ok) return;
         try {
-            await DataService.cancelPurchaseRequest(id, '');
-            UI.toast(`${id} cancelled.`, 'success');
+            const res = await DataService.cancelPurchaseRequest(id, '');
+            const bits = [];
+            if (res && res.cashAdvanceCancelled) bits.push(`cash advance ${res.cashAdvanceId} rejected`);
+            if (res && res.releasesCancelled) bits.push(`${res.releasesCancelled} pending release(s) rejected`);
+            UI.toast(`${id} cancelled${bits.length ? ' — ' + bits.join(', ') : ''}.`, 'success');
             await this.load();
         } catch (err) { UI.toast('' + err.message, 'error'); }
     }

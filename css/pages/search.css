@@ -30,3 +30,25 @@
     display: inline-flex;
     align-items: center;
 }
+
+/* v11 BATCH I3 — the searching indicator.
+   A search over twenty-odd sheets takes a moment on Apps Script. With no
+   feedback the screen just sits there, so people type again — which
+   starts another search and makes it slower. This is what stops the
+   retrying. */
+.search-spin {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--line);
+    border-top-color: var(--blueprint);
+    border-radius: 50%;
+    animation: search-spin .7s linear infinite;
+    vertical-align: -2px;
+    margin-right: 6px;
+}
+@keyframes search-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+    .search-spin { animation: none; border-top-color: var(--blueprint); }
+}

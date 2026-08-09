@@ -11,6 +11,25 @@
 //  SEARCH
 // ============================================================
 
+/**
+ * SEARCH_COVERAGE (v11 BATCH I4) - Every record type this build searches.
+ *
+ * Returned with the results so the UI can say what was covered. That is
+ * not decoration: the frontend and the Apps Script backend DEPLOY
+ * SEPARATELY, so a page can be several versions ahead of its server. A
+ * search that quietly omits purchase orders looks identical to a search
+ * that found none — and the conclusion drawn is "the record does not
+ * exist", which is the worst possible wrong answer.
+ *
+ * If this count is lower than the frontend expects, the backend has not
+ * been redeployed. Now that is visible instead of being guessed at.
+ */
+var SEARCH_COVERAGE = ['Project', 'Quotation', 'Purchase Request', 'Purchase Order',
+  'Goods Receipt', 'Supplier Invoice', 'Supplier', 'Cash Advance', 'Cash Release',
+  'Incoming Cash', 'Liquidation', 'Billing', 'Material', 'Equipment',
+  'Manpower Role', 'Personnel', 'Transfer', 'Safety', 'Punchlist', 'Drawing',
+  'OT Request', 'Lesson'];
+
 function search(query) {
   query = String(query || '').toLowerCase().trim();
   if (!query) return [];
@@ -170,5 +189,192 @@ function search(query) {
     });
   });
 
+  // ── v11 BATCH I3: THE RECORDS THAT WERE MISSING ──
+  // Search covered the sheets that existed when it was written and was
+  // never extended as the system grew. Everything from Batch D onward
+  // was invisible to it: safety records, punchlist, drawings, OT
+  // requests, purchase requests, purchase orders, goods receipts,
+  // supplier invoices, suppliers, quotations and lessons learned.
+  //
+  // A search box that silently omits half the system is worse than no
+  // search box — you conclude the record does not exist.
+  //
+  // Each block is guarded with getSheetByName because these sheets are
+  // created on first use; a project that has never raised a purchase
+  // order simply has no PurchaseOrders sheet yet.
+  var has_ = function (n) { return !!ss_().getSheetByName(n); };
+
+  if (has_('SafetyRecords')) {
+    readAll_('SafetyRecords').forEach(function (r) {
+      if (!hit_(r.id, r.recordType, r.description, r.personsInvolved, r.projectId)) return;
+      results.push({
+        type: 'Safety', id: r.id, label: r.recordType || '',
+        projectId: r.projectId || '', status: r.status || '', date: fmtDate_(r.recordDate),
+        detail: { 'Record ID': r.id, 'Type': r.recordType || '—', 'Date': fmtDate_(r.recordDate),
+          'Project': r.projectId || '—', 'Description': r.description || '—',
+          'Severity': r.severity || '—', 'Persons': r.personsInvolved || '—',
+          'Action taken': r.actionTaken || '—', 'Status': r.status || '—' }
+      });
+    });
+  }
+
+  if (has_('Punchlist')) {
+    readAll_('Punchlist').forEach(function (r) {
+      if (!hit_(r.id, r.description, r.sowId, r.projectId)) return;
+      results.push({
+        type: 'Punchlist', id: r.id, label: r.description || '',
+        projectId: r.projectId || '', status: r.status || '', date: fmtDate_(r.dateRaised),
+        detail: { 'Item': r.id, 'SOW': r.sowId || '—', 'Description': r.description || '—',
+          'Severity': r.severity || '—', 'Raised': fmtDate_(r.dateRaised), 'Status': r.status || '—' }
+      });
+    });
+  }
+
+  if (has_('Drawings')) {
+    readAll_('Drawings').forEach(function (r) {
+      if (!hit_(r.id, r.drawingNo, r.title, r.discipline, r.projectId)) return;
+      results.push({
+        type: 'Drawing', id: r.id, label: r.drawingNo || r.title || '',
+        projectId: r.projectId || '', status: r.revision || '', date: fmtDate_(r.dateIssued),
+        detail: { 'Drawing': r.drawingNo || '—', 'Title': r.title || '—',
+          'Revision': r.revision || '—', 'Discipline': r.discipline || '—',
+          'Issued': fmtDate_(r.dateIssued) }
+      });
+    });
+  }
+
+  if (has_('OTRequests')) {
+    readAll_('OTRequests').forEach(function (r) {
+      if (!hit_(r.id, r.reason, r.requestedBy, r.projectId)) return;
+      results.push({
+        type: 'OT Request', id: r.id, label: r.reason || '',
+        projectId: r.projectId || '', status: r.status || '', date: fmtDate_(r.otDate),
+        detail: { 'Request ID': r.id, 'Date': fmtDate_(r.otDate),
+          'Hours': (r.otStart || '') + ' – ' + (r.otEnd || ''),
+          'Reason': r.reason || '—', 'Requested by': r.requestedBy || '—', 'Status': r.status || '—' }
+      });
+    });
+  }
+
+  if (has_('PurchaseRequests')) {
+    readAll_('PurchaseRequests').forEach(function (r) {
+      if (!hit_(r.id, r.title, r.justification, r.sowId, r.projectId, r.requestor)) return;
+      results.push({
+        type: 'Purchase Request', id: r.id, label: r.title || '',
+        projectId: r.projectId || '', amount: parseFloat(r.totalAmount) || 0,
+        status: r.status || '', date: fmtDate_(r.createdAt),
+        detail: { 'PR No.': r.id, 'Title': r.title || '—', 'Project': r.projectId || '—',
+          'SOW': r.sowId || '—', 'Amount': '₱' + fmtMoney_(parseFloat(r.totalAmount) || 0),
+          'Route': low_(r.route) === 'cash' ? 'Cash advance' : 'Purchase order',
+          'Description': r.justification || '—',
+          'Requested by': r.requestor || '—', 'Status': r.status || '—' }
+      });
+    });
+  }
+
+  if (has_('PurchaseOrders')) {
+    var suppById_ = {};
+    if (has_('Suppliers')) {
+      readAll_('Suppliers').forEach(function (x) { suppById_[x.id] = x.name; });
+    }
+    readAll_('PurchaseOrders').forEach(function (r) {
+      var sname = suppById_[r.supplierId] || r.supplierId || '';
+      if (!hit_(r.id, r.prId, sname, r.sowId, r.projectId)) return;
+      results.push({
+        type: 'Purchase Order', id: r.id, label: sname,
+        projectId: r.projectId || '', amount: parseFloat(r.grossAmount) || 0,
+        status: r.status || '', date: fmtDate_(r.issuedAt),
+        detail: { 'PO No.': r.id, 'Supplier': sname || '—', 'From request': r.prId || '—',
+          'Project': r.projectId || '—', 'SOW': r.sowId || '—',
+          'Gross': '₱' + fmtMoney_(parseFloat(r.grossAmount) || 0),
+          'Expected': fmtDate_(r.expectedDate), 'Status': r.status || '—' }
+      });
+    });
+  }
+
+  if (has_('Receipts')) {
+    readAll_('Receipts').forEach(function (r) {
+      if (!hit_(r.id, r.poId, r.deliveryRef, r.sowId, r.projectId)) return;
+      results.push({
+        type: 'Goods Receipt', id: r.id, label: r.deliveryRef || r.poId || '',
+        projectId: r.projectId || '', amount: parseFloat(r.grossAmount) || 0,
+        status: r.status || '', date: fmtDate_(r.receiptDate),
+        detail: { 'Receipt': r.id, 'Against PO': r.poId || '—', 'Delivery ref': r.deliveryRef || '—',
+          'Received': fmtDate_(r.receiptDate), 'SOW': r.sowId || '—',
+          'Value': '₱' + fmtMoney_(parseFloat(r.grossAmount) || 0), 'Status': r.status || '—' }
+      });
+    });
+  }
+
+  if (has_('SupplierInvoices')) {
+    readAll_('SupplierInvoices').forEach(function (r) {
+      if (!hit_(r.id, r.invoiceNo, r.poId, r.projectId)) return;
+      var bal = (parseFloat(r.grossAmount) || 0) - (parseFloat(r.paidAmount) || 0);
+      results.push({
+        type: 'Supplier Invoice', id: r.id, label: r.invoiceNo || r.id,
+        projectId: r.projectId || '', amount: parseFloat(r.grossAmount) || 0,
+        status: r.status || '', date: fmtDate_(r.invoiceDate),
+        detail: { 'Invoice': r.invoiceNo || r.id, 'Against PO': r.poId || '—',
+          'Gross': '₱' + fmtMoney_(parseFloat(r.grossAmount) || 0),
+          'Paid': '₱' + fmtMoney_(parseFloat(r.paidAmount) || 0),
+          'Balance': '₱' + fmtMoney_(bal), 'Due': fmtDate_(r.dueDate), 'Status': r.status || '—' }
+      });
+    });
+  }
+
+  if (has_('Suppliers')) {
+    readAll_('Suppliers').forEach(function (r) {
+      if (!hit_(r.id, r.name, r.contactPerson, r.tin, r.category)) return;
+      results.push({
+        type: 'Supplier', id: r.id, label: r.name || '',
+        status: r.status || '', date: fmtDate_(r.createdAt),
+        detail: { 'Supplier': r.name || '—', 'Contact': r.contactPerson || '—',
+          'Number': r.contactNumber || '—', 'TIN': r.tin || '—',
+          'Terms': supplierTermsLabel_(r.termsDays), 'Category': r.category || '—',
+          'Status': r.status || '—' }
+      });
+    });
+  }
+
+  if (has_('Quotations')) {
+    readAll_('Quotations').forEach(function (r) {
+      if (!hit_(r.id, r.title, r.clientName, r.projectId)) return;
+      results.push({
+        type: 'Quotation', id: r.id, label: r.title || '',
+        projectId: r.projectId || '', amount: parseFloat(r.quotedValue) || 0,
+        status: r.status || '', date: fmtDate_(r.createdAt),
+        detail: { 'Quote No.': r.id, 'Title': r.title || '—', 'Client': r.clientName || '—',
+          'Revision': r.revision || '—',
+          'Quoted': '₱' + fmtMoney_(parseFloat(r.quotedValue) || 0),
+          'Valid until': fmtDate_(r.validUntil), 'Status': r.status || '—' }
+      });
+    });
+  }
+
+  if (has_('LessonsLearned')) {
+    readAll_('LessonsLearned').forEach(function (r) {
+      if (!hit_(r.id, r.title, r.category, r.projectName, r.recommendation)) return;
+      results.push({
+        type: 'Lesson', id: r.id, label: r.title || '',
+        projectId: r.projectId || '', status: r.category || '', date: fmtDate_(r.capturedAt),
+        detail: { 'Lesson': r.title || '—', 'Category': r.category || '—',
+          'Project': r.projectName || '—', 'Recommendation': r.recommendation || '—',
+          'Captured': fmtDate_(r.capturedAt) }
+      });
+    });
+  }
+
+  // The coverage list rides along on the first result rather than
+  // changing the return type, so an older frontend keeps working
+  // unchanged and a newer one can read it.
+  if (results.length) results[0]._coverage = SEARCH_COVERAGE.length;
   return results;
+}
+
+/**
+ * searchCoverage - What this deployment can find. Called by the UI to
+ * report the version it is actually talking to.
+ */
+function searchCoverage() {
+  return { types: SEARCH_COVERAGE, count: SEARCH_COVERAGE.length };
 }

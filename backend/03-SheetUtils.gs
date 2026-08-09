@@ -26,6 +26,42 @@ function sheet_(name) {
 function headers_(name) { return SCHEMAS[name]; }
 
 /**
+ * ensureColumns_ (v11 BATCH I1b) - Adds any schema column that is
+ * missing from the sheet's physical header row.
+ *
+ * WHY THIS EXISTS. Every schema addition so far has come with a note
+ * saying "add this header by hand". A forgotten manual step is a
+ * feature that silently does nothing: reads are positional, so the
+ * value is written and read back fine — until someone sorts, filters or
+ * inserts a column in that sheet, at which point data lands under the
+ * wrong heading with no error anywhere.
+ *
+ * Called from ensureSheet_, so it runs on the paths that already touch
+ * a sheet before writing. It only ever APPENDS headers — it never
+ * reorders or renames, because either of those would move existing data
+ * under a different meaning.
+ */
+function ensureColumns_(name, sh) {
+  var want = SCHEMAS[name];
+  if (!want || !want.length) return;
+  sh = sh || ss_().getSheetByName(name);
+  if (!sh) return;
+
+  var lastCol = sh.getLastColumn();
+  var have = lastCol > 0
+    ? sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); })
+    : [];
+
+  // Only append what is genuinely absent, and keep schema order for the
+  // new ones so the sheet stays readable.
+  var missing = want.filter(function (h) { return have.indexOf(h) === -1; });
+  if (!missing.length) return;
+
+  sh.getRange(1, have.length + 1, 1, missing.length).setValues([missing]);
+  _invalidateRead_(name);
+}
+
+/**
  * ensureSheet_ (v11 BATCH E) - Returns a sheet, creating it with its
  * schema header row if it does not exist yet.
  *
@@ -38,7 +74,10 @@ function headers_(name) { return SCHEMAS[name]; }
  */
 function ensureSheet_(name) {
   var sh = ss_().getSheetByName(name);
-  if (sh) return sh;
+  // v11 BATCH I1b: an existing sheet is brought up to schema rather than
+  // simply returned, so a new column installs itself instead of waiting
+  // for someone to remember a note in a README.
+  if (sh) { ensureColumns_(name, sh); return sh; }
   var heads = SCHEMAS[name];
   if (!heads) throw new Error('No schema defined for sheet: ' + name);
   sh = ss_().insertSheet(name);

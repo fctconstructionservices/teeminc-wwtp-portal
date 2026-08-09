@@ -15,6 +15,73 @@ const SearchPage = {
 
     /** Column plans per result type: [label, renderFn] */
     _plans: {
+        // ── v11 BATCH I4: columns for the record types added in I3 ──
+        // Without a plan a type falls back to ID / Description / Status,
+        // which is readable but throws away the one figure that makes
+        // each of these worth finding: the amount, the supplier, the due
+        // date.
+        'Quotation': [
+            ['Quote No.', r => `<span class="req-id">${r.id}</span>`],
+            ['Title', r => r.label || '—'],
+            ['Quoted', r => '₱' + fmtMoney(r.amount || 0)],
+            ['Status', r => SearchPage._stamp(r.status)]
+        ],
+        'Purchase Request': [
+            ['PR No.', r => `<span class="req-id">${r.id}</span>`],
+            ['Title', r => r.label || '—'],
+            ['Amount', r => '₱' + fmtMoney(r.amount || 0)],
+            ['Status', r => SearchPage._stamp(r.status)]
+        ],
+        'Purchase Order': [
+            ['PO No.', r => `<span class="req-id">${r.id}</span>`],
+            ['Supplier', r => r.label || '—'],
+            ['Gross', r => '₱' + fmtMoney(r.amount || 0)],
+            ['Status', r => SearchPage._stamp(r.status)]
+        ],
+        'Goods Receipt': [
+            ['Receipt', r => `<span class="req-id">${r.id}</span>`],
+            ['Delivery ref', r => r.label || '—'],
+            ['Value', r => '₱' + fmtMoney(r.amount || 0)],
+            ['Received', r => r.date || '—']
+        ],
+        'Supplier Invoice': [
+            ['Invoice', r => `<span class="req-id">${r.label || r.id}</span>`],
+            ['Gross', r => '₱' + fmtMoney(r.amount || 0)],
+            ['Status', r => SearchPage._stamp(r.status)]
+        ],
+        'Supplier': [
+            ['Supplier', r => r.label || '—'],
+            ['ID', r => `<span class="req-id">${r.id}</span>`],
+            ['Status', r => SearchPage._stamp(r.status)]
+        ],
+        'Safety': [
+            ['Date', r => r.date || '—'],
+            ['Type', r => r.label || '—'],
+            ['Project', r => r.projectId || '—'],
+            ['Status', r => SearchPage._stamp(r.status)]
+        ],
+        'Punchlist': [
+            ['Ref', r => `<span class="req-id">${r.id}</span>`],
+            ['Description', r => r.label || '—'],
+            ['Status', r => SearchPage._stamp(r.status)]
+        ],
+        'Drawing': [
+            ['Drawing', r => r.label || '—'],
+            ['Revision', r => r.status || '—'],
+            ['Issued', r => r.date || '—']
+        ],
+        'OT Request': [
+            ['Request', r => `<span class="req-id">${r.id}</span>`],
+            ['Reason', r => r.label || '—'],
+            ['Date', r => r.date || '—'],
+            ['Status', r => SearchPage._stamp(r.status)]
+        ],
+        'Lesson': [
+            ['Lesson', r => r.label || '—'],
+            ['Category', r => r.status || '—'],
+            ['Captured', r => r.date || '—']
+        ],
+
         'Project': [
             ['Project ID', r => `<span class="req-id">${r.id}</span>`],
             ['Name', r => r.label || '—'],
@@ -141,30 +208,77 @@ async function performSearch() {
 
     // debounce + stale-response guard: only the LATEST query may render
     const seq = ++SearchPage._seq;
+
+    // ── v11 BATCH I3: SAY THAT IT IS SEARCHING ──
+    // A search over twenty-odd sheets takes a moment on Apps Script. With
+    // no feedback the screen simply sat there, so people typed again,
+    // which starts another search and makes it slower still. The spinner
+    // is not decoration — it is what stops the retrying.
+    countEl.textContent = 'Searching...';
+    emptyEl.style.display = 'block';
+    emptyEl.querySelector('p').innerHTML =
+        '<span class="search-spin"></span> Searching every record for “' +
+        String(query).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '”...';
+    resultsEl.innerHTML = '';
+
     try {
         const results = await DataService.search(query);
         if (seq !== SearchPage._seq) return;   // a newer search superseded this one
         SearchPage._results = results;
         countEl.textContent = results.length + ' found';
 
+        // ── v11 BATCH I4: SAY WHAT WAS SEARCHED ──
+        // The frontend and the Apps Script backend deploy separately, so
+        // this page can be several versions ahead of its server. A search
+        // that quietly omits purchase orders looks exactly like a search
+        // that found none, and the conclusion drawn is "the record does
+        // not exist" — the worst possible wrong answer.
+        //
+        // The backend reports how many record types it covers. If that
+        // is fewer than this build expects, the Apps Script has not been
+        // redeployed, and it says so instead of leaving you guessing.
+        const EXPECTED_TYPES = 22;
+        const covered = results.length ? (results[0]._coverage || 0) : 0;
+        SearchPage._staleBackend = covered > 0 && covered < EXPECTED_TYPES;
+
         if (!results.length) {
             emptyEl.style.display = 'block';
-            emptyEl.querySelector('p').textContent = 'No matches found.';
+            // Offer the likeliest explanation rather than a flat "none".
+            emptyEl.querySelector('p').innerHTML =
+                'No matches found.<br><span style="font-size:11.5px;color:var(--ink-soft)">' +
+                'If you expected a purchase order, quotation or supplier here and the backend ' +
+                'has not been redeployed since the last update, it will not be searched yet.</span>';
             resultsEl.innerHTML = '';
             return;
         }
         emptyEl.style.display = 'none';
 
         // group by type, keep a stable order
-        const order = ['Project', 'Cash Advance', 'Cash Release', 'Incoming Cash', 'Liquidation',
-            'Material', 'Equipment', 'Manpower Role', 'Personnel', 'Billing', 'Transfer'];
+        // v11 BATCH I3: the new record types are ordered too. A type that
+        // is not listed here still renders — it just sorts last — so a
+        // future record type appears in search the day it is added
+        // rather than the day someone remembers this array.
+        const order = ['Project', 'Quotation', 'Purchase Request', 'Purchase Order',
+            'Goods Receipt', 'Supplier Invoice', 'Supplier',
+            'Cash Advance', 'Cash Release', 'Incoming Cash', 'Liquidation', 'Billing',
+            'Material', 'Equipment', 'Manpower Role', 'Personnel', 'Transfer',
+            'Safety', 'Punchlist', 'Drawing', 'OT Request', 'Lesson'];
         const groups = {};
         results.forEach((r, i) => {
             r._idx = i;
             (groups[r.type] = groups[r.type] || []).push(r);
         });
 
-        let html = '';
+        let html = SearchPage._staleBackend
+            ? `<div class="panel" style="margin-bottom:14px;border-left:3px solid var(--amber);">
+                 <div style="padding:11px 14px;font-size:12.5px;line-height:1.5;">
+                   <b>This search covered ${covered} of ${EXPECTED_TYPES} record types.</b>
+                   Purchase orders, quotations, suppliers and others are missing because the
+                   Apps Script backend has not been redeployed since the last update. Push
+                   <code>backend/</code> with clasp and redeploy.
+                 </div>
+               </div>`
+            : '';
         order.concat(Object.keys(groups).filter(t => !order.includes(t))).forEach(type => {
             const rows = groups[type];
             if (!rows || !rows.length) return;
@@ -187,6 +301,10 @@ async function performSearch() {
         });
         resultsEl.innerHTML = html;
     } catch (err) {
+        if (seq !== SearchPage._seq) return;
+        emptyEl.style.display = 'block';
+        emptyEl.querySelector('p').textContent = 'Search failed: ' + (err.message || err);
+        countEl.textContent = '0 found';
         if (seq !== SearchPage._seq) return;
         console.error('Search error:', err);
         UI.toast('Error performing search.', 'error');
