@@ -2,7 +2,7 @@
  * 13-FileService.gs — Drive attachments and photo uploads
  *
  * PURPOSE: Every file in the system lands in one Drive folder
- * ('FCTC Ops Board Attachments'), created on demand. Payloads carry
+ * ('TEEM ERP Attachments'), created on demand. Payloads carry
  * base64 (fileBase64/fileName/fileMimeType); only the resulting
  * Drive URLs are stored in sheet rows.
  */
@@ -12,7 +12,7 @@
 // ============================================================
 
 function getOrCreateAttachmentsFolder_() {
-  const name = 'FCTC Ops Board Attachments';
+  const name = 'TEEM ERP Attachments';
   const folders = DriveApp.getFoldersByName(name);
   return folders.hasNext() ? folders.next() : DriveApp.createFolder(name);
 }
