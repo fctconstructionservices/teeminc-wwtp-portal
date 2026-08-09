@@ -11,6 +11,25 @@
 //  SEARCH
 // ============================================================
 
+/**
+ * SEARCH_COVERAGE (v11 BATCH I4) - Every record type this build searches.
+ *
+ * Returned with the results so the UI can say what was covered. That is
+ * not decoration: the frontend and the Apps Script backend DEPLOY
+ * SEPARATELY, so a page can be several versions ahead of its server. A
+ * search that quietly omits purchase orders looks identical to a search
+ * that found none — and the conclusion drawn is "the record does not
+ * exist", which is the worst possible wrong answer.
+ *
+ * If this count is lower than the frontend expects, the backend has not
+ * been redeployed. Now that is visible instead of being guessed at.
+ */
+var SEARCH_COVERAGE = ['Project', 'Quotation', 'Purchase Request', 'Purchase Order',
+  'Goods Receipt', 'Supplier Invoice', 'Supplier', 'Cash Advance', 'Cash Release',
+  'Incoming Cash', 'Liquidation', 'Billing', 'Material', 'Equipment',
+  'Manpower Role', 'Personnel', 'Transfer', 'Safety', 'Punchlist', 'Drawing',
+  'OT Request', 'Lesson'];
+
 function search(query) {
   query = String(query || '').toLowerCase().trim();
   if (!query) return [];
@@ -345,5 +364,17 @@ function search(query) {
     });
   }
 
+  // The coverage list rides along on the first result rather than
+  // changing the return type, so an older frontend keeps working
+  // unchanged and a newer one can read it.
+  if (results.length) results[0]._coverage = SEARCH_COVERAGE.length;
   return results;
+}
+
+/**
+ * searchCoverage - What this deployment can find. Called by the UI to
+ * report the version it is actually talking to.
+ */
+function searchCoverage() {
+  return { types: SEARCH_COVERAGE, count: SEARCH_COVERAGE.length };
 }

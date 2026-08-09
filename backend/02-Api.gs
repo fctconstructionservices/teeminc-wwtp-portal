@@ -134,6 +134,7 @@ const API_ACTIONS = {
   getProjectData: getProjectData,
   getFinanceData: getFinanceData,
   search: search,
+  searchCoverage: searchCoverage,   // v11 BATCH I4
   saveEstimates: saveEstimates,
   submitEstimatesForApproval: submitEstimatesForApproval,
   approveEstimates: approveEstimates,

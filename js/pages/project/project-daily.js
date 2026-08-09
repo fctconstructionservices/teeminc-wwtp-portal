@@ -63,7 +63,7 @@ Object.assign(ProjectPage, {
             </div>
             <div class="daily-form-section" id="equipmentSection">
                 <div class="section-label">Equipment on Site <span class="rule"></span></div>
-                <div id="equipmentEntries"><div class="entry-row"><div class="field"><label>Equipment</label><input type="text" class="eq-name" list="dl-equipment" autocomplete="off" placeholder="Type or pick" /></div><div class="field"><label>Qty</label><input type="number" class="eq-qty" placeholder="1" min="0" /></div><div class="field"><label>Status</label><select class="eq-status"><option>Operational</option><option>Idle</option><option>Under Repair</option><option>Breakdown</option><option>Standby</option></select></div><div class="field"><label>Remarks</label><input type="text" class="eq-remarks" placeholder="Optional" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'equipment')">${Icon.close({size:13})}</button></div></div></div>
+                <div id="equipmentEntries"><div class="entry-row"><div class="field"><label>Equipment</label><input type="text" class="eq-name" autocomplete="off" placeholder="Type or pick" /></div><div class="field"><label>Qty</label><input type="number" class="eq-qty" placeholder="1" min="0" /></div><div class="field"><label>Status</label><select class="eq-status"><option>Operational</option><option>Idle</option><option>Under Repair</option><option>Breakdown</option><option>Standby</option></select></div><div class="field"><label>Remarks</label><input type="text" class="eq-remarks" placeholder="Optional" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'equipment')">${Icon.close({size:13})}</button></div></div></div>
                 <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('equipment')">+ Add Equipment</button></div>
             </div>
             <div class="daily-form-section" id="workSection">
@@ -87,7 +87,7 @@ Object.assign(ProjectPage, {
             </div>
             <div class="daily-form-section" id="materialsSection">
                 <div class="section-label">Materials Delivered <span class="rule"></span></div>
-                <div id="materialsEntries"><div class="entry-row"><div class="field"><label>Material</label><input type="text" class="mat-name" list="dl-materials" autocomplete="off" placeholder="Type or pick" oninput="ProjectPage.syncMaterialUnit(this)" onchange="ProjectPage.syncMaterialUnit(this)" /></div><div class="field"><label>Qty</label><input type="number" class="mat-qty" min="0" /></div><div class="field"><label>Unit</label><input type="text" class="mat-unit" placeholder="Type or auto" title="Filled from the material database when the name matches; type it when it does not" /></div><div class="field"><label>Supplier / DR No.</label><input type="text" class="mat-supplier" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'materials')">${Icon.close({size:13})}</button></div></div></div>
+                <div id="materialsEntries"><div class="entry-row"><div class="field"><label>Material</label><input type="text" class="mat-name" autocomplete="off" placeholder="Type or pick" oninput="ProjectPage.syncMaterialUnit(this)" onchange="ProjectPage.syncMaterialUnit(this)" /></div><div class="field"><label>Qty</label><input type="number" class="mat-qty" min="0" /></div><div class="field"><label>Unit</label><input type="text" class="mat-unit" placeholder="Type or auto" title="Filled from the material database when the name matches; type it when it does not" /></div><div class="field"><label>Supplier / DR No.</label><input type="text" class="mat-supplier" /></div><div class="field" style="display:flex;gap:6px;align-items:end;justify-content:flex-end;"><button class="btn-sm danger" onclick="ProjectPage.removeEntry(this,'materials')">${Icon.close({size:13})}</button></div></div></div>
                 <div class="add-btn-row"><button class="btn-sm primary" onclick="ProjectPage.addEntry('materials')">+ Add Material</button></div>
             </div>
             <div class="daily-form-section" id="materialsUsedSection">
@@ -212,12 +212,29 @@ Object.assign(ProjectPage, {
             }
             return;
         }
-        const scope = root || document.getElementById('addRecordForm');
-        if (!scope) return;
+        // ── v11 BATCH I4 FIX: THE ID WAS WRONG ──
+        // This looked for `dailyAddForm`. The element is `dailyAddForm`.
+        // getElementById returned null every time, so the wiring bailed
+        // on its very first line and NOTHING was ever attached — which is
+        // why the suggestions never appeared no matter how many times the
+        // logic behind them was corrected.
+        //
+        // The same wrong id was in the stylesheet, so the printed-form
+        // layout from I2b never applied either. One typo, two features.
+        const scope = root || document.getElementById('dailyAddForm');
+        if (!scope) {
+            // Do not fail silently again. If the form cannot be found the
+            // wiring can do nothing, and that must be visible.
+            if (!this._warnedNoForm) {
+                this._warnedNoForm = true;
+                console.error('Daily record form (#dailyAddForm) not found — typeahead not wired.');
+            }
+            return;
+        }
         const self = this;
 
         // Delegation: attach on first focus, wherever the row came from.
-        const form = document.getElementById('addRecordForm');
+        const form = document.getElementById('dailyAddForm');
         if (form && !form._taDelegated) {
             form._taDelegated = true;
             form.addEventListener('focusin', ev => {
@@ -334,12 +351,12 @@ Object.assign(ProjectPage, {
         return `<div class="entry-row" style="display:block;border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;background:var(--bg);">
             <div style="display:grid;grid-template-columns:2fr 1.2fr 70px 30px;gap:8px;align-items:end;">
                 <div class="field"><label>Personnel *</label>
-                    <input type="text" class="mp-person" list="dl-personnel" autocomplete="off"
+                    <input type="text" class="mp-person" autocomplete="off"
                            placeholder="Type a name, or pick one on record"
                            oninput="ProjectPage.syncPersonnelRole(this)" onchange="ProjectPage.syncPersonnelRole(this)" />
                     <input type="hidden" class="mp-person-id" /></div>
                 <div class="field"><label>Trade / Role</label>
-                    <input type="text" class="mp-role" list="dl-roles" placeholder="Type or pick" /></div>
+                    <input type="text" class="mp-role" placeholder="Type or pick" /></div>
                 <div class="field"><label># Present</label><input type="number" class="mp-count" value="1" min="0" /></div>
                 <button class="btn-sm danger" style="margin-bottom:6px;" onclick="ProjectPage.removeEntry(this,'manpower')">${Icon.close({size:12})}</button>
             </div>

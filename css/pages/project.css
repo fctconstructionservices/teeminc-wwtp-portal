@@ -616,8 +616,8 @@
 
 /* Numbered sections, counted automatically so inserting one later does
    not mean renumbering the rest by hand. */
-#addRecordForm { counter-reset: drsec; }
-#addRecordForm .daily-form-section .section-label::before {
+#dailyAddForm { counter-reset: drsec; }
+#dailyAddForm .daily-form-section .section-label::before {
     counter-increment: drsec;
     content: counter(drsec);
     display: inline-flex;
@@ -635,9 +635,9 @@
 }
 /* Tighter than a stack of panels: the paper form is dense, and so is
    the person copying from it. */
-#addRecordForm .daily-form-section { margin-bottom: 12px; }
-#addRecordForm .daily-form-section .section-label { margin-bottom: 7px; }
-#addRecordForm .entry-row { margin-bottom: 5px; }
+#dailyAddForm .daily-form-section { margin-bottom: 12px; }
+#dailyAddForm .daily-form-section .section-label { margin-bottom: 7px; }
+#dailyAddForm .entry-row { margin-bottom: 5px; }
 
 .dr-signrow {
     display: grid;
@@ -741,7 +741,7 @@
    rebuilding them as real tables would risk that for a border.
    ================================================================ */
 
-#addRecordForm .daily-form-section {
+#dailyAddForm .daily-form-section {
     border: none;
     border-bottom: 1px solid var(--line);
     border-radius: 0;
@@ -749,9 +749,9 @@
     padding: 0 0 10px;
     margin-bottom: 12px;
 }
-#addRecordForm .daily-form-section:last-of-type { border-bottom: none; }
+#dailyAddForm .daily-form-section:last-of-type { border-bottom: none; }
 
-#addRecordForm .section-label {
+#dailyAddForm .section-label {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -764,12 +764,12 @@
     border-bottom: 1.5px solid var(--blueprint);
     margin-bottom: 8px;
 }
-#addRecordForm .section-label .rule { display: none; }
+#dailyAddForm .section-label .rule { display: none; }
 
 /* Field labels become column headings: shown on the FIRST row only, so
    a section of six rows does not repeat its headers six times — which
    is what a printed form does, and why it stays readable. */
-#addRecordForm .entry-row {
+#dailyAddForm .entry-row {
     border: none;
     background: none;
     padding: 3px 0;
@@ -777,8 +777,8 @@
     border-radius: 0;
     margin-bottom: 0;
 }
-#addRecordForm .entry-row:last-child { border-bottom: none; }
-#addRecordForm .entry-row .field label {
+#dailyAddForm .entry-row:last-child { border-bottom: none; }
+#dailyAddForm .entry-row .field label {
     font-family: 'IBM Plex Mono', monospace;
     font-size: 8px;
     letter-spacing: .09em;
@@ -786,37 +786,37 @@
     color: var(--ink-soft);
     font-weight: 400;
 }
-#addRecordForm .entry-row:not(:first-child) .field label { visibility: hidden; height: 0; margin: 0; }
+#dailyAddForm .entry-row:not(:first-child) .field label { visibility: hidden; height: 0; margin: 0; }
 
-#addRecordForm .entry-row input,
-#addRecordForm .entry-row select,
-#addRecordForm .entry-row textarea {
+#dailyAddForm .entry-row input,
+#dailyAddForm .entry-row select,
+#dailyAddForm .entry-row textarea {
     border: 1px solid transparent;
     background: none;
     border-radius: 5px;
     padding: 4px 6px;
     font-size: 12.5px;
 }
-#addRecordForm .entry-row input:hover,
-#addRecordForm .entry-row select:hover { border-color: var(--line); }
-#addRecordForm .entry-row input:focus,
-#addRecordForm .entry-row select:focus {
+#dailyAddForm .entry-row input:hover,
+#dailyAddForm .entry-row select:hover { border-color: var(--line); }
+#dailyAddForm .entry-row input:focus,
+#dailyAddForm .entry-row select:focus {
     border-color: var(--safety);
     background: var(--surface);
     outline: none;
 }
-#addRecordForm .entry-row input[type="number"] {
+#dailyAddForm .entry-row input[type="number"] {
     text-align: right;
     font-family: 'IBM Plex Mono', monospace;
 }
 
-#addRecordForm .add-btn-row { padding-top: 7px; }
-#addRecordForm .add-btn-row .btn-sm {
+#dailyAddForm .add-btn-row { padding-top: 7px; }
+#dailyAddForm .add-btn-row .btn-sm {
     background: none;
     border: 1px dashed var(--line);
     color: var(--ink-soft);
 }
-#addRecordForm .add-btn-row .btn-sm:hover {
+#dailyAddForm .add-btn-row .btn-sm:hover {
     border-color: var(--blueprint);
     color: var(--blueprint);
     border-style: solid;
@@ -825,12 +825,12 @@
 @media (max-width: 820px) {
     /* On a phone every row needs its own labels — there is no column to
        read across, so hiding them would leave unlabelled boxes. */
-    #addRecordForm .entry-row:not(:first-child) .field label {
+    #dailyAddForm .entry-row:not(:first-child) .field label {
         visibility: visible;
         height: auto;
         margin-bottom: 3px;
     }
-    #addRecordForm .entry-row {
+    #dailyAddForm .entry-row {
         border: 1px solid var(--line);
         border-radius: 8px;
         padding: 8px;
