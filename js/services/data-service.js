@@ -724,6 +724,17 @@ const DataService = {
         return await gasCall('getPayables');
     },
 
+    // ── v12: DUPLICATION + LOGO ──
+    async duplicatePreview(sourceId) {
+        return await gasCall('duplicatePreview', sourceId);
+    },
+    async duplicateProject(sourceId, opts) {
+        return await gasCall('duplicateProject', sourceId, opts || {});
+    },
+    async saveCompanyLogo(base64, filename, mimeType) {
+        return await gasCall('saveCompanyLogo', base64, filename, mimeType);
+    },
+
     // ── v11 BATCH H5: SOW TITLE MAINTENANCE ──
     // For SOW items created before titles could be declared. The audit
     // is read-only; the cleanup removes only EMPTY estimate groups.

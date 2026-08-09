@@ -105,6 +105,10 @@ const App = {
             }
         }
 
+        // v12: one shell for the whole app. Rendered on every navigation
+        // so the highlighted group can never drift from where you are.
+        if (typeof Nav !== 'undefined') Nav.render(page);
+
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
         const target = document.getElementById('page-' + page);
         if (target) {

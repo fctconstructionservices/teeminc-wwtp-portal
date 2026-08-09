@@ -53,7 +53,7 @@
     top: 0;
     background: var(--bg);
     color: var(--ink-soft);
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 8.5px;
     letter-spacing: .12em;
     text-transform: uppercase;
@@ -83,7 +83,7 @@
     padding: 0 1px;
 }
 .ss-opt-meta {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 10.5px;
     color: var(--ink-soft);
     white-space: nowrap;

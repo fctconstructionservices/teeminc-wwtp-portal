@@ -38,7 +38,7 @@
     margin: 0 0 2px;
 }
 .log-body time {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 10.5px;
     color: var(--ink-soft);
 }

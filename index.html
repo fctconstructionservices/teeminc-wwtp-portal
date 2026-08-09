@@ -5,7 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>FCTC ERP System v3</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    <!-- v12: Barlow Condensed display, Public Sans body, Roboto Mono numbers.
+         Oswald, Inter and IBM Plex Mono stay loaded as fallbacks so anything
+         still naming them directly keeps rendering while the sweep finishes. -->
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;600&family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js">
     </script>
     <!-- v8: SheetJS for Excel exports (Estimates summary, Billings/SWA) -->
@@ -16,6 +19,17 @@
     <link rel="stylesheet" href="css/bundle.css" />
 </head>
 <body>
+
+    <!-- ════════════════════════════════════════════════════
+         v12 CONTROL ROOM — the app shell.
+         One grouped navigation bar for the whole system, rendered
+         by js/core/nav.js on every navigation. Replaces the
+         per-page topbars, which repeated the same brand block
+         twenty-odd times and left you with no idea what else the
+         system contained until you went back to the home tiles.
+         ════════════════════════════════════════════════════ -->
+    <header id="appNav" hidden></header>
+
 
     <!-- ════════════════════════════════════════════ -->
     <!--  CONFIRM DIALOG                             -->
@@ -145,10 +159,12 @@
                 </div>
             </div>
 
-            <div class="section-head"><h2>Start a Transaction</h2><div class="rule"></div></div>
-            <div class="tickets">
-                <!-- tickets will be rendered dynamically -->
-            </div>
+            <!-- v12: "Start a Transaction" removed. It was a second,
+                 partial copy of the navigation — eleven buttons that did
+                 nothing the top bar does not now do, and only some of what
+                 it does. Two routes to the same page is two things to keep
+                 in step, and these were already behind: no Purchase Orders,
+                 no Suppliers, no Timeline. -->
 
             <div class="section-head" id="projectsSectionHead">
                 <h2>Projects</h2>
@@ -864,6 +880,7 @@
     <script src="js/core/modals.js"></script>
     <script src="js/core/print-doc.js"></script>
     <script src="js/core/typeahead.js"></script>
+    <script src="js/core/nav.js"></script>
     <script src="js/services/data-service.js"></script>
     <script src="js/pages/home.js"></script>
     <script src="js/pages/project/project-core.js"></script>

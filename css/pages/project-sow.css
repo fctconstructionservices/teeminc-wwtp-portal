@@ -38,7 +38,7 @@
     align-items: center;
 }
 .sow-item .sow-numbers .sn {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 12.5px;
 }
 .sow-item .sow-bar {
@@ -71,7 +71,7 @@
     font-weight: 600;
 }
 .sow-total-row span {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
 }
 
 /* ═══════════════════════════════════════════════ */
@@ -145,7 +145,7 @@
     gap: 8px;
     padding: 4px 14px;
     border-radius: 99px;
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
     font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
@@ -174,7 +174,7 @@
     border: 1.5px solid var(--green);
 }
 .sow-status-badge .sow-status-date {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 9px;
     font-weight: 400;
     opacity: 0.7;
@@ -201,10 +201,10 @@
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--ink-soft);
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
 }
 .sow-number-group .sn-value {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 14px;
     font-weight: 600;
 }
@@ -290,7 +290,7 @@
     padding: 1px 8px;
     font-size: 8px;
     border-radius: 99px;
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;

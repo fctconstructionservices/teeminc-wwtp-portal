@@ -19,7 +19,7 @@
     background: var(--blueprint-tint);
 }
 .panel-head h3 {
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
     font-size: 12.5px;
     text-transform: uppercase;
     letter-spacing: .07em;
@@ -70,12 +70,12 @@ tbody tr:hover td {
     background: var(--bg);
 }
 .req-id {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     color: var(--blueprint);
     font-size: 12px;
 }
 .amt {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     text-align: right;
     white-space: nowrap;
 }
@@ -114,7 +114,7 @@ tbody tr:hover td {
 .editors-lbl { font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-soft); }
 .editors-open { font-size: 11.5px; color: var(--ink-soft); font-style: italic; }
 .editor-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--blueprint-tint); border: 1px solid var(--line); border-radius: 20px; padding: 3px 10px 3px 4px; font-size: 11.5px; }
-.editor-avatar { width: 22px; height: 22px; border-radius: 50%; background: var(--blueprint); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-family: 'Oswald'; font-size: 10px; flex-shrink: 0; }
+.editor-avatar { width: 22px; height: 22px; border-radius: 50%; background: var(--blueprint); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 10px; flex-shrink: 0; }
 .home-editor-avatars { display: flex; align-items: center; }
 .home-editor-avatars .editor-avatar { border: 2px solid var(--surface); margin-right: -7px; width: 20px; height: 20px; font-size: 9px; }
 .home-editor-avatars .more { font-size: 9.5px; color: var(--ink-soft); margin-left: 12px; }
@@ -150,7 +150,7 @@ tbody tr:hover td {
 
 /* index chips (SPI / CPI) — colour carries the verdict at a glance */
 .idx-chip {
-    font-family: 'IBM Plex Mono', monospace; font-size: 11px;
+    font-family: var(--font-num); font-size: 11px;
     padding: 1px 7px; border-radius: 4px;
     background: var(--bg); color: var(--ink-soft);
 }
@@ -168,7 +168,7 @@ tbody tr:hover td {
 }
 .empty .empty-ico { font-size: 30px; opacity: .4; margin-bottom: 8px; }
 .empty h4 {
-    font-family: 'Oswald', sans-serif; font-size: 13px;
+    font-family: var(--font-display); font-size: 13px;
     text-transform: uppercase; letter-spacing: .04em;
     margin: 0 0 5px; color: var(--ink);
 }
@@ -206,7 +206,7 @@ textarea:focus-visible {
 }
 .gal-group-head {
     display: flex; align-items: center; gap: 8px;
-    font-family: 'Oswald', sans-serif; font-size: 11px;
+    font-family: var(--font-display); font-size: 11px;
     text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft);
     margin: 18px 0 8px;
 }
@@ -228,13 +228,13 @@ textarea:focus-visible {
     position: absolute; top: 6px; left: 6px;
     background: rgba(255, 255, 255, .92); color: var(--ink);
     border-radius: 4px; padding: 1px 6px;
-    font-family: 'IBM Plex Mono', monospace; font-size: 9px;
+    font-family: var(--font-num); font-size: 9px;
 }
 .gal-item .gal-meta {
     position: absolute; left: 0; right: 0; bottom: 0;
     background: linear-gradient(transparent, rgba(28, 35, 33, .85));
     color: #fff; padding: 16px 8px 6px;
-    font-family: 'IBM Plex Mono', monospace; font-size: 9.5px;
+    font-family: var(--font-num); font-size: 9.5px;
 }
 
 .gal-timeline { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; }
@@ -247,11 +247,11 @@ textarea:focus-visible {
 .gal-tl-pct {
     position: absolute; right: 4px; bottom: 4px;
     background: rgba(28, 35, 33, .82); color: #fff;
-    font-family: 'IBM Plex Mono', monospace; font-size: 9.5px;
+    font-family: var(--font-num); font-size: 9.5px;
     padding: 1px 5px; border-radius: 3px;
 }
 .gal-tl-cap {
-    font-family: 'IBM Plex Mono', monospace; font-size: 10px;
+    font-family: var(--font-num); font-size: 10px;
     color: var(--ink-soft); text-align: center; margin-top: 4px;
 }
 

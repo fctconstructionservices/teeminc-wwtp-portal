@@ -32,14 +32,14 @@
     color: var(--ink-soft);
 }
 .kpi-card .k-val {
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
     font-size: 19px;
     font-weight: 600;
     margin-top: 5px;
     line-height: 1.1;
 }
 .kpi-card .k-sub {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 10px;
     color: var(--ink-soft);
     margin-top: 4px;
@@ -104,7 +104,7 @@
     border-radius: 4px;
     box-shadow: var(--shadow);
     padding: 22px 24px;
-    font-family: 'Inter', sans-serif;
+    font-family: var(--font-body);
     font-size: 12px;
     position: relative;
     overflow: hidden;

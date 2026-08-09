@@ -5,32 +5,60 @@
    ================================================================ */
 
 /* ─────────── ROOT & BASE ─────────── */
+/* ── v12 CONTROL ROOM ──
+   The palette moves from warm paper to steel and graphite. The reason
+   is legibility, not fashion: this system is mostly dense tables of
+   figures, and the old cream background lowered contrast against every
+   one of them. Steel chrome, near-white canvas, and ONE accent.
+
+   Amber replaces orange as that accent. Orange at 11px on a data row
+   reads as an error even when it is a heading; amber carries the same
+   weight without the alarm, and leaves red free to mean only one thing.
+
+   --safety is kept, pointing at the amber, so nothing that already
+   references it breaks. */
 :root {
-    --bg: #EDECE4;
+    --bg: #F6F7F8;
     --surface: #FFFFFF;
-    --ink: #1C2321;
-    --ink-soft: #5B6360;
-    --blueprint: #24455A;
-    --blueprint-tint: #E8EFF1;
-    --safety: #E15412;
-    --safety-ink: #8C3007;
-    --amber: #C2860F;
-    --green: #2F7A46;
-    --red: #B23A2E;
-    --line: #D6D2C4;
-    --radius: 10px;
-    --shadow: 0 8px 18px rgba(28, 35, 33, .10);
-    --transition: 0.25s ease;
+    --ink: #15181A;
+    --ink-soft: #697077;
+    --steel: #2C3A45;
+    --steel-2: #22303A;
+    --blueprint: #3E6E8E;
+    --blueprint-tint: #EDF2F5;
+    --amber: #D98A00;
+    --safety: #D98A00;
+    --safety-ink: #8A5B00;
+    --green: #0E7C4A;
+    --red: #C0362C;
+    --line: #E1E4E6;
+    --radius: 7px;
+    --shadow: 0 6px 16px rgba(21, 24, 26, .10);
+    --transition: 0.18s ease;
+
+    /* Type roles. Numbers are their own role because a peso column only
+       lines up with tabular figures — Roboto Mono, per your pick. */
+    --font-display: 'Barlow Condensed', 'Oswald', sans-serif;
+    --font-body: 'Public Sans', 'Inter', system-ui, sans-serif;
+    --font-num: 'Roboto Mono', 'IBM Plex Mono', monospace;
+
+    --bar-h: 46px;
+    --sub-h: 38px;
 }
 [data-theme="dark"] {
-    --bg: #121212;
-    --surface: #1E1E1E;
-    --ink: #E8E8E8;
-    --ink-soft: #A0A0A0;
-    --blueprint: #5A8AA8;
-    --blueprint-tint: #2A3A45;
-    --line: #3A3A3A;
-    --shadow: 0 8px 18px rgba(0, 0, 0, 0.6);
-    --safety: #F06A2A;
-    --safety-ink: #B24A1A;
+    --bg: #14181A;
+    --surface: #1C2225;
+    --ink: #E6EAEC;
+    --ink-soft: #98A3A9;
+    --steel: #101619;
+    --steel-2: #0B1013;
+    --blueprint: #6FA0BE;
+    --blueprint-tint: #22323C;
+    --line: #2E373C;
+    --shadow: 0 8px 18px rgba(0, 0, 0, 0.55);
+    --amber: #E8A32B;
+    --safety: #E8A32B;
+    --safety-ink: #C48420;
+    --green: #3FA06B;
+    --red: #E06A5E;
 }

@@ -11,14 +11,14 @@ body {
     margin: 0;
     background: var(--bg);
     color: var(--ink);
-    font-family: 'Inter', sans-serif;
+    font-family: var(--font-body);
     font-size: 14px;
     line-height: 1.45;
     min-height: 100vh;
     transition: background var(--transition), color var(--transition);
 }
 .mono {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
 }
 button,
 input,

@@ -135,6 +135,11 @@ const API_ACTIONS = {
   getFinanceData: getFinanceData,
   search: search,
   searchCoverage: searchCoverage,   // v11 BATCH I4
+
+  // ── v12: DUPLICATION + LOGO ──
+  duplicateProject: duplicateProject,
+  duplicatePreview: duplicatePreview,
+  saveCompanyLogo: saveCompanyLogo,
   saveEstimates: saveEstimates,
   submitEstimatesForApproval: submitEstimatesForApproval,
   approveEstimates: approveEstimates,

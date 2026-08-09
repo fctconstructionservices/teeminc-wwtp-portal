@@ -44,7 +44,7 @@
     color: var(--green);
 }
 .ticket .t-label {
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
     font-size: 14px;
     text-transform: uppercase;
     letter-spacing: .04em;
@@ -63,7 +63,7 @@
     padding: 1px 8px;
     border-radius: 99px;
     margin-top: 6px;
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
     letter-spacing: .04em;
 }
 @media (max-width: 900px) {
@@ -104,7 +104,7 @@
     justify-content: space-between;
 }
 .project-card .pc-name {
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
     font-size: 13.5px;
     text-transform: uppercase;
     letter-spacing: .03em;
@@ -122,7 +122,7 @@
     color: var(--ink-soft);
 }
 .project-card .pc-stat .v {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 13px;
     margin-top: 2px;
 }
@@ -151,7 +151,7 @@
     flex-shrink: 0;
 }
 .gauge .g-num {
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
     font-size: 24px;
     font-weight: 600;
     line-height: 1;

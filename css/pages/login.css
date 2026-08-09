@@ -34,7 +34,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
     font-weight: 700;
     font-size: 20px;
     color: var(--blueprint);
@@ -50,7 +50,7 @@
     border-radius: 4px;
 }
 .login-card h1 {
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
     font-size: 17px;
     text-transform: uppercase;
     letter-spacing: .03em;
@@ -71,7 +71,7 @@
     letter-spacing: .08em;
     color: var(--ink-soft);
     margin-bottom: 6px;
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
     font-weight: 500;
 }
 .field input,
@@ -115,7 +115,7 @@
     background: var(--safety);
     color: #fff;
     cursor: pointer;
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
     font-size: 13px;
     text-transform: uppercase;
     letter-spacing: .06em;

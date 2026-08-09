@@ -17,6 +17,7 @@
 
 /* ─── layout ─── */
 @import url('layout/shell.css');
+@import url('layout/nav.css');   /* v12 CONTROL ROOM shell */
 @import url('layout/two-column.css');
 
 /* ─── shared components ─── */

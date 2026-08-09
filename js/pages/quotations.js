@@ -134,6 +134,88 @@ const QuotationsPage = {
      * when each one is its own box — and comparing bids is most of what
      * this page is for.
      */
+    /**
+     * duplicate (v12) - Copy a quotation into a new one.
+     *
+     * Most quotations are a variation on one already priced: the same
+     * liner, one cell instead of two. Re-typing forty SOW items to
+     * change three is how quoting becomes the bottleneck — and how a
+     * transcription error gets into a price you are held to.
+     *
+     * The confirm states REAL COUNTS from the server, not a vague
+     * promise about "the scope and estimates", and says plainly what is
+     * left behind. A copy inherits what you PLANNED and none of what
+     * HAPPENED.
+     */
+    async duplicate(projectId, title) {
+        try {
+            const pv = await DataService.duplicatePreview(projectId);
+            const e = this._esc.bind(this);
+            document.getElementById('dupModal')?.remove();
+            const m = document.createElement('div');
+            m.className = 'print-modal-overlay open';
+            m.id = 'dupModal';
+            m.innerHTML = `
+                <div class="print-modal-content" style="max-width:520px;">
+                    <button class="close-modal" onclick="document.getElementById('dupModal').remove()">${Icon.close({size:18})}</button>
+                    <div class="print-header"><h2>Copy this quotation</h2>
+                        <div class="print-meta">From ${e(pv.sourceName)}</div></div>
+
+                    <div class="field"><label>Name for the copy *</label>
+                        <input type="text" id="dup-name" value="${e(title)} (copy)" /></div>
+                    <div class="db-form-grid">
+                        <div class="field"><label>Client</label>
+                            <input type="text" id="dup-client" placeholder="Leave blank to keep the same" /></div>
+                        <div class="field"><label>Start date</label>
+                            <input type="date" id="dup-start" value="${new Date().toISOString().slice(0,10)}" /></div>
+                    </div>
+
+                    <div class="pr-budget-box" style="margin-top:12px;">
+                        <b>What comes across</b>
+                        <p>${pv.sowItems} SOW item${pv.sowItems === 1 ? '' : 's'}${pv.titles ? ` (${pv.titles} title${pv.titles === 1 ? '' : 's'})` : ''},
+                        ${pv.estimateGroups} estimate${pv.estimateGroups === 1 ? '' : 's'} with ${pv.estimateLines}
+                        priced line${pv.estimateLines === 1 ? '' : 's'} worth ${this._peso(pv.estimateValue)},
+                        and the schedule shifted to your new start date.</p>
+                    </div>
+                    <div class="pr-budget-box near" style="margin-top:8px;">
+                        <b>What does not</b>
+                        <p>No billings, cash, daily records, purchases or approvals — a copy inherits
+                        what you planned, not what happened.
+                        ${pv.approvedGroups ? `The ${pv.approvedGroups} approved estimate${pv.approvedGroups === 1 ? '' : 's'}
+                        come${pv.approvedGroups === 1 ? 's' : ''} across as <b>draft</b>, so the prices get reviewed
+                        before you quote from them.` : ''}</p>
+                    </div>
+
+                    <div class="print-actions">
+                        <button class="btn-primary" onclick="QuotationsPage.doDuplicate('${e(projectId)}')">Create the copy</button>
+                        <button class="btn-ghost" onclick="document.getElementById('dupModal').remove()">Cancel</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(m);
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
+
+    async doDuplicate(projectId) {
+        const v = x => (document.getElementById(x)?.value || '').trim();
+        if (!v('dup-name')) { UI.toast('Give the copy a name.', 'error'); return; }
+        const btn = document.querySelector('#dupModal .btn-primary');
+        if (btn) { btn.textContent = 'Copying...'; btn.disabled = true; }
+        try {
+            const res = await DataService.duplicateProject(projectId, {
+                name: v('dup-name'), clientName: v('dup-client') || undefined,
+                startDate: v('dup-start'), asQuotation: true
+            });
+            document.getElementById('dupModal')?.remove();
+            UI.toast(`${res.id} created — ${res.sowItems} SOW items and ${res.estimateLines} priced lines copied as draft.`, 'success');
+            await this.load();
+        } catch (err) {
+            UI.toast('' + err.message, 'error');
+            if (btn) { btn.textContent = 'Create the copy'; btn.disabled = false; }
+        }
+    },
+
+    _peso(v) { return '₱' + fmtMoney(parseFloat(v) || 0); },
+
     _table(list) {
         const e = this._esc.bind(this);
         const pipeline = list.reduce((s, q) => s + (parseFloat(q.quotedValue) || 0), 0);
@@ -187,6 +269,8 @@ const QuotationsPage = {
             <td><span class="qt-status ${cls}">${e(q.status)}</span>
                 ${decided && q.decisionNote ? `<div class="muted">${e(q.decisionNote)}</div>` : ''}</td>
             <td class="qt-row-actions">${actions}
+                <button class="btn-sm" title="Copy this quotation"
+                    onclick="QuotationsPage.duplicate('${e(q.projectId)}','${e(q.title)}')">${Icon.copy ? Icon.copy({size:12}) : '⧉'}</button>
                 ${(App.getUser() || {}).role === 'superadmin' && q.status === 'Lost'
                     ? `<button class="btn-sm danger" onclick="QuotationsPage.remove('${e(q.id)}')">${Icon.trash({size:12})}</button>` : ''}</td>
         </tr>`;

@@ -14,7 +14,7 @@
     margin-bottom: 16px;
 }
 .kb-tabs button {
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
     font-size: 11.5px;
     text-transform: uppercase;
     letter-spacing: .06em;
@@ -96,7 +96,7 @@
     gap: 10px;
 }
 .kb-lesson h3 {
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
     font-size: 14px;
     font-weight: 500;
     margin: 4px 0 3px;
@@ -113,7 +113,7 @@
 }
 .kb-cat {
     display: inline-block;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 8.5px;
     text-transform: uppercase;
     letter-spacing: .08em;
@@ -146,7 +146,7 @@
     color: var(--ink-soft);
     margin-bottom: 2px;
 }
-.kb-metric b { font-family: 'IBM Plex Mono', monospace; font-size: 12px; }
+.kb-metric b { font-family: var(--font-num); font-size: 12px; }
 .kb-metric.good b { color: var(--green); }
 .kb-metric.bad b { color: var(--red); }
 
@@ -154,7 +154,7 @@
 .kb-findings { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.6; }
 .kb-findings li { margin-bottom: 4px; }
 .kb-findings b {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: .05em;
@@ -170,7 +170,7 @@
 }
 .kb-sug-head { display: flex; align-items: center; gap: 7px; margin-bottom: 3px; }
 .kb-sug-head b {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: .05em;
@@ -182,12 +182,12 @@
 .kb-suggestions cite {
     display: block;
     font-style: normal;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 10px;
     color: var(--ink-soft);
 }
 .kb-prio {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 8.5px;
     text-transform: uppercase;
     letter-spacing: .07em;

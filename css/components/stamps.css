@@ -6,7 +6,7 @@
 /* ─── STAMPS ─── */
 .stamp {
     display: inline-block;
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
     font-size: 10px;
     font-weight: 600;
     letter-spacing: .08em;

@@ -47,7 +47,7 @@
     }
 }
 .confirm-box h3 {
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
     font-size: 16px;
     text-transform: uppercase;
     letter-spacing: .04em;

@@ -96,29 +96,17 @@ const HomePage = {
             UI.setContent(gaugesContainer, gaugeHtml);
 
             // ─── Tickets ──────────────────────────────────────────
-            const tickets = [
-                { id: 'request', label: 'Request Cash Advance', sub: 'New requisition', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
-                { id: 'record-cash', label: 'Record Incoming Cash', sub: 'Capital / injections', roles: ['superadmin', 'admin', 'approver'] },
-                { id: 'release-cash', label: 'Release Cash', sub: 'Super Admin only', roles: ['superadmin'] },
-                { id: 'liquidate', label: 'Liquidate Cash Advance', sub: 'Receipts & balance', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
-                { id: 'search', label: 'Search Records', sub: 'All transactions', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
-                // v11 BATCH F1: three tiles became one. Materials, Equipment
-                // and Manpower are reference data that outlives every
-                // project, not things you come to the home screen to DO —
-                // they sat beside Request Cash Advance for no good reason.
-                // v11 BATCH F2: work that is still being priced. Approvers and
-                // above only — a request-only user has no business seeing the
-                // company's margin on open bids.
-                // v11 BATCH G1: every purchase starts here now.
-                { id: 'purchase-requests', label: 'Purchase Requests', sub: 'Buy against a scope item', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
-                // v11 BATCH G2: supplier credit was invisible until it landed.
-                { id: 'payables', label: 'Payables', sub: 'Who you owe · Due dates', roles: ['superadmin', 'admin', 'approver'] },
-                { id: 'quotations', label: 'Quotations', sub: 'Bids · Revisions · Award', roles: ['superadmin', 'admin', 'approver'] },
-                { id: 'knowledge', label: 'Knowledge Base', sub: 'Materials · Equipment · Manpower · Lessons', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
-                { id: 'approvals', label: 'Approvals', sub: 'My requests & pending', roles: ['superadmin', 'admin', 'approver', 'request-only'] },
-                // v11 BATCH E: the letterhead every printed document carries
-                { id: 'print-template', label: 'Print Template', sub: 'Company letterhead · Super Admin', roles: ['superadmin'] }
-            ];
+            // ── v12: THE TILES ARE GONE ──
+            // "Start a transaction" was a second, partial copy of the
+            // navigation: eleven buttons that did nothing the top bar
+            // does not now do, and only some of what it does. Two routes
+            // to the same page is two things to keep in step, and these
+            // were already behind — no Purchase Orders, no Suppliers, no
+            // Timeline.
+            //
+            // The dashboard is a DASHBOARD now: what needs you, and what
+            // the money is doing. Going somewhere is the bar's job.
+            const tickets = [];
 
             const userRole = user ? user.role : 'request-only';
             const visibleTickets = tickets.filter(t => t.roles.includes(userRole));
@@ -152,47 +140,13 @@ const HomePage = {
                                 pendingMaterials.length + pendingEquipment.length + 
                                 pendingEstimates.length + pendingDailyRecords.length;
             
-            let ticketHtml = `<div class="tickets">`;
-            visibleTickets.forEach(t => {
-                const isApproval = t.id === 'approvals';
-                const safetyClass = t.id === 'request' ? 'safety' : '';
-                const approvalClass = isApproval ? 'approval-ticket' : '';
-                const badgeHtml = isApproval ? `<span class="t-badge" id="approvalBadgeHome">${pendingCount}</span>` : '';
-                const borderStyle = t.id === 'payables' ? 'border-color:var(--red);' :
-                                    t.id === 'purchase-requests' ? 'border-color:var(--safety);' :
-                                    t.id === 'quotations' ? 'border-color:var(--amber);' :
-                                    t.id === 'knowledge' ? 'border-color:var(--blueprint);' :
-                                    isApproval ? 'border-color:var(--green);' : '';
-                const iconBg = t.id === 'payables' ? 'background:var(--red);color:#fff;' :
-                               t.id === 'purchase-requests' ? 'background:var(--safety);color:#fff;' :
-                               t.id === 'quotations' ? 'background:var(--amber);color:#fff;' :
-                               t.id === 'knowledge' ? 'background:var(--blueprint);color:#fff;' :
-                               isApproval ? 'background:#E1F0E8;color:var(--green);' : '';
-                const iconEl = t.id === 'request' ? Icon.wallet({ size: 18 }) :
-                                t.id === 'record-cash' ? Icon.incoming({ size: 18 }) :
-                                t.id === 'release-cash' ? Icon.outgoing({ size: 18 }) :
-                                t.id === 'liquidate' ? Icon.receipt({ size: 18 }) :
-                                t.id === 'search' ? Icon.search({ size: 18 }) :
-                                t.id === 'payables' ? Icon.receipt({ size: 18 }) :
-                                t.id === 'purchase-requests' ? Icon.package({ size: 18 }) :
-                                t.id === 'quotations' ? Icon.fileText({ size: 18 }) :
-                                t.id === 'knowledge' ? Icon.folder({ size: 18 }) :
-                                t.id === 'approvals' ? Icon.checkCircle({ size: 18, color: 'currentColor' }) :
-                                t.id === 'print-template' ? Icon.printer({ size: 18 }) : '';
-                ticketHtml += `
-                    <button class="ticket ${safetyClass} ${approvalClass}" onclick="App.navigate('${t.id}')" style="${borderStyle}">
-                        <div class="ico" style="${iconBg}">${iconEl}</div>
-                        <div class="t-label">${t.label}</div>
-                        <div class="t-sub">${t.sub}</div>
-                        ${badgeHtml}
-                    </button>`;
-            });
-            ticketHtml += `</div>`;
+            let ticketHtml = '';
 
+            // Remove the tile strip and its heading outright.
             const ticketsContainer = document.querySelector('.tickets');
             if (ticketsContainer) {
-                ticketsContainer.outerHTML = ticketHtml;
-            } else {
+                ticketsContainer.remove();
+            } else if (false) {
                 const sectionHeadEl = document.querySelector('.section-head');
                 if (sectionHeadEl && sectionHeadEl.nextElementSibling && sectionHeadEl.nextElementSibling.classList.contains('tickets')) {
                     sectionHeadEl.nextElementSibling.outerHTML = ticketHtml;

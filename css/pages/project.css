@@ -17,7 +17,7 @@
     background: none;
     border: none;
     padding: 10px 18px;
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: .06em;
@@ -51,7 +51,7 @@
     margin-bottom: 14px;
 }
 .daily-form-section .section-label {
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: .08em;
@@ -96,7 +96,7 @@
     text-transform: uppercase;
     letter-spacing: .06em;
     color: var(--ink-soft);
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
 }
 .daily-form-section .entry-row .field input,
 .daily-form-section .entry-row .field select,
@@ -133,7 +133,7 @@
     color: var(--blueprint);
     margin-top: 8px;
     text-align: right;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
 }
 @media (max-width: 700px) {
     .daily-form-section .sub-fields {
@@ -178,7 +178,7 @@
     top: 0;
     z-index: 1;
     background: var(--blueprint-tint);
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 9px;
     letter-spacing: .09em;
     text-transform: uppercase;
@@ -207,7 +207,7 @@
 
 .dr-date { white-space: nowrap; }
 .dr-date .wd {
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: .07em;
@@ -215,7 +215,7 @@
     margin-right: 6px;
 }
 .dr-date .dt {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 11.5px;
     font-weight: 500;
 }
@@ -243,7 +243,7 @@
     display: inline-flex;
     align-items: center;
     gap: 3px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 11px;
     color: var(--ink);
     white-space: nowrap;
@@ -428,7 +428,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: .07em;
@@ -508,19 +508,19 @@
 }
 .sow-twist:hover, .gt-twist:hover { color: var(--blueprint); }
 .sh-id {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 11.5px;
     font-weight: 700;
     color: var(--blueprint);
 }
 .sh-desc {
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
     font-size: 13.5px;
     font-weight: 500;
     letter-spacing: .02em;
 }
 .sh-count {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 9px;
     text-transform: uppercase;
     letter-spacing: .07em;
@@ -538,14 +538,14 @@
     letter-spacing: .07em;
     color: var(--ink-soft);
 }
-.sh-nums b { font-family: 'IBM Plex Mono', monospace; font-size: 12px; }
+.sh-nums b { font-family: var(--font-num); font-size: 12px; }
 .sh-nums .pos b { color: var(--green); }
 .sh-nums .neg b { color: var(--red); }
 /* The roll-up caption exists so nobody has to wonder where the figure
    came from — an unexplained total gets argued with. */
 .sh-rollup {
     flex-basis: 100%;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 9px;
     text-transform: uppercase;
     letter-spacing: .06em;
@@ -607,7 +607,7 @@
     border: none;
     background: none;
     color: var(--ink);
-    font-family: 'Inter', sans-serif;
+    font-family: var(--font-body);
     font-size: 13px;
     padding: 0;
 }
@@ -628,7 +628,7 @@
     border-radius: 50%;
     background: var(--blueprint);
     color: #fff;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 9px;
     margin-right: 7px;
     flex-shrink: 0;
@@ -681,7 +681,7 @@
 }
 .sow-kind b {
     display: block;
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
     font-size: 12px;
     text-transform: uppercase;
     letter-spacing: .05em;
@@ -755,7 +755,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
     font-size: 10.5px;
     text-transform: uppercase;
     letter-spacing: .1em;
@@ -779,7 +779,7 @@
 }
 #dailyAddForm .entry-row:last-child { border-bottom: none; }
 #dailyAddForm .entry-row .field label {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 8px;
     letter-spacing: .09em;
     text-transform: uppercase;
@@ -807,7 +807,7 @@
 }
 #dailyAddForm .entry-row input[type="number"] {
     text-align: right;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
 }
 
 #dailyAddForm .add-btn-row { padding-top: 7px; }

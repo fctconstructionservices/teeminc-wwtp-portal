@@ -47,13 +47,13 @@
 }
 .qt-id { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
 .qt-num {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 11px;
     font-weight: 600;
     color: var(--blueprint);
 }
 .qt-rev {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 9px;
     text-transform: uppercase;
     letter-spacing: .07em;
@@ -63,7 +63,7 @@
     padding: 1px 7px;
 }
 .qt-revcount {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 9px;
     color: var(--ink-soft);
     text-decoration: underline dotted;
@@ -72,7 +72,7 @@
 .qt-revcount:hover { color: var(--blueprint); }
 
 .qt-status {
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
     font-size: 9.5px;
     text-transform: uppercase;
     letter-spacing: .08em;
@@ -89,7 +89,7 @@
 .qt-status.lost { background: var(--red); color: #fff; border-color: var(--red); }
 
 .qt-card h3 {
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
     font-size: 14.5px;
     font-weight: 500;
     margin: 0 0 3px;
@@ -129,13 +129,13 @@
     margin-bottom: 2px;
 }
 .qt-metric b {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 11.5px;
     display: block;
 }
 .qt-metric em {
     font-style: normal;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 9px;
     color: var(--ink-soft);
 }
@@ -150,7 +150,7 @@
     border: 1px solid var(--line);
     border-radius: 6px;
     padding: 5px 6px;
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
     font-size: 9.5px;
     text-transform: uppercase;
     letter-spacing: .05em;
@@ -224,7 +224,7 @@
 
 .qt-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .qt-table th {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 9px;
     letter-spacing: .09em;
     text-transform: uppercase;
@@ -238,7 +238,7 @@
 .qt-table th.amt, .qt-table td.amt { text-align: right; }
 .qt-table td { padding: 8px 9px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .qt-table td.amt, .qt-table td.mono {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
 }
@@ -264,7 +264,7 @@
     border: 1px solid var(--line);
     border-radius: 5px;
     padding: 2px 7px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 9px;
     text-transform: uppercase;
     letter-spacing: .05em;

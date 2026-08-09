@@ -7,7 +7,7 @@
 .att-block { margin-top: 13px; }
 
 .att-label {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 9px;
     letter-spacing: .12em;
     text-transform: uppercase;
@@ -97,7 +97,7 @@
     color: var(--ink-soft);
 }
 .att-doc .att-ext b {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 10px;
     letter-spacing: .06em;
     color: var(--blueprint);
@@ -137,7 +137,7 @@
 }
 .att-lb-cap {
     color: #fff;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 12px;
     text-align: center;
 }
@@ -177,7 +177,7 @@
 @media print {
     .att-block { page-break-inside: auto; margin-top: 16px; }
     .att-label {
-        font-family: 'Oswald', sans-serif;
+        font-family: var(--font-display);
         font-size: 11px;
         text-transform: uppercase;
         letter-spacing: .08em;

@@ -144,7 +144,7 @@
     flex-shrink: 0;
 }
 .gt-task .id {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 10.5px;
     font-weight: 600;
     color: var(--blueprint);
@@ -158,7 +158,7 @@
     font-weight: 500;
 }
 .gt-task .ms-tag {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 8.5px;
     text-transform: uppercase;
     letter-spacing: .08em;
@@ -174,7 +174,7 @@
     border-radius: 5px;
     background: var(--surface);
     color: var(--ink);
-    font: 11px 'IBM Plex Mono', monospace;
+    font: 11px var(--font-num);
 }
 .gt-in:focus { outline: 2px solid var(--blueprint); outline-offset: -1px; }
 .gt-in[readonly] {
@@ -184,7 +184,7 @@
 }
 .gt-dur { text-align: center; }
 .gt-ro {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 11px;
     color: var(--ink-soft);
 }
@@ -192,7 +192,7 @@
     display: none;   /* shown only when the column is wide enough */
     align-items: center;
     gap: 3px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 8.5px;
     color: var(--green);
 }
@@ -231,7 +231,7 @@
     align-items: center;
     padding-left: 6px;
     border-left: 1px solid var(--line);
-    font-family: 'Oswald', sans-serif;
+    font-family: var(--font-display);
     font-size: 10.5px;
     font-weight: 500;
     letter-spacing: .05em;
@@ -252,7 +252,7 @@
     align-items: center;
     justify-content: center;
     border-left: 1px solid var(--line);
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 9px;
     color: var(--ink-soft);
     overflow: hidden;
@@ -296,7 +296,7 @@
     z-index: 2;
     padding: 0 7px;
     pointer-events: none;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 9.5px;
     font-weight: 600;
     color: #fff;
@@ -367,7 +367,7 @@
     position: absolute;
     top: 2px;
     left: 4px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 8px;
     font-weight: 700;
     letter-spacing: .08em;
@@ -437,7 +437,7 @@
     z-index: 9999;
     background: var(--ink);
     color: var(--bg);
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-num);
     font-size: 10.5px;
     padding: 4px 8px;
     border-radius: 5px;

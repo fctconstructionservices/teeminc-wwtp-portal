@@ -197,3 +197,25 @@ function resetPrintTemplate() {
   logActivity_('Print template reset to defaults by ' + currentUserName_(), 'a');
   return { success: true, template: getPrintTemplate() };
 }
+
+/**
+ * saveCompanyLogo (v12) - One logo, used everywhere.
+ *
+ * The mark in the navigation bar, the login screen and every printed
+ * document read the same setting. Uploading it in three places is how
+ * they end up different, and a letterhead that does not match the app
+ * is the kind of detail a client notices.
+ */
+function saveCompanyLogo(base64, filename, mimeType) {
+  requireSuperAdmin_('changing the company logo');
+  if (!base64) {
+    setSetting_('logoUrl', '');
+    logActivity_('Company logo removed by ' + currentUserName_(), 'a');
+    return { success: true, url: '' };
+  }
+  var up = uploadImage(base64, filename || 'fctc-logo', mimeType || 'image/png');
+  if (!up || !up.url) throw new Error('The logo could not be uploaded. Try a PNG or SVG under 2MB.');
+  setSetting_('logoUrl', up.url);
+  logActivity_('Company logo updated by ' + currentUserName_(), 'g');
+  return { success: true, url: up.url };
+}
