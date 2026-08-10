@@ -102,7 +102,8 @@ function addPersonnel(data) {
     contactNumber: String(data.contactNumber || '').trim(),
     dailyRate: parseFloat(data.dailyRate) || 0,
     notes: String(data.notes || '').trim(),
-    image: String(data.image || ''),   // v11 BATCH H3
+    image: String(data.image || ''),       // v11 BATCH H3
+    signature: String(data.signature || ''),   // v13
     status: 'active',
     addedBy: currentUserEmail_(),
     createdAt: new Date(),
@@ -133,6 +134,11 @@ function updatePersonnel(id, data) {
   // how photo fields quietly disappear after a routine rate change.
   if (data.image !== undefined && String(data.image).trim() !== '') {
     patch.image = String(data.image).trim();
+  }
+  // v13: same guard. Sending an empty signature on a routine rate change
+  // would wipe it from every report that already relies on it.
+  if (data.signature !== undefined && String(data.signature).trim() !== '') {
+    patch.signature = String(data.signature).trim();
   }
   if (data.status !== undefined) patch.status = String(data.status).toLowerCase() === 'inactive' ? 'inactive' : 'active';
   updateRow_('Personnel', 'id', id, patch);

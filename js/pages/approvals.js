@@ -394,12 +394,19 @@ const RequestDetailModal = {
                 </div>
 
                 ${T('Manpower', mp, [
+                    ['Name', 'name', 'left', (v, r) => e(v || r.role || '—')],
                     ['Role / trade', 'role', 'left', v => e(v || '—')],
                     ['AM', 'am', 'center', v => e(v || '—')],
                     ['PM', 'pm', 'center', v => e(v || '—')],
                     ['OT', 'ot', 'center', v => e(v || '—')],
                     ['Count', 'count', 'right', v => String(parseInt(v, 10) || 0)],
-                    ['Remarks', 'remarks', 'left', v => e(v || '')]
+                    // v13: the signature, last — where it sits on the paper
+                    // form. Blank rather than a dash when the person has
+                    // none on file: a dash in a signature column reads as
+                    // "refused to sign", which is not what it means.
+                    ['Signature', 'signature', 'center', v => v
+                        ? `<img class="mp-sig" src="${driveImgSrc(v)}" alt="" onerror="this.style.display='none'" />`
+                        : '']
                 ])}
 
                 ${T('Equipment', data.equipment || [], [

@@ -120,6 +120,26 @@ const ManpowerPage = {
                             <!-- v11 BATCH H3: a personnel record without a face is of
                                  limited use on site, where the point is recognising who
                                  is being referred to. -->
+                            <!-- v13: the signature. Uploaded as a photo of a
+                                 signature on paper, then stripped of its white
+                                 background in the browser so it can sit ON a
+                                 signature line instead of covering it. -->
+                            <div class="field full"><label>Signature</label>
+                                <div class="file-drop"><input type="file" accept="image/*" id="prs-sig"
+                                    onchange="ManpowerPage.previewSignature(event)" /></div>
+                                <p style="font-size:11px;color:var(--ink-soft);margin-top:4px;">
+                                    Sign on plain white paper and photograph it in even light. The white is
+                                    removed automatically. Leave blank when editing to keep the existing one.</p>
+                                <div class="sig-preview" id="prsSigPreview" style="display:none;">
+                                    <img id="prsSigPreviewImg" src="#" alt="Signature preview" />
+                                    <div class="sig-tune">
+                                        <label>Keep more / less of the strokes</label>
+                                        <input type="range" id="prs-sig-threshold" min="120" max="245" value="200"
+                                               oninput="ManpowerPage.retuneSignature()" />
+                                        <span id="prsSigNote"></span>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="field full"><label>Photo</label>
                                 <div class="file-drop"><input type="file" accept="image/*" id="prs-image"
                                     onchange="ManpowerPage.previewPersonImage(event)" /></div>
@@ -398,6 +418,17 @@ const ManpowerPage = {
         const pvImg = document.getElementById('prsImagePreviewImg');
         const fileEl = document.getElementById('prs-image');
         if (fileEl) fileEl.value = '';
+        // v13: drop any signature staged for a different person.
+        this._sigFile = null;
+        this._sigDataUrl = '';
+        const sigEl = document.getElementById('prs-sig');
+        if (sigEl) sigEl.value = '';
+        const sigBox = document.getElementById('prsSigPreview');
+        const sigImg = document.getElementById('prsSigPreviewImg');
+        if (sigBox && sigImg) {
+            if (p.signature) { sigImg.src = driveImgSrc(p.signature); sigBox.style.display = 'block'; }
+            else { sigBox.style.display = 'none'; }
+        }
         if (pv && pvImg) {
             if (p.image) { pvImg.src = driveImgSrc(p.image); pv.style.display = 'block'; }
             else { pv.style.display = 'none'; }
@@ -406,6 +437,46 @@ const ManpowerPage = {
         document.getElementById('prsSubmitBtn').textContent = 'Save Changes';
         el.style.display = 'block';
         el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    },
+
+    /**
+     * previewSignature (v13) - Processes the photo and shows the result
+     * BEFORE anything is uploaded.
+     *
+     * The preview sits on a chequered background precisely so the
+     * transparency is visible: on white it would look identical whether
+     * the background had been removed or not, which is the one thing
+     * this needs to show.
+     */
+    async previewSignature(ev) {
+        const f = ev.target.files && ev.target.files[0];
+        if (!f) return;
+        this._sigFile = f;
+        await this._runSignature();
+    },
+
+    /** retuneSignature - re-runs at a new threshold, same file. */
+    async retuneSignature() {
+        if (this._sigFile) await this._runSignature();
+    },
+
+    async _runSignature() {
+        const box = document.getElementById('prsSigPreview');
+        const img = document.getElementById('prsSigPreviewImg');
+        const note = document.getElementById('prsSigNote');
+        const th = parseInt(document.getElementById('prs-sig-threshold')?.value, 10) || undefined;
+        if (!box || !img) return;
+        try {
+            const res = await Signature.process(this._sigFile, th);
+            this._sigDataUrl = res.dataUrl;
+            img.src = res.dataUrl;
+            box.style.display = 'block';
+            if (note) note.textContent = `${res.width} × ${res.height}`;
+        } catch (err) {
+            this._sigDataUrl = '';
+            box.style.display = 'none';
+            UI.toast('' + err.message, 'error');
+        }
     },
 
     /** previewPersonImage (v11 BATCH H3) - local preview before upload. */
@@ -464,6 +535,11 @@ const ManpowerPage = {
                         ${V('Status', p.status === 'active' ? 'Active' : 'Inactive')}
                         ${V('Notes', p.notes, true)}
                     </div>
+                    ${p.signature ? `<div class="sig-block">
+                        <img src="${driveImgSrc(p.signature)}" alt="" onerror="this.parentNode.style.display='none'" />
+                        <div class="ln"></div>
+                        <div class="lb">${e(p.name)}</div>
+                    </div>` : ''}
                 </div>
                 <div class="print-actions pd-noprint">
                     <button class="btn-primary" onclick="PrintDoc.print({title:'Personnel Record — ${e(p.name)}'})">${Icon.printer({size:14})} Print</button>
@@ -494,6 +570,15 @@ const ManpowerPage = {
                 const b64 = await fileToBase64_(file);
                 const up = await DataService.uploadImage(b64, file.name, file.type);
                 if (up && up.url) data.image = up.url;
+            }
+            // v13: the PROCESSED signature is uploaded, not the original
+            // photo — the whole point is that the paper is already gone.
+            if (this._sigDataUrl) {
+                UI.toast('Uploading signature...', 'success');
+                const sb64 = Signature.dataUrlToBase64(this._sigDataUrl);
+                const sup = await DataService.uploadImage(sb64,
+                    'signature-' + (data.name || 'personnel').replace(/[^\w]+/g, '-') + '.png', 'image/png');
+                if (sup && sup.url) data.signature = sup.url;
             }
             if (id) {
                 await DataService.updatePersonnel(id, data);

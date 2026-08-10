@@ -206,9 +206,22 @@ module.exports = function (t) {
                 'these would deploy pointing at nothing: ' + unfilled.join(', '));
         });
 
-        t.it('Cloudflare needs the SPA fallback', () => {
-            t.ok(t.exists('_redirects'),
-                'without /* -> /index.html 200, refreshing on any screen returns a 404');
+        t.it('the SPA fallback is configured for Cloudflare Workers', () => {
+            // The app is a single page: there is no server route for
+            // /payables, so a refresh anywhere but the root would 404.
+            //
+            // This used to check for a _redirects file. That is the
+            // Cloudflare PAGES mechanism, and Workers rejects the rule
+            // outright — "infinite loop detected", because Workers
+            // strips .html and /index and re-triggers the same rule.
+            // The Workers equivalent lives in wrangler.jsonc.
+            t.ok(t.exists('wrangler.jsonc'),
+                'wrangler.jsonc is missing — the Worker has nothing telling it to serve the site');
+            const w = t.read('wrangler.jsonc');
+            t.ok(/single-page-application/.test(w),
+                'not_found_handling is not set to single-page-application, so refreshing on any screen will 404');
+            t.ok(!t.exists('_redirects'),
+                '_redirects is a Pages file and Workers REJECTS it — it fails the whole deploy');
         });
     });
 

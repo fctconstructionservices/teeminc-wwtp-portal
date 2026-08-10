@@ -34,6 +34,7 @@ const only = process.argv[2];
 
 let pass = 0, fail = 0, files = 0;
 const failures = [];
+const pending = [];   // async tests awaited before the summary
 
 const C = process.stdout.isTTY
     ? { g: '\x1b[32m', r: '\x1b[31m', d: '\x1b[2m', b: '\x1b[1m', x: '\x1b[0m' }
@@ -47,7 +48,23 @@ const suite = {
     },
     it(what, fn) {
         try {
-            fn();
+            const r = fn();
+            // v13: a test may be async — the signature suite has to
+            // decode an image before it can assert anything. A returned
+            // promise is awaited by the runner rather than being
+            // silently dropped, which is how an async test "passes"
+            // without ever running its assertions.
+            if (r && typeof r.then === 'function') {
+                pending.push(r.then(
+                    () => { pass++; console.log(`  ${C.g}pass${C.x}  ${what}`); },
+                    err => {
+                        fail++;
+                        failures.push({ what, message: err.message });
+                        console.log(`  ${C.r}FAIL${C.x}  ${what}`);
+                        console.log(`        ${C.d}${err.message}${C.x}`);
+                    }));
+                return;
+            }
             pass++;
             console.log(`  ${C.g}pass${C.x}  ${what}`);
         } catch (err) {
@@ -81,20 +98,27 @@ if (!fs.existsSync(dir)) {
     process.exit(1);
 }
 
-fs.readdirSync(dir)
-    .filter(f => f.endsWith('.test.js'))
-    .filter(f => !only || f.indexOf(only) > -1)
-    .sort()
-    .forEach(f => {
-        files++;
-        require(path.join(dir, f))(suite);
-    });
+(async () => {
+    const suites = fs.readdirSync(dir)
+        .filter(f => f.endsWith('.test.js'))
+        .filter(f => !only || f.indexOf(only) > -1)
+        .sort();
 
-console.log(`\n${'─'.repeat(52)}`);
-if (fail) {
-    console.log(`${C.r}${C.b}${fail} failed${C.x}, ${pass} passed, ${files} file(s)\n`);
-    failures.forEach(f => console.log(`  ${C.r}·${C.x} ${f.what}\n    ${C.d}${f.message}${C.x}`));
-    console.log('');
-    process.exit(1);
-}
-console.log(`${C.g}${C.b}${pass} passed${C.x}, ${files} file(s)\n`);
+    for (const f of suites) {
+        files++;
+        // A test FILE may itself be async — awaited so its describes run
+        // before the next file starts and the output stays readable.
+        await require(path.join(dir, f))(suite);
+        await Promise.all(pending.splice(0));
+    }
+    await Promise.all(pending.splice(0));
+
+    console.log(`\n${'─'.repeat(52)}`);
+    if (fail) {
+        console.log(`${C.r}${C.b}${fail} failed${C.x}, ${pass} passed, ${files} file(s)\n`);
+        failures.forEach(f => console.log(`  ${C.r}·${C.x} ${f.what}\n    ${C.d}${f.message}${C.x}`));
+        console.log('');
+        process.exit(1);
+    }
+    console.log(`${C.g}${C.b}${pass} passed${C.x}, ${files} file(s)\n`);
+})();

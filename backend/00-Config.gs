@@ -11,7 +11,7 @@
  * top-level variable is safe: it cannot leak between users.
  */
 
-const SHEET_ID = '1Z-1NtuiJ_BYfUD_9CGfccJmJT6hHmnunc5zbrHaMiDw';
+const SHEET_ID = '1NNrc_kH_XNUYsOhzGxMvPzv8y3NRUsAwyZHBFDzhaW8';
 
 // Set per-request in doPost(); read via currentUserEmail_() in 04-AuthService.gs.
 let CURRENT_REQUEST_USER_EMAIL = '';

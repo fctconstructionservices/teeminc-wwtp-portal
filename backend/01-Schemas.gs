@@ -148,7 +148,12 @@ const SCHEMAS = {
   // is of limited use on site, where the point is recognising who is
   // being referred to.
   Personnel: ['id', 'name', 'role', 'classification', 'contactNumber', 'dailyRate',
-    'notes', 'status', 'addedBy', 'createdAt', 'updatedAt', 'image'],
+    // v13: `signature` is a separate column from `image`. A photo of a
+    // person and their signature are different things used in different
+    // places — the photo identifies them in a list, the signature signs
+    // a document — and one field would mean uploading a headshot wipes
+    // the signature on the reports already carrying it.
+    'notes', 'status', 'addedBy', 'createdAt', 'updatedAt', 'image', 'signature'],
 
   // v9 NEW: OVERTIME authorization. OT time in/out on a Daily Site
   // Record stays LOCKED until an approved OTRequest exists for that

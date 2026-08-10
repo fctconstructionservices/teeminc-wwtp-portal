@@ -499,7 +499,16 @@ Object.assign(ProjectPage, {
                 }).join('')}</tr></tbody>`).join('')}</tbody></table>`;
         };
 
-        return `<section class="rp-sec"><h2>Daily Site Records — full detail</h2>
+        // ── v13: ONE DAY, ONE SHEET ──
+        // These used to run together, so a fortnight of records printed
+        // as one continuous block and a day could start halfway down a
+        // page. A daily site report is filed, signed and sometimes sent
+        // on its own — it has to be a document, not a paragraph.
+        //
+        // Each day now starts a new page and carries its own header
+        // block: project, date, weather, prepared by. A sheet that turns
+        // up on someone's desk on its own still says what it is.
+        return `<section class="rp-sec rp-dsr"><h2>Daily Site Records</h2>
             ${recs.map(r => {
                 const mp = r.manpower || [];
                 const heads = mp.reduce((n, m) => n + (parseInt(m.count, 10) || 0), 0);
@@ -507,15 +516,27 @@ Object.assign(ProjectPage, {
                 const photos = (r.photos || []).concat(wa.filter(w => w.image).map(w => ({
                     url: w.image, name: (w.scope || '') + ' ' + (w.pct || 0) + '%'
                 })));
-                return `<div class="rp-day">
-                    <div class="rp-day-head">
-                        <b>${this._rDate(r.date)}</b>
-                        <span>${e(r.weatherAM) || '—'} / ${e(r.weatherPM) || '—'}</span>
-                        <span>${heads} worker(s)</span>
-                        <span>${e(r.createdByName || r.createdBy || '')}</span>
+                return `<div class="rp-day rp-page">
+                    <div class="rp-dsr-head">
+                        <div class="rp-dsr-title">
+                            <b>DAILY SITE REPORT</b>
+                            <span>${e(p.name)}${p.location ? ' · ' + e(p.location) : ''}</span>
+                        </div>
+                        <div class="rp-dsr-meta">
+                            <div><em>Date</em>${this._rDate(r.date)}</div>
+                            <div><em>Weather AM / PM</em>${e(r.weatherAM) || '—'} / ${e(r.weatherPM) || '—'}</div>
+                            <div><em>Manpower</em>${heads} worker(s)</div>
+                            <div><em>Prepared by</em>${e(r.createdByName || r.createdBy || '—')}</div>
+                        </div>
                     </div>
-                    ${sub('Manpower', mp, [['Role', 'role'], ['AM', 'am', 'center'], ['PM', 'pm', 'center'],
-                        ['OT', 'ot', 'center'], ['Count', 'count', 'right', v => String(parseInt(v, 10) || 0)]])}
+                    ${sub('Manpower', mp, [
+                        ['Name', 'name', 'left', (v, x) => e(v || x.role || '—')],
+                        ['Role', 'role'], ['AM', 'am', 'center'], ['PM', 'pm', 'center'],
+                        ['OT', 'ot', 'center'],
+                        ['Count', 'count', 'right', v => String(parseInt(v, 10) || 0)],
+                        ['Signature', 'signature', 'center', v => v
+                            ? `<img class="rp-sig" src="${e(v)}" alt="" onerror="this.style.display='none'" />`
+                            : '']])}
                     ${sub('Equipment', r.equipment || [], [['Equipment', 'name', 'left', (v, x) => e(v || x.equipName || '—')],
                         ['Hours', 'hours', 'right'], ['Status', 'status']])}
                     ${sub('Work accomplished', wa, [['SOW', 'scope'], ['Location', 'location'],
@@ -533,6 +554,11 @@ Object.assign(ProjectPage, {
                         <div class="rp-photos">${photos.slice(0, 8).map(ph => `
                             <figure><img src="${e(ph.url)}" alt="" onerror="this.parentNode.style.display='none'" />
                             <figcaption>${e(ph.name || '')}</figcaption></figure>`).join('')}</div>` : ''}
+                    <div class="rp-sign">
+                        <div><div class="ln"></div><span>Prepared by</span></div>
+                        <div><div class="ln"></div><span>Checked by</span></div>
+                        <div><div class="ln"></div><span>Approved by</span></div>
+                    </div>
                 </div>`;
             }).join('')}
         </section>`;
@@ -878,6 +904,23 @@ Object.assign(ProjectPage, {
                 .rp-photos img { width:100%; height:auto; max-height:52mm; object-fit:contain;
                     border:1px solid #D6D2C4; }
                 .rp-photos figcaption { font-size:8px; color:#5B6360; text-align:center; margin-top:2px; }
+
+                /* v13 — a daily site report is a SHEET, not a paragraph */
+                .rp-page { page-break-before:always; page-break-inside:auto; padding-top:4mm; }
+                .rp-dsr .rp-page:first-of-type { page-break-before:avoid; }
+                .rp-dsr-head { border-bottom:2px solid var(--pd-accent); padding-bottom:6px; margin-bottom:10px; }
+                .rp-dsr-title b { font-family:'Oswald',sans-serif; font-size:14px; letter-spacing:.09em; }
+                .rp-dsr-title span { display:block; font-size:10.5px; color:#5B6360; margin-top:1px; }
+                .rp-dsr-meta { display:flex; gap:26px; flex-wrap:wrap; margin-top:7px; font-size:11px; }
+                .rp-dsr-meta em { display:block; font-style:normal; font-family:'IBM Plex Mono',monospace;
+                    font-size:7.5px; letter-spacing:.12em; text-transform:uppercase; color:#5B6360; }
+                /* Bounded so a wide signature cannot stretch the row. */
+                .rp-sig { max-height:11mm; max-width:38mm; display:block; margin:0 auto; }
+                .rp-sign { display:flex; gap:24px; margin-top:14mm; page-break-inside:avoid; }
+                .rp-sign > div { flex:1; text-align:center; }
+                .rp-sign .ln { border-bottom:1px solid #1C2321; height:9mm; }
+                .rp-sign span { font-size:8px; text-transform:uppercase; letter-spacing:.08em;
+                    color:#5B6360; display:block; margin-top:3px; }
             `
         }));
         w.document.close();

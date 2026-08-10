@@ -355,6 +355,20 @@ function getRequestById(id) {
       // record, exactly as the project's own Daily Records tab does.
       if (req.type === 'DailyRecord') {
         req.manpower = safeParse_(req.manpowerJSON, []);
+        // v13: attach each person's signature so the report can carry it
+        // in the last column. Looked up by id first and by name second —
+        // rows entered as free text have no id, and those are exactly the
+        // people most likely to be missing from a signed sheet otherwise.
+        var _people = readAll_('Personnel');
+        req.manpower.forEach(function (m) {
+          var hit = _people.find(function (p) {
+            return (m.personnelId && p.id === m.personnelId) ||
+                   String(p.name || '').trim().toLowerCase() ===
+                   String(m.name || '').trim().toLowerCase();
+          });
+          m.signature = hit ? (hit.signature || '') : '';
+          if (!m.name && hit) m.name = hit.name;
+        });
         req.equipment = safeParse_(req.equipmentJSON, []);
         req.workAccomplished = safeParse_(req.workAccomplishedJSON, []);
         req.materialsDelivered = safeParse_(req.materialsDeliveredJSON, []);
