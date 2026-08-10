@@ -208,6 +208,23 @@ const SCHEMAS = {
   PRLines: ['id', 'prId', 'materialId', 'itemName', 'unit', 'qty', 'rate', 'amount',
     'qtyOrdered', 'qtyReceived', 'notes', 'sortOrder'],
 
+  // ── v14: DISCUSSION ──
+  // A comment is identified by recordType + recordId and nothing else.
+  // That single key is why one service covers sixteen surfaces rather
+  // than sixteen implementations that drift apart.
+  //
+  // `deletedAt` marks rather than removes: deleting the row would leave
+  // a reply answering nothing, which reads as a different conversation
+  // than the one that happened.
+  Comments: ['id', 'recordType', 'recordId', 'projectId', 'author', 'body',
+    'attachmentUrl', 'attachmentName', 'mentionsJSON',
+    'createdAt', 'editedAt', 'deletedAt'],
+
+  // One row per person per thread holding WHEN they last read it — not
+  // a row per comment per person, which grows without limit on a busy
+  // project and turns every badge count into a full scan.
+  CommentReads: ['id', 'reader', 'recordType', 'recordId', 'readAt'],
+
   // ── v11 BATCH G2: PO · RECEIVING · PAYABLES ──
   // `overPrBy` records how far a PO exceeded its purchase request; a PO
   // over tolerance is HELD rather than issued, because issuing it and

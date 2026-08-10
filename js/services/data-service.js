@@ -735,6 +735,34 @@ const DataService = {
         return await gasCall('getPayables');
     },
 
+    // ── v14: DISCUSSION ──
+    // The thread is fetched only when a record is opened; getUnread is
+    // the only thing polled, and it returns a count — never the bodies.
+    async getThread(recordType, recordId) {
+        return await gasCall('getThread', recordType, recordId);
+    },
+    async postComment(data) {
+        return await gasCall('postComment', data);
+    },
+    async editComment(id, body) {
+        return await gasCall('editComment', id, body);
+    },
+    async deleteComment(id) {
+        return await gasCall('deleteComment', id);
+    },
+    async markThreadRead(recordType, recordId) {
+        return await gasCall('markThreadRead', recordType, recordId);
+    },
+    async getUnread() {
+        return await gasCall('getUnread');
+    },
+    async markAllRead() {
+        return await gasCall('markAllRead');
+    },
+    async getThreadCounts(refs) {
+        return await gasCall('getThreadCounts', refs || []);
+    },
+
     // ── v12: DUPLICATION + LOGO ──
     async duplicatePreview(sourceId) {
         return await gasCall('duplicatePreview', sourceId);

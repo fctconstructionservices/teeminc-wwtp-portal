@@ -68,6 +68,14 @@ const RequestDetailModal = {
                 return;
             }
             body.innerHTML = this._renderDetails(data);
+
+            // v14: mounted AFTER the body is in the DOM. The thread
+            // loads on its own, so the record is readable immediately
+            // rather than waiting on a second round trip.
+            const host = body.querySelector('#dscHost');
+            if (host && typeof Discussion !== 'undefined') {
+                Discussion.mount(host, data.type, data.id, { projectId: data.projectId || '' });
+            }
         } catch (err) {
             console.error('RequestDetailModal load error:', err);
             UI.toast('Error loading details: ' + (err.message || err), 'error');
@@ -487,6 +495,15 @@ const RequestDetailModal = {
             <div class="print-meta">${data.createdAt || new Date().toLocaleDateString()} · <span class="stamp ${statusCls}">${data.status}</span></div>
         </div>
         ${detailsHtml}
+        <!-- ── v14: ONE MOUNT, THIRTEEN RECORD TYPES ──
+             This modal already renders every request type in the system,
+             so attaching the discussion here gives cash advances,
+             liquidations, materials, equipment, daily records, estimates,
+             billings, OT requests and purchase requests a thread at once.
+             Thirteen separate implementations would have drifted apart
+             within a month. -->
+        <div id="dscHost" class="dsc-host"></div>
+
         <div class="print-actions pd-noprint">
             <button class="btn-primary" onclick="PrintDoc.print()">${Icon.printer({size:14})} Print</button>
             ${actionButtons}

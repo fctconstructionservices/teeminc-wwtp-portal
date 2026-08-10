@@ -18,9 +18,14 @@ module.exports = function (t) {
         return o;
     };
     const host = el();
+    // v14: the bell registers a visibilitychange listener and starts a
+    // poll timer, so the stub has to provide both — otherwise rendering
+    // the shell throws before a single assertion runs.
     const document = { getElementById: id => (id === 'appNav' ? host : el()),
         querySelector: () => el(), querySelectorAll: () => [], createElement: el,
-        body: { appendChild() {} } };
+        body: { appendChild() {} }, addEventListener() {}, hidden: false };
+    const setInterval = () => 0;
+    const DataService = { getUnread: async () => ({ total: 0, mentions: 0, items: [] }) };
     const Icon = new Proxy({}, { get: () => () => '' });
     let USER = { email: 'd@f.ph', name: 'Darwin', role: 'superadmin' };
     const App = { getUser: () => USER, navigate() {}, toggleTheme() {}, logout() {} };
@@ -28,8 +33,9 @@ module.exports = function (t) {
     const KnowledgeBasePage = { _tab: 'materials', switchTab() {} };
 
     const N = new Function('document', 'Icon', 'App', 'PrintDoc', 'KnowledgeBasePage',
+        'setInterval', 'DataService',
         fs.readFileSync(path.join(t.ROOT, 'js/core/nav.js'), 'utf8') + '\nreturn Nav;')
-        (document, Icon, App, PrintDoc, KnowledgeBasePage);
+        (document, Icon, App, PrintDoc, KnowledgeBasePage, setInterval, DataService);
 
     t.describe('navigation groups', () => {
         t.it('the six groups are Projects, Finance, Procurement, Commercial, Knowledge, Approvals', () => {

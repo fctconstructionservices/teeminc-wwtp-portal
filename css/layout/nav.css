@@ -186,3 +186,104 @@
     #appNav.open .nav-groups button.cur { border-left-color: var(--amber); }
     .wrap { padding: 14px 13px 40px; }
 }
+
+/* ── v14: the notification bell ──
+   Beside search, because that is where people already look when they
+   want to FIND something — and an unread mention is a thing you are
+   being asked to find. */
+.nav-bell { position: relative; }
+.bell-dot {
+    position: absolute;
+    top: 1px;
+    right: 0;
+    min-width: 15px;
+    height: 15px;
+    border-radius: 99px;
+    background: var(--blueprint);
+    color: #fff;
+    font-family: var(--font-num);
+    font-size: 9px;
+    display: grid;
+    place-items: center;
+    padding: 0 3px;
+}
+/* Being mentioned by name is not the same as being copied in, and the
+   colour is what says which. */
+.bell-dot.is-mention { background: var(--amber); color: #15181A; font-weight: 700; }
+
+.bell-panel {
+    position: absolute;
+    top: var(--bar-h);
+    right: 12px;
+    width: 340px;
+    max-height: 460px;
+    overflow-y: auto;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    box-shadow: var(--shadow);
+    z-index: 400;
+    color: var(--ink);
+}
+.bell-head {
+    display: flex;
+    align-items: center;
+    padding: 10px 13px;
+    border-bottom: 1px solid var(--line);
+    font-size: 12.5px;
+}
+.bell-head button {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: var(--blueprint);
+    cursor: pointer;
+    font-size: 11.5px;
+    font-family: var(--font-body);
+}
+.bell-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--line);
+    padding: 9px 13px;
+    cursor: pointer;
+    font-family: var(--font-body);
+}
+.bell-item:hover { background: var(--blueprint-tint); }
+.bell-item.is-mention { border-left: 3px solid var(--amber); }
+.bi-top { display: block; font-size: 11.5px; }
+.bi-top em {
+    font-style: normal;
+    background: var(--amber);
+    color: #15181A;
+    font-size: 8.5px;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-right: 5px;
+}
+.bi-top span { color: var(--ink-soft); }
+.bi-body {
+    display: block;
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.bell-empty, .bell-foot {
+    padding: 14px 13px;
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    line-height: 1.5;
+}
+.bell-foot { border-top: 1px solid var(--line); font-size: 10.5px; }
+
+@media (max-width: 620px) {
+    .bell-panel { left: 8px; right: 8px; width: auto; }
+}
