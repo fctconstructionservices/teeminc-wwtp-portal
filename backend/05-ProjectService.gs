@@ -249,6 +249,10 @@ function getProjectData(projectId) {
   readAll_('Users').forEach(function (u) {
     if (u.email) userNameByEmail[String(u.email).toLowerCase()] = u.name || u.email;
   });
+  // v13.1: read once — attachSignatures_ runs per record, and
+  // re-reading Personnel inside that loop is how a report of thirty
+  // days becomes thirty sheet reads.
+  const allPersonnel_ = readAll_('Personnel');
   const dailyRecords = liveDailyRecords_()
     .filter(function (d) { return d.projectId === projectId; })
     .map(function (d) {
@@ -261,7 +265,7 @@ function getProjectData(projectId) {
         weatherAM: d.weatherAM,
         weatherPM: d.weatherPM,
         status: d.status || 'draft',
-        manpower: safeParse_(d.manpowerJSON, []),
+        manpower: attachSignatures_(safeParse_(d.manpowerJSON, []), allPersonnel_),
         equipment: safeParse_(d.equipmentJSON, []),
         workAccomplished: safeParse_(d.workAccomplishedJSON, []),
         materialsDelivered: safeParse_(d.materialsDeliveredJSON, []),
@@ -1116,6 +1120,7 @@ function getProjectData(projectId) {
     safetyRecords: getSafetyRecords(projectId),
     drawings: getDrawings(projectId),
     personnel: getAllPersonnel().filter(function (pp) { return pp.status === 'active'; }),
+
     equipmentOnSite: equipmentOnSite,
     equipmentSummary: equipmentSummary,
     downtimeLog: downtimeLog.slice(0, 40),

@@ -94,7 +94,7 @@ const Nav = {
         {
             id: 'approvals', label: 'Approvals',
             pages: [
-                { id: 'approvals', label: 'Waiting on you' },
+                { id: 'approvals', label: 'Approval Dashboard' },
                 { id: 'print-template', label: 'Print template', roles: ['superadmin'] }
             ]
         }

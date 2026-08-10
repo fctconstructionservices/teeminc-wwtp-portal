@@ -370,6 +370,7 @@ const RequestDetailModal = {
             // in and out, issues, visitors and photos.
             const T = this._tbl.bind(this);
             const e = this._esc.bind(this);
+            const _t = (a, b) => (a || b) ? `${a || '?'}–${b || '?'}` : '';
             const mp = data.manpower || [];
             const heads = mp.reduce((n, m) => n + (parseInt(m.count, 10) || 0), 0);
             const wa = data.workAccomplished || [];
@@ -396,9 +397,15 @@ const RequestDetailModal = {
                 ${T('Manpower', mp, [
                     ['Name', 'name', 'left', (v, r) => e(v || r.role || '—')],
                     ['Role / trade', 'role', 'left', v => e(v || '—')],
-                    ['AM', 'am', 'center', v => e(v || '—')],
-                    ['PM', 'pm', 'center', v => e(v || '—')],
-                    ['OT', 'ot', 'center', v => e(v || '—')],
+                    // ── v13.1 FIX ──
+                    // These read `am`, `pm` and `ot`. The form stores
+                    // amIn/amOut, pmIn/pmOut, otIn/otOut — so the columns
+                    // were always blank, and had been since the modal was
+                    // written. A time IN with no time OUT still shows,
+                    // because a half-filled row is information.
+                    ['AM', 'amIn', 'center', (v, r) => e(_t(r.amIn, r.amOut))],
+                    ['PM', 'pmIn', 'center', (v, r) => e(_t(r.pmIn, r.pmOut))],
+                    ['OT', 'otIn', 'center', (v, r) => e(_t(r.otIn, r.otOut))],
                     ['Count', 'count', 'right', v => String(parseInt(v, 10) || 0)],
                     // v13: the signature, last — where it sits on the paper
                     // form. Blank rather than a dash when the person has

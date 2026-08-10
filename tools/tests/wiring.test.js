@@ -144,6 +144,61 @@ module.exports = function (t) {
         });
     });
 
+    // ── the field-name class of bug ──────────────────────────
+    t.describe('reads match what is written', () => {
+        const daily = t.read('js/pages/project/project-daily.js');
+
+        t.it('nothing reads a manpower time field that is never written', () => {
+            // The form writes amIn/amOut, pmIn/pmOut, otIn/otOut. Three
+            // separate views read `am`, `pm` and `ot` — fields that have
+            // never existed — so those columns printed blank on every
+            // report and nobody noticed, because a blank cell in a time
+            // column looks like a day somebody did not fill in.
+            const written = ['amIn', 'amOut', 'pmIn', 'pmOut', 'otIn', 'otOut'];
+            written.forEach(f => {
+                t.ok(daily.indexOf(f) > -1, `the form no longer writes ${f} — update these tests`);
+            });
+            const readers = ['js/pages/approvals.js',
+                'js/pages/project/project-reports.js', 'js/core/modals.js'];
+            const bad = [];
+            readers.forEach(rel => {
+                const src = t.read(rel);
+                [/\['AM', 'am'/, /\['PM', 'pm'/, /\['OT', 'ot'/].forEach(re => {
+                    if (re.test(src)) bad.push(rel);
+                });
+            });
+            t.ok(bad.length === 0, 'reading am/pm/ot instead of amIn/amOut in: ' + bad.join(', '));
+        });
+
+        t.it('getAllPersonnel returns every column the frontend uses', () => {
+            // This builds an explicit object rather than returning the
+            // row, so a new column is invisible to the whole frontend
+            // until it is added there too. That is how the photo and the
+            // signature were written to the sheet and then dropped on
+            // the way out.
+            const svc = t.read('backend/16-ManpowerService.gs');
+            const fn = /function getAllPersonnel\(\)[\s\S]*?\n}/.exec(svc);
+            t.ok(fn, 'getAllPersonnel not found');
+            ['image', 'signature', 'name', 'role', 'dailyRate'].forEach(f => {
+                t.ok(new RegExp('\\b' + f + ':').test(fn[0]),
+                    `getAllPersonnel drops ${f} — the frontend will never see it`);
+            });
+        });
+
+        t.it('a Drive image is always rendered through driveImgSrc', () => {
+            // A raw Drive link does not render in an <img>; it needs the
+            // direct-view form. Emitting the raw url is why the signature
+            // column stayed empty even once the data reached it.
+            const bad = [];
+            ['js/pages/project/project-reports.js', 'js/pages/approvals.js',
+             'js/core/modals.js', 'js/pages/manpower.js'].forEach(rel => {
+                const src = t.read(rel);
+                if (/src="\$\{e\((?:m|p|r|x)\.(?:signature|image)\)\}"/.test(src)) bad.push(rel);
+            });
+            t.ok(bad.length === 0, 'raw Drive url in an <img> in: ' + bad.join(', '));
+        });
+    });
+
     // ── one codebase, many companies ─────────────────────────
     t.describe('nothing is hardcoded to one company', () => {
         t.it('the backend URL appears only in config.js', () => {

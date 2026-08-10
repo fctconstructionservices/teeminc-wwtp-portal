@@ -535,12 +535,23 @@ const ManpowerPage = {
                         ${V('Status', p.status === 'active' ? 'Active' : 'Inactive')}
                         ${V('Notes', p.notes, true)}
                     </div>
-                    ${p.signature ? `<div class="sig-block">
-                        <img src="${driveImgSrc(p.signature)}" alt="" onerror="this.parentNode.style.display='none'" />
-                        <div class="ln"></div>
-                        <div class="lb">${e(p.name)}</div>
-                    </div>` : ''}
                 </div>
+                <!-- v13.1: the specimen is its own section rather than a
+                     column beside the details. A signature squeezed into
+                     a 190px sidebar prints too small to compare against
+                     anything, which is the only reason to hold a specimen
+                     on file. -->
+                ${p.signature ? `<div class="print-section"><div class="ps-title">Specimen Signature</div>
+                    <div class="sig-specimen">
+                        <img src="${driveImgSrc(p.signature)}" alt="Specimen signature"
+                             onerror="this.parentNode.style.display='none'" />
+                        <div class="ln"></div>
+                        <div class="lb">${e(p.name)}${p.role ? ' · ' + e(p.role) : ''}</div>
+                    </div>
+                </div>` : `<div class="print-section pd-noprint">
+                    <p style="font-size:12px;color:var(--ink-soft);margin:0;">
+                        No specimen signature on file. Add one by editing this person.</p>
+                </div>`}
                 <div class="print-actions pd-noprint">
                     <button class="btn-primary" onclick="PrintDoc.print({title:'Personnel Record — ${e(p.name)}'})">${Icon.printer({size:14})} Print</button>
                     <button class="btn-ghost" onclick="document.getElementById('prsViewModal').remove()">Close</button>

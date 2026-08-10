@@ -79,7 +79,15 @@ function getAllPersonnel() {
       notes: p.notes || '',
       status: (p.status || 'active').toLowerCase(),
       addedBy: p.addedBy || '',
-      createdAt: p.createdAt ? fmtDate_(p.createdAt) : ''
+      createdAt: p.createdAt ? fmtDate_(p.createdAt) : '',
+      // ── v13.1 FIX ──
+      // These were being written to the sheet and then dropped on the
+      // way out. This function builds an explicit object rather than
+      // returning the row, so a new column is invisible to the whole
+      // frontend until it is added HERE too — which is why the photo
+      // never appeared and the signature never reached a report.
+      image: p.image || '',
+      signature: p.signature || ''
     };
   });
 }
@@ -144,4 +152,33 @@ function updatePersonnel(id, data) {
   updateRow_('Personnel', 'id', id, patch);
   logActivity_('Personnel ' + id + ' updated by ' + currentUserName_(), 'blue', id);
   return { success: true };
+}
+
+
+/**
+ * attachSignatures_ (v13.1) - Puts each worker's signature on their
+ * manpower row.
+ *
+ * WHY IT IS A SHARED HELPER. v13 did this inline in getRequestById, so
+ * the approvals modal showed signatures and the project payload — which
+ * every report is built from — did not. Two paths to the same record,
+ * and only one of them was fixed. One helper, called from both.
+ *
+ * Matched by personnel id FIRST, then by name. Rows typed as free text
+ * have no id, and those are exactly the people most likely to be
+ * missing from a signed sheet otherwise.
+ */
+function attachSignatures_(rows, people) {
+  if (!rows || !rows.length) return rows || [];
+  var list = people || readAll_('Personnel');
+  rows.forEach(function (m) {
+    var hit = list.find(function (p) {
+      return (m.personnelId && String(p.id) === String(m.personnelId)) ||
+        (m.name && String(p.name || '').trim().toLowerCase() ===
+                   String(m.name).trim().toLowerCase());
+    });
+    m.signature = hit ? (hit.signature || '') : '';
+    if (!m.name && hit) m.name = hit.name;
+  });
+  return rows;
 }

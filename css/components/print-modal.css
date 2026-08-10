@@ -466,3 +466,18 @@
 .sig-block img { max-height: 60px; max-width: 100%; display: block; margin: 0 auto 2px; }
 .sig-block .ln { border-bottom: 1px solid var(--ink); }
 .sig-block .lb { font-size: 10px; color: var(--ink-soft); margin-top: 3px; }
+
+/* v13.1 — the specimen signature on a personnel record.
+   Its own section rather than a column beside the details: a signature
+   squeezed into a 190px sidebar prints too small to compare against
+   anything, which is the only reason to hold a specimen on file. */
+.sig-specimen { max-width: 300px; }
+.sig-specimen img { max-height: 80px; max-width: 100%; display: block; margin: 0 auto 2px; }
+.sig-specimen .ln { border-bottom: 1px solid var(--ink); }
+.sig-specimen .lb { font-size: 10.5px; color: var(--ink-soft); margin-top: 3px; text-align: center; }
+
+@media print {
+    /* The specimen is the point of printing a personnel record — it must
+       survive, at a size someone can actually compare a signature to. */
+    .sig-specimen img { max-height: 22mm !important; }
+}

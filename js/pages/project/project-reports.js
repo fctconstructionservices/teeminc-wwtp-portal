@@ -488,6 +488,7 @@ Object.assign(ProjectPage, {
             .sort((a, b) => new Date(a.date) - new Date(b.date));
         if (!recs.length) return '';
         const e = this._rEsc.bind(this);
+        const _t = (a, b) => (a || b) ? `${a || '?'}–${b || '?'}` : '';
         const sub = (title, rows, cols) => {
             if (!rows || !rows.length) return '';
             return `<div class="rp-sub">${e(title)}</div>
@@ -531,11 +532,18 @@ Object.assign(ProjectPage, {
                     </div>
                     ${sub('Manpower', mp, [
                         ['Name', 'name', 'left', (v, x) => e(v || x.role || '—')],
-                        ['Role', 'role'], ['AM', 'am', 'center'], ['PM', 'pm', 'center'],
-                        ['OT', 'ot', 'center'],
+                        ['Role', 'role'],
+                        // v13.1: amIn/amOut, not am — see the approvals modal.
+                        ['AM', 'amIn', 'center', (v, x) => e(_t(x.amIn, x.amOut))],
+                        ['PM', 'pmIn', 'center', (v, x) => e(_t(x.pmIn, x.pmOut))],
+                        ['OT', 'otIn', 'center', (v, x) => e(_t(x.otIn, x.otOut))],
                         ['Count', 'count', 'right', v => String(parseInt(v, 10) || 0)],
+                        // driveImgSrc: a raw Drive link does not render in an
+                        // <img>; it needs the direct-view form. The report
+                        // was emitting the raw url, so the column was empty
+                        // even once the signature reached it.
                         ['Signature', 'signature', 'center', v => v
-                            ? `<img class="rp-sig" src="${e(v)}" alt="" onerror="this.style.display='none'" />`
+                            ? `<img class="rp-sig" src="${driveImgSrc(v)}" alt="" onerror="this.style.display='none'" />`
                             : '']])}
                     ${sub('Equipment', r.equipment || [], [['Equipment', 'name', 'left', (v, x) => e(v || x.equipName || '—')],
                         ['Hours', 'hours', 'right'], ['Status', 'status']])}
