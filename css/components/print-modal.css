@@ -481,3 +481,178 @@
        survive, at a size someone can actually compare a signature to. */
     .sig-specimen img { max-height: 22mm !important; }
 }
+
+/* ================================================================
+   v14 — DISCUSSION
+
+   The same thread on sixteen surfaces, so it is styled once here rather
+   than per page. Deliberately quieter than the record above it: the
+   discussion is context, not the document.
+   ================================================================ */
+
+.dsc-host { margin-top: 16px; }
+.dsc {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--bg);
+    overflow: hidden;
+}
+.dsc-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 13px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+    font-family: var(--font-display);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+}
+.dsc-count {
+    margin-left: auto;
+    font-family: var(--font-num);
+    font-size: 10px;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--ink-soft);
+}
+.dsc-list { max-height: 340px; overflow-y: auto; }
+.dsc-empty {
+    padding: 16px 14px;
+    font-size: 12px;
+    color: var(--ink-soft);
+    line-height: 1.55;
+}
+.dsc-msg {
+    display: flex;
+    gap: 10px;
+    padding: 10px 13px;
+    border-bottom: 1px solid var(--line);
+}
+.dsc-msg:last-child { border-bottom: none; }
+.dsc-msg.is-sending { opacity: .55; }
+/* A failed send is marked rather than silently dropped — pretending it
+   saved would be worse than admitting it did not. */
+.dsc-msg.is-failed { background: rgba(192, 54, 44, .07); }
+.dsc-msg.is-failed time { color: var(--red); font-weight: 600; }
+.dsc-msg.is-gone { opacity: .5; font-style: italic; }
+.dsc-av {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--blueprint);
+    color: #fff;
+    display: grid;
+    place-items: center;
+    font-size: 10.5px;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+.dsc-body { flex: 1; min-width: 0; }
+.dsc-who { font-size: 11.5px; font-weight: 600; display: flex; align-items: center; gap: 7px; }
+.dsc-who time {
+    font-weight: 400;
+    color: var(--ink-soft);
+    font-family: var(--font-num);
+    font-size: 9.5px;
+}
+.dsc-tools { margin-left: auto; display: flex; gap: 2px; opacity: 0; transition: var(--transition); }
+.dsc-msg:hover .dsc-tools { opacity: 1; }
+.dsc-tools button {
+    background: none;
+    border: none;
+    color: var(--ink-soft);
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+}
+.dsc-tools button:hover { color: var(--red); background: var(--surface); }
+.dsc-text { margin: 2px 0 0; font-size: 12.5px; line-height: 1.5; word-break: break-word; }
+.dsc-mention {
+    background: rgba(217, 138, 0, .16);
+    color: var(--safety-ink);
+    border-radius: 3px;
+    padding: 0 4px;
+    font-weight: 600;
+}
+.dsc-file {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 5px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 3px 8px;
+    font-size: 11px;
+    color: var(--ink-soft);
+    text-decoration: none;
+}
+.dsc-file:hover { border-color: var(--blueprint); color: var(--blueprint); }
+
+.dsc-compose { padding: 10px 13px; background: var(--surface); border-top: 1px solid var(--line); position: relative; }
+.dsc-input {
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-family: var(--font-body);
+    font-size: 12.5px;
+    background: var(--surface);
+    color: var(--ink);
+    resize: vertical;
+}
+.dsc-input:focus { outline: none; border-color: var(--safety); }
+.dsc-actions { display: flex; align-items: center; gap: 10px; margin-top: 7px; }
+.dsc-attach { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; color: var(--ink-soft); }
+.dsc-attach input { display: none; }
+.dsc-fname { font-size: 10.5px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsc-hint { margin-left: auto; font-size: 10.5px; color: var(--ink-soft); }
+.dsc-editing textarea {
+    width: 100%;
+    border: 1px solid var(--safety);
+    border-radius: 6px;
+    padding: 7px;
+    font-family: var(--font-body);
+    font-size: 12.5px;
+    background: var(--surface);
+    color: var(--ink);
+}
+.dsc-editing > div { display: flex; gap: 6px; margin-top: 6px; }
+
+.dsc-mentions {
+    position: absolute;
+    left: 13px;
+    right: 13px;
+    bottom: 100%;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    box-shadow: var(--shadow);
+    z-index: 20;
+    overflow: hidden;
+    max-height: 210px;
+    overflow-y: auto;
+}
+.dsc-mentions button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    padding: 7px 11px;
+    cursor: pointer;
+    font-family: var(--font-body);
+}
+.dsc-mentions button:hover, .dsc-mentions button.is-active { background: var(--blueprint-tint); }
+.dsc-mentions b { display: block; font-size: 12px; }
+.dsc-mentions em { font-style: normal; font-size: 10.5px; color: var(--ink-soft); }
+
+@media print {
+    /* The discussion prints — it is often the only record of WHY. But
+       the composer is not part of the document. */
+    .dsc-compose, .dsc-tools, .dsc-mentions { display: none !important; }
+    .dsc-list { max-height: none !important; overflow: visible !important; }
+    .dsc-msg { page-break-inside: avoid; }
+}

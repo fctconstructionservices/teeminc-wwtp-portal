@@ -136,6 +136,16 @@ const API_ACTIONS = {
   search: search,
   searchCoverage: searchCoverage,   // v11 BATCH I4
 
+  // ── v14: DISCUSSION ──
+  getThread: getThread,
+  postComment: postComment,
+  editComment: editComment,
+  deleteComment: deleteComment,
+  markThreadRead: markThreadRead,
+  getUnread: getUnread,
+  markAllRead: markAllRead,
+  getThreadCounts: getThreadCounts,
+
   // ── v12: DUPLICATION + LOGO ──
   duplicateProject: duplicateProject,
   duplicatePreview: duplicatePreview,

@@ -305,12 +305,19 @@ const PurchaseRequestsPage = {
                         <div>Deliver to<br><b>${e(p.deliverTo) || '—'}</b></div>
                     </div></div>
 
-                <div class="print-actions">
+                <div id="dscHostPR" class="dsc-host"></div>
+
+                <div class="print-actions pd-noprint">
                     <button class="btn-sm" onclick="PrintDoc.print({title:'Purchase Request ${e(p.id)}'})">${Icon.printer({size:12})} Print</button>
                     <button class="btn-ghost" onclick="document.getElementById('prViewModal').remove()">Close</button>
                 </div>
             </div>`;
         document.body.appendChild(modal);
+        // v14
+        if (typeof Discussion !== 'undefined') {
+            Discussion.mount(modal.querySelector('#dscHostPR'), 'PurchaseRequest', p.id,
+                { projectId: p.projectId });
+        }
     },
 
     // ─── the form ───────────────────────────────────────────────

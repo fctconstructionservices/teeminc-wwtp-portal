@@ -94,7 +94,7 @@ const Nav = {
         {
             id: 'approvals', label: 'Approvals',
             pages: [
-                { id: 'approvals', label: 'Approval Dashboard' },
+                { id: 'approvals', label: 'Waiting on you' },
                 { id: 'print-template', label: 'Print template', roles: ['superadmin'] }
             ]
         }
@@ -150,6 +150,7 @@ const Nav = {
         // Login and other chrome-free screens get no bar at all.
         if (!user.email || pageId === 'login') { host.innerHTML = ''; host.hidden = true; return; }
         host.hidden = false;
+        setTimeout(() => this.startBell(), 400);   // v14
 
         const groups = this.GROUPS
             .filter(g => this._allowed(g, role))
@@ -184,6 +185,15 @@ const Nav = {
                 </nav>
                 <span class="nav-sp"></span>
                 <button class="nav-icon" onclick="App.navigate('search')" title="Search records">${Icon.search({ size: 15 })}</button>
+                <!-- v14: the bell sits beside search because that is where
+                     people already look when they want to FIND something,
+                     and an unread mention is a thing you are being asked
+                     to find. -->
+                <button class="nav-icon nav-bell" onclick="Nav.toggleBell()" title="Notifications">
+                    ${Icon.bell ? Icon.bell({ size: 15 }) : '🔔'}
+                    <span class="bell-dot" id="bellDot" hidden></span>
+                </button>
+                <div class="bell-panel" id="bellPanel" hidden></div>
                 <button class="nav-icon" onclick="App.toggleTheme()" title="Light or dark">${Icon.themeToggle({ size: 15 })}</button>
                 <span class="nav-who">${e(user.name || user.email)}<em>${e(this._roleLabel(role))}</em></span>
                 <button class="nav-icon" onclick="App.logout()" title="Sign out">${Icon.logout ? Icon.logout({ size: 15 }) : Icon.close({ size: 15 })}</button>
@@ -223,6 +233,116 @@ const Nav = {
                 this.render(pageId, tab);
             }, 40);
         }
+    },
+
+    // ── v14: NOTIFICATIONS ──────────────────────────────────
+    //
+    // The badge polls a SINGLE NUMBER every 90 seconds, never the
+    // comments themselves. Polling threads would burn the Apps Script
+    // quota the whole system runs on, and the badge only has to answer
+    // "is there anything?" — the thread is read when you open the
+    // record.
+    //
+    // Polling stops when the tab is hidden. A laptop left open on a
+    // desk overnight would otherwise spend the night asking.
+
+    _bellTimer: null,
+    _unread: null,
+
+    startBell() {
+        if (this._bellTimer) return;
+        const tick = () => {
+            if (document.hidden) return;
+            this.refreshBell();
+        };
+        this.refreshBell();
+        this._bellTimer = setInterval(tick, 90000);
+        // Catch up the moment you come back rather than waiting out the
+        // rest of the interval.
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) this.refreshBell();
+        });
+    },
+
+    async refreshBell() {
+        try {
+            this._unread = await DataService.getUnread();
+        } catch (err) { return; }   // never let the badge break the page
+        const dot = document.getElementById('bellDot');
+        if (!dot) return;
+        const n = (this._unread && this._unread.total) || 0;
+        dot.hidden = n === 0;
+        dot.textContent = n > 9 ? '9+' : String(n);
+        // A mention is addressed to you by name; being copied in is not
+        // the same thing, and the colour says which it is.
+        dot.classList.toggle('is-mention', !!(this._unread && this._unread.mentions));
+        const panel = document.getElementById('bellPanel');
+        if (panel && !panel.hidden) this._paintBell();
+    },
+
+    toggleBell() {
+        const panel = document.getElementById('bellPanel');
+        if (!panel) return;
+        panel.hidden = !panel.hidden;
+        if (!panel.hidden) { this._paintBell(); this.refreshBell(); }
+    },
+
+    _paintBell() {
+        const panel = document.getElementById('bellPanel');
+        const u = this._unread || { total: 0, items: [] };
+        const e = this._esc.bind(this);
+        const label = t => String(t).replace(/([A-Z])/g, ' $1').trim();
+
+        panel.innerHTML = `
+            <div class="bell-head">
+                <b>Notifications</b>
+                ${u.total ? `<button onclick="Nav.clearBell()">Mark all read</button>` : ''}
+            </div>
+            ${u.items && u.items.length ? u.items.map(i => `
+                <button class="bell-item ${i.mentioned ? 'is-mention' : ''}"
+                        onclick="Nav.openNotification('${e(i.recordType)}','${e(i.recordId)}','${e(i.projectId)}')">
+                    <span class="bi-top">
+                        ${i.mentioned ? '<em>mentioned you</em>' : ''}
+                        <b>${e(i.authorName)}</b>
+                        <span>${e(label(i.recordType))} ${e(i.recordId)}</span>
+                    </span>
+                    <span class="bi-body">${e(i.excerpt)}</span>
+                </button>`).join('')
+            : '<div class="bell-empty">Nothing new. Comments you are mentioned in show up here.</div>'}
+            <div class="bell-foot">Checked every 90 seconds. Mentions are emailed to you as well.</div>`;
+    },
+
+    async clearBell() {
+        try {
+            await DataService.markAllRead();
+            await this.refreshBell();
+            this._paintBell();
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
+
+    /**
+     * openNotification - takes you to the record the comment is on.
+     * A notification you cannot act on is just an interruption.
+     */
+    openNotification(type, id, projectId) {
+        document.getElementById('bellPanel').hidden = true;
+        const route = {
+            PurchaseRequest: 'purchase-requests', PurchaseOrder: 'purchase-requests',
+            Quotation: 'quotations', Billing: 'billings'
+        }[type];
+
+        if (projectId && ['DailyRecord', 'Estimate', 'SOWItem', 'Project'].indexOf(type) > -1) {
+            App.navigate('project');
+            setTimeout(() => ProjectPage.open(projectId), 60);
+            return;
+        }
+        if (route) { App.navigate(route); return; }
+        // Everything else lives in the approvals inbox, which already
+        // opens any record type by id.
+        App.navigate('approvals');
+        setTimeout(() => {
+            if (typeof RequestDetailModal !== 'undefined') RequestDetailModal.open(id, type);
+        }, 120);
     },
 
     toggleMobile() {
