@@ -150,6 +150,12 @@ const API_ACTIONS = {
   previewSowOutline: previewSowOutline,
   addSOWItemsBulk: addSOWItemsBulk,
 
+  // ── v16: PROJECT DELETE / ARCHIVE ──
+  previewProjectDelete: previewProjectDelete,
+  deleteProject: deleteProject,
+  archiveProject: archiveProject,
+  unarchiveProject: unarchiveProject,
+
   // ── v12: DUPLICATION + LOGO ──
   duplicateProject: duplicateProject,
   duplicatePreview: duplicatePreview,

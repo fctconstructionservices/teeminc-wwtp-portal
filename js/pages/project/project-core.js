@@ -555,6 +555,101 @@ const ProjectPage = {
     },
 
     /**
+     * confirmDelete (v16) - Shows exactly what would be destroyed, then
+     * requires the project NAME to be typed.
+     *
+     * A yes/no dialog gets dismissed by reflex. By the time somebody has
+     * typed "BF2/NF2 Lagoon Liner" they have noticed which project they
+     * are about to destroy — which is the entire purpose of asking.
+     */
+    async confirmDelete() {
+        try {
+            const p = await DataService.previewProjectDelete(this._currentProjectId);
+            const e = v => String(v == null ? '' : v)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const peso = v => '₱' + fmtMoney(parseFloat(v) || 0);
+            const rows = Object.keys(p.counts).map(k =>
+                `<tr><td>${e(k.replace(/([A-Z])/g, ' $1').trim())}</td>
+                     <td class="amt">${p.counts[k]}</td></tr>`).join('');
+
+            document.getElementById('delProjModal')?.remove();
+            const m = document.createElement('div');
+            m.className = 'print-modal-overlay open';
+            m.id = 'delProjModal';
+            m.innerHTML = `
+                <div class="print-modal-content" style="max-width:560px;">
+                    <button class="close-modal" onclick="document.getElementById('delProjModal').remove()">${Icon.close({size:18})}</button>
+                    <div class="print-header"><h2>Delete ${e(p.name)}</h2>
+                        <div class="print-meta">This cannot be undone</div></div>
+
+                    ${p.hasMoney ? `<div class="pr-budget-box over">
+                        <b>${Icon.warning({size:12})} This project has money in it</b>
+                        <p>${peso(p.money.billed)} billed · ${peso(p.money.cashOut)} released ·
+                        ${peso(p.money.collected)} collected. All of it will be removed from your books.</p>
+                        <p>If this is a real job that ended, <b>close this and archive it instead</b>.</p>
+                    </div>` : `<div class="pr-budget-box">
+                        <b>No money is attached</b>
+                        <p>Nothing has been billed, released or collected on this project — it is safe
+                        to remove.</p>
+                    </div>`}
+
+                    ${rows ? `<div class="print-section"><div class="ps-title">What will be deleted</div>
+                        <table class="mini-table"><tbody>${rows}</tbody>
+                        <tfoot><tr><td><b>Total rows</b></td>
+                            <td class="amt"><b>${p.totalRows}</b></td></tr></tfoot></table></div>`
+                    : '<p style="font-size:12.5px;">This project has no attached records.</p>'}
+
+                    <div class="field" style="margin-top:14px;">
+                        <label>Type <b>${e(p.name)}</b> to confirm</label>
+                        <input type="text" id="del-confirm" autocomplete="off"
+                               oninput="ProjectPage._checkDeleteName('${e(p.name).replace(/'/g, "\\'")}')" />
+                    </div>
+
+                    <div class="print-actions">
+                        <button class="btn-sm danger" id="del-go" disabled
+                            onclick="ProjectPage.doDelete('${e(this._currentProjectId)}')">Delete permanently</button>
+                        <button class="btn-ghost" onclick="document.getElementById('delProjModal').remove()">Cancel</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(m);
+            setTimeout(() => document.getElementById('del-confirm')?.focus(), 60);
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
+
+    _checkDeleteName(name) {
+        const v = (document.getElementById('del-confirm')?.value || '').trim();
+        const btn = document.getElementById('del-go');
+        if (btn) btn.disabled = v !== name;
+    },
+
+    async doDelete(projectId) {
+        const name = (document.getElementById('del-confirm')?.value || '').trim();
+        const btn = document.getElementById('del-go');
+        if (btn) { btn.textContent = 'Deleting…'; btn.disabled = true; }
+        try {
+            const res = await DataService.deleteProject(projectId, name);
+            document.getElementById('delProjModal')?.remove();
+            UI.toast(`"${res.name}" deleted — ${res.rowsRemoved} row(s) removed.`, 'success');
+            App.navigate('home');
+        } catch (err) {
+            UI.toast('' + err.message, 'error');
+            if (btn) { btn.textContent = 'Delete permanently'; btn.disabled = false; }
+        }
+    },
+
+    async archiveThis() {
+        const ok = await Confirm.open('Archive this project?',
+            'It leaves the dashboard, the portfolio and every picker, but every record is kept. ' +
+            'You can restore it later.');
+        if (!ok) return;
+        try {
+            const res = await DataService.archiveProject(this._currentProjectId, '');
+            UI.toast(`"${res.name}" archived.`, 'success');
+            App.navigate('home');
+        } catch (err) { UI.toast('' + err.message, 'error'); }
+    },
+
+    /**
      * renderOverview - Renders the overview tab.
      * v8: Requests-by-Status, Incoming Cash graph, and the two tables
      * (Cash Advance Requests / Incoming Cash) were removed — no
@@ -603,7 +698,36 @@ const ProjectPage = {
                 </div>
 
                 <div class="section-head"><h2>Cost Breakdown</h2><div class="rule"></div><span class="cc-note">by request type</span></div>
-                <div class="chart-card" style="margin-bottom:16px;"><div class="canvas-wrap"><canvas id="projTypeChart"></canvas></div></div>`;
+                <div class="chart-card" style="margin-bottom:16px;"><div class="canvas-wrap"><canvas id="projTypeChart"></canvas></div></div>
+
+                ${(App.getUser() || {}).role === 'superadmin' ? `
+                <!-- v16: kept at the very bottom, behind its own heading and
+                     its own colour. A destructive action that sits next to a
+                     routine one gets clicked by accident eventually. -->
+                <div class="section-head" style="margin-top:34px;"><h2>Danger zone</h2><div class="rule"></div></div>
+                <div class="danger-zone">
+                    <div class="dz-row">
+                        <div>
+                            <b>Archive this project</b>
+                            <p>Removes it from the dashboard, the portfolio, the cashflow and every
+                            project picker — but keeps every record. This is the right choice for a
+                            job that finished or was cancelled: you will still need it for tax,
+                            warranty and any future dispute.</p>
+                        </div>
+                        <button class="btn-sm" onclick="ProjectPage.archiveThis()">Archive</button>
+                    </div>
+                    <div class="dz-row is-danger">
+                        <div>
+                            <b>Delete this project permanently</b>
+                            <p>Removes the project <b>and everything attached to it</b> — billings,
+                            cash, estimates, daily records, purchases, comments. This cannot be undone
+                            and there is no backup of it.</p>
+                            <p>Use this for a test or a duplicate. For a real job that ended,
+                            <b>archive it instead</b>.</p>
+                        </div>
+                        <button class="btn-sm danger" onclick="ProjectPage.confirmDelete()">Delete</button>
+                    </div>
+                </div>` : ''}`;
         container.innerHTML = html;
     },
 

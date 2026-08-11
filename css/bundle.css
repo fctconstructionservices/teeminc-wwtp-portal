@@ -4319,6 +4319,31 @@ textarea:focus-visible {
     #boq-text, .boq-preview { height: 220px; }
 }
 
+/* v16 — the danger zone.
+   At the very bottom, behind its own heading and its own colour. A
+   destructive action sitting next to a routine one gets clicked by
+   accident eventually. */
+.danger-zone { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.dz-row {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    padding: 13px 15px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+}
+.dz-row:last-child { border-bottom: none; }
+.dz-row.is-danger { background: rgba(192, 54, 44, .05); border-left: 3px solid var(--red); }
+.dz-row > div { flex: 1; }
+.dz-row b { font-size: 13px; display: block; margin-bottom: 3px; }
+.dz-row p { margin: 0 0 4px; font-size: 11.5px; color: var(--ink-soft); line-height: 1.5; }
+.dz-row button { flex-shrink: 0; align-self: center; }
+
+@media (max-width: 620px) {
+    .dz-row { flex-direction: column; }
+    .dz-row button { align-self: stretch; }
+}
+
 
 /* ═══════ pages/project-sow.css ═══════ */
 /* ================================================================

@@ -773,6 +773,22 @@ const DataService = {
         return await gasCall('addSOWItemsBulk', projectId, text, opts || {});
     },
 
+    // ── v16: PROJECT DELETE / ARCHIVE ──
+    async previewProjectDelete(projectId) {
+        return await gasCall('previewProjectDelete', projectId);
+    },
+    // confirmName must match the project name exactly — a yes/no dialog
+    // gets dismissed by reflex, a name has to be read.
+    async deleteProject(projectId, confirmName) {
+        return await gasCall('deleteProject', projectId, confirmName);
+    },
+    async archiveProject(projectId, reason) {
+        return await gasCall('archiveProject', projectId, reason || '');
+    },
+    async unarchiveProject(projectId) {
+        return await gasCall('unarchiveProject', projectId);
+    },
+
     // ── v12: DUPLICATION + LOGO ──
     async duplicatePreview(sourceId) {
         return await gasCall('duplicatePreview', sourceId);
