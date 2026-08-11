@@ -45,15 +45,15 @@ const CONFIG = {
      * apiUrl - the Apps Script Web App /exec URL for THIS company.
      * Each company has its own deployment reading its own spreadsheet.
      */
-    apiUrl: 'https://script.google.com/macros/s/AKfycbwoInhyBINQwtEw66Dh94xT1q6L9aC225NtN86FSygY1PiaUbfBTPhciShCor-puMuc/exec',
+    apiUrl: 'https://script.google.com/macros/s/AKfycbyIuNjph0XC0Jd4yc777cOXrBnzt1rtv8rvzI8X0WISEtuz31CBJmTngv9c7Wcte1Xp_g/exec',
 
     /** company - what the app calls itself. */
     company: {
-        short: 'FCTC',
-        name: 'FCTC Construction Services',
-        appName: 'FCTC Operations Board',
+        short: 'TEEM',
+        name: 'Technical Experts on Environmental Management Inc.',
+        appName: 'TEEM - WWTP ERP System',
         // Shown on the login screen under the sign-in button.
-        notice: 'For FCTC Construction Services internal use only.'
+        notice: 'Wastewater Treatment Plant Division ERP System'
     },
 
     /**
