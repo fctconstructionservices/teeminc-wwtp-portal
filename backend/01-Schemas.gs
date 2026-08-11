@@ -65,7 +65,10 @@ const SCHEMAS = {
     'clientId', 'location', 'startDate', 'endDate', 'contractValue', 'retentionPct', 'editorsJSON',
     // v10: downpayment % of the contract. The advance is recouped from
     // every progress billing until it is fully worked off.
-    'downpaymentPct', 'copiedFrom'],
+    'downpaymentPct', 'copiedFrom',
+    // v16: archive rather than delete for a real project that ended —
+    // a finished job is still needed for tax, warranty and disputes.
+    'archivedAt', 'archiveReason', 'previousStatus'],
   // v3 additions (appended):
   //   budgetMode   -> 'auto' (mat+labor+equip from approved estimate),
   //                   'indirect' (indirect costs only) or 'manual'
