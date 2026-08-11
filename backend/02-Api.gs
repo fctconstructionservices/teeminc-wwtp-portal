@@ -146,6 +146,10 @@ const API_ACTIONS = {
   markAllRead: markAllRead,
   getThreadCounts: getThreadCounts,
 
+  // ── v15: BULK SOW ──
+  previewSowOutline: previewSowOutline,
+  addSOWItemsBulk: addSOWItemsBulk,
+
   // ── v12: DUPLICATION + LOGO ──
   duplicateProject: duplicateProject,
   duplicatePreview: duplicatePreview,
