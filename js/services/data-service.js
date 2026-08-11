@@ -763,6 +763,16 @@ const DataService = {
         return await gasCall('getThreadCounts', refs || []);
     },
 
+    // ── v15: BULK SOW ──
+    // Preview is read-only and runs the SAME parser the write uses, so
+    // what you are shown is exactly what would be created.
+    async previewSowOutline(projectId, text) {
+        return await gasCall('previewSowOutline', projectId, text);
+    },
+    async addSOWItemsBulk(projectId, text, opts) {
+        return await gasCall('addSOWItemsBulk', projectId, text, opts || {});
+    },
+
     // ── v12: DUPLICATION + LOGO ──
     async duplicatePreview(sourceId) {
         return await gasCall('duplicatePreview', sourceId);

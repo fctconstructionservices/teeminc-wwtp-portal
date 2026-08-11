@@ -140,6 +140,168 @@ Object.assign(ProjectPage, {
     },
 
     /**
+     * showBulkSOWModal (v15) - Paste a whole bill of quantities.
+     *
+     * Entering a BOQ one row at a time is forty form submissions for a
+     * job of any size, and nobody does that twice — they enter half and
+     * give up, and the project runs on an incomplete scope.
+     *
+     * INDENTATION IS THE STRUCTURE, and it generates the ids. Nobody
+     * types an id, which matters because ids are structural here: a
+     * person typing them by hand can silently put an item under the
+     * wrong heading.
+     */
+    showBulkSOWModal() {
+        const sample =
+`General Requirements
+  Mobilization and demobilization | 1 | lot
+  Temporary facilities and utilities | 1 | lot
+  Occupational safety and health | 1 | lot
+Earthworks
+  Clearing and grubbing | 12000 | sq.m
+  Excavation
+    Lagoon BF2 | 4200 | cu.m
+    Lagoon NF2 | 5100 | cu.m
+  Embankment and compaction | 3400 | cu.m
+Lagoon Lining Works
+  Geotextile underlayment | 13600 | sq.m
+  HDPE liner installation | 13600 | sq.m`;
+
+        document.getElementById('bulkSowModal')?.remove();
+        const m = document.createElement('div');
+        m.className = 'print-modal-overlay open';
+        m.id = 'bulkSowModal';
+        m.innerHTML = `
+            <div class="print-modal-content" style="max-width:940px;">
+                <button class="close-modal" onclick="document.getElementById('bulkSowModal').remove()">${Icon.close({size:18})}</button>
+                <div class="print-header"><h2>Import a bill of quantities</h2>
+                    <div class="print-meta">Indentation makes the structure — and the item numbers</div></div>
+
+                <div class="boq-rules">
+                    <div><b>Indent with two spaces</b> for each level. A tab counts as two spaces.</div>
+                    <div><b>Anything with items under it becomes a title</b> — no quantity, no estimate,
+                        its money is the total of what is beneath it.</div>
+                    <div><b>Priced items need a quantity and unit</b>, written as
+                        <code>Description | 4200 | cu.m</code></div>
+                    <div><b>Item numbers are generated for you.</b> Do not type them.</div>
+                </div>
+
+                <div class="boq-split">
+                    <div class="boq-in">
+                        <label>Paste your outline</label>
+                        <textarea id="boq-text" spellcheck="false"
+                            oninput="ProjectPage.previewBOQ()">${sample}</textarea>
+                        <button class="btn-sm" onclick="document.getElementById('boq-text').value='';ProjectPage.previewBOQ()">Clear</button>
+                    </div>
+                    <div class="boq-out">
+                        <label>What will be created</label>
+                        <div id="boq-preview" class="boq-preview"></div>
+                    </div>
+                </div>
+
+                <div id="boq-summary"></div>
+
+                <div class="print-actions">
+                    <button class="btn-primary" id="boq-go" onclick="ProjectPage.runBOQImport()">Import</button>
+                    <button class="btn-ghost" onclick="document.getElementById('bulkSowModal').remove()">Cancel</button>
+                </div>
+            </div>`;
+        document.body.appendChild(m);
+        this.previewBOQ();
+    },
+
+    /**
+     * previewBOQ - debounced, and it calls the SERVER parser rather than
+     * a second one written here. Two parsers would eventually disagree,
+     * and the preview would then be showing something other than what
+     * gets written.
+     */
+    previewBOQ() {
+        clearTimeout(this._boqTimer);
+        this._boqTimer = setTimeout(() => this._runBOQPreview(), 350);
+    },
+
+    async _runBOQPreview() {
+        const box = document.getElementById('boq-preview');
+        const sum = document.getElementById('boq-summary');
+        const go = document.getElementById('boq-go');
+        if (!box) return;
+        const text = document.getElementById('boq-text').value;
+        if (!text.trim()) {
+            box.innerHTML = '<div class="boq-empty">Paste an outline on the left.</div>';
+            sum.innerHTML = ''; if (go) go.disabled = true;
+            return;
+        }
+
+        try {
+            const p = await DataService.previewSowOutline(this._currentProjectId, text);
+            const e = v => String(v == null ? '' : v)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+            box.innerHTML = p.rows.length ? p.rows.map(r => `
+                <div class="boq-row ${r.isTitle ? 'is-title' : ''} ${r.collides ? 'is-clash' : ''}"
+                     style="padding-left:${r.depth * 18}px">
+                    <span class="boq-id">${e(r.id)}</span>
+                    <span class="boq-desc">${e(r.description)}</span>
+                    ${r.isTitle
+                        ? '<span class="boq-tag">title</span>'
+                        : `<span class="boq-qty">${r.qty} ${e(r.unit)}</span>`}
+                    ${r.collides ? '<span class="boq-tag clash">exists</span>' : ''}
+                </div>`).join('') : '<div class="boq-empty">Nothing recognised yet.</div>';
+
+            const hasErr = p.errors.length > 0;
+            sum.innerHTML = `
+                ${hasErr ? `<div class="pr-budget-box over" style="margin-top:12px;">
+                    <b>${Icon.warning({size:12})} ${p.errors.length} line(s) need fixing</b>
+                    <p>${p.errors.slice(0, 5).map(x =>
+                        `Line ${x.line}: ${e(x.message)}`).join('<br>')}
+                    ${p.errors.length > 5 ? `<br>…and ${p.errors.length - 5} more` : ''}</p>
+                </div>` : `<div class="pr-budget-box" style="margin-top:12px;">
+                    <b>Ready — ${p.priced} priced item(s) under ${p.titles} title(s)</b>
+                    <p>${p.priced} estimate group(s) will be created, one per priced item.
+                    Titles get none — they have nothing to price.
+                    ${p.existingCount ? `This project already has ${p.existingCount} SOW item(s).` : ''}</p>
+                </div>`}
+                ${p.collisions ? `<div class="pr-budget-box near" style="margin-top:8px;">
+                    <b>${p.collisions} item number(s) already exist here</b>
+                    <p>Their description, quantity and unit would be updated. <b>Budgets and actual
+                    costs are never touched</b> — an import that wiped a budget somebody set by hand
+                    would be a very expensive convenience.</p>
+                    <label style="display:flex;gap:7px;align-items:center;margin-top:7px;font-size:12px;">
+                        <input type="checkbox" id="boq-replace" style="width:auto;" />
+                        Yes, update those ${p.collisions} item(s)</label>
+                </div>` : ''}`;
+
+            if (go) {
+                go.disabled = hasErr || !p.rows.length;
+                go.textContent = hasErr ? 'Fix the lines above'
+                    : `Import ${p.rows.length} item(s)`;
+            }
+        } catch (err) {
+            box.innerHTML = `<div class="boq-empty">${err.message}</div>`;
+        }
+    },
+
+    async runBOQImport() {
+        const text = document.getElementById('boq-text').value;
+        const replace = !!document.getElementById('boq-replace')?.checked;
+        const go = document.getElementById('boq-go');
+        if (go) { go.textContent = 'Importing…'; go.disabled = true; }
+        try {
+            const res = await DataService.addSOWItemsBulk(this._currentProjectId, text,
+                { replaceExisting: replace });
+            document.getElementById('bulkSowModal')?.remove();
+            UI.toast(`${res.added} added${res.updated ? ', ' + res.updated + ' updated' : ''} — ` +
+                `${res.titles} title(s), ${res.priced} priced item(s).`, 'success');
+            await this.open(this._currentProjectId, true);
+            this.switchTab('sow');
+        } catch (err) {
+            UI.toast('' + err.message, 'error');
+            if (go) { go.textContent = 'Import'; go.disabled = false; }
+        }
+    },
+
+    /**
      * toggleSowKind (v11 BATCH H5) - A title has no quantity and no unit,
      * so those fields are hidden AND their `required` removed. Leaving
      * them required but hidden makes the form refuse to submit with
@@ -284,7 +446,9 @@ Object.assign(ProjectPage, {
                 ${(App.getUser() || {}).role === 'superadmin'
                     ? `<button class="btn-sm" title="Find titles that still carry an estimate group"
                         onclick="ProjectPage.auditTitles()">${Icon.search({size:12})} Check titles</button>` : ''}
-                ${this._canEdit !== false ? `<button class="btn-primary" onclick="ProjectPage.showAddSOWModal()" style="padding:4px 14px;font-size:11px;margin-left:auto;">+ Add SOW</button>` : ''}
+                ${this._canEdit !== false ? `
+                    <button class="btn-primary" onclick="ProjectPage.showBulkSOWModal()" style="padding:4px 14px;font-size:11px;margin-left:auto;">${Icon.fileText({size:12})} Import BOQ</button>
+                    <button class="btn-sm" onclick="ProjectPage.showAddSOWModal()">+ Add one</button>` : ''}
                 <span class="badge">Click any SOW to see detailed breakdown</span>
             </div>
             
