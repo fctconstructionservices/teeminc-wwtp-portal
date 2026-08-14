@@ -290,6 +290,103 @@ module.exports = function (t) {
         });
     });
 
+    t.describe('task dates survive Google Sheets', () => {
+        // A due date written as '2026-08-20' is RECOGNISED by Sheets and
+        // converted to a real date value, so it reads back as a Date.
+        // String(date) is "Wed Aug 20 2026 ..." which does not begin
+        // with "2026-08" — so every task was stored correctly and then
+        // filtered out of every month. Assigning appeared to do nothing.
+        const SHEETS = { Tasks: [], Users: [] };
+        const harness = `
+            function ensureSheet_(n){ if(!SHEETS[n]) SHEETS[n]=[]; return SHEETS[n]; }
+            function readAll_(n){ return (SHEETS[n]||[]).map(r=>Object.assign({},r)); }
+            function appendRow_(n,row){ (SHEETS[n]=SHEETS[n]||[]).push(Object.assign({},row)); }
+            function updateRow_(n,k,v,p){ (SHEETS[n]||[]).forEach(r=>{ if(String(r[k])===String(v)) Object.assign(r,p); }); }
+            function deleteRow_(n,k,v){ SHEETS[n]=(SHEETS[n]||[]).filter(r=>String(r[k])!==String(v)); }
+            var _s=0; function nextId_(p){return p+'-'+(++_s);}
+            var ME='darwin@f.ph';
+            function currentUserEmail_(){return ME;} function currentUserName_(){return 'Darwin';}
+            function currentUserRole_(){return 'superadmin';}
+            function requireLogin_(){} function requireApprover_(){} function requireSuperAdmin_(){}
+            function logActivity_(){} function low_(v){return String(v||'').toLowerCase();}
+            function sanitizeDatesDeep_(v){return v;}
+            function uploadImage(){return {url:'http://x/p.png'};}
+            function _esc_(v){return String(v);}
+            // The real formatDate honours the SCRIPT timezone; this
+            // container runs in UTC, so the stub emulates Asia/Manila.
+            var Utilities={formatDate:(d)=>{
+                const m=new Date(d.getTime()+8*3600*1000);
+                const p=n=>String(n).padStart(2,'0');
+                return m.getUTCFullYear()+'-'+p(m.getUTCMonth()+1)+'-'+p(m.getUTCDate());
+            }};
+            var Session={getScriptTimeZone:()=>'Asia/Manila'};
+        `;
+        const api = new Function('SHEETS', harness +
+            t.read('backend/39-TaskService.gs') +
+            '\nreturn {getTasksForMonth, createTask, getAssignableUsers, taskDay_, setMe:v=>{ME=v}};')(SHEETS);
+
+        SHEETS.Users.push({ email: 'darwin@f.ph', name: 'Darwin Fabon', role: 'superadmin', status: 'active' },
+            { email: 'glenn@f.ph', name: 'Glenn Cariaso', role: 'admin', status: 'active' },
+            { email: 'old@f.ph', name: 'Former Staff', role: 'admin', status: 'inactive' });
+
+        t.it('every shape a due date can arrive in resolves', () => {
+            t.eq(api.taskDay_('2026-08-20'), '2026-08-20');
+            t.eq(api.taskDay_("'2026-08-20"), '2026-08-20', 'the Sheets text marker');
+            t.eq(api.taskDay_(new Date(2026, 7, 20)), '2026-08-20', 'a Date object');
+            t.eq(api.taskDay_('Wed Aug 20 2026 00:00:00 GMT+0800'), '2026-08-20', 'a locale string');
+        });
+        t.it('an unreadable date is empty rather than throwing', () => {
+            t.eq(api.taskDay_(''), '');
+            t.eq(api.taskDay_('rubbish'), '');
+        });
+
+        t.it('an assigned task appears in its month, on its day', () => {
+            api.createTask({ title: 'Chase AgriFarms', assignedTo: 'glenn@f.ph', dueDate: '2026-08-20' });
+            const r = api.getTasksForMonth('2026-08');
+            t.eq(r.tasks.length, 1);
+            t.eq(r.tasks[0].dueDate, '2026-08-20');
+            t.ok(!!r.byDay['2026-08-20']);
+        });
+
+        t.it('rows already saved as a Date are still found', () => {
+            // Fixing this only at the point of writing would leave the
+            // tasks already in the sheet invisible forever.
+            SHEETS.Tasks.push({ id: 'TSK-OLD', title: 'Old row', dueDate: new Date(2026, 7, 25),
+                assignedTo: 'glenn@f.ph', assignedBy: 'darwin@f.ph', status: 'open',
+                priority: 'normal', proofRequired: 'none' });
+            const r = api.getTasksForMonth('2026-08');
+            t.ok(r.tasks.some(x => x.dueDate === '2026-08-25'));
+        });
+
+        t.it('the day carries titles, capped, with a full count', () => {
+            for (let i = 0; i < 5; i++) {
+                api.createTask({ title: 'Extra ' + i, assignedTo: 'glenn@f.ph', dueDate: '2026-08-20' });
+            }
+            const d = api.getTasksForMonth('2026-08').byDay['2026-08-20'];
+            t.eq(d.titles.length, 3, 'three is what fits a cell');
+            t.eq(d.total, 6, 'but the count must include the rest');
+        });
+
+        t.it('the assignee sees them flagged as theirs', () => {
+            api.setMe('glenn@f.ph');
+            const r = api.getTasksForMonth('2026-08');
+            t.ok(r.tasks.every(x => x.isMine));
+            t.ok(r.byDay['2026-08-20'].titles.every(x => x.mine));
+            api.setMe('darwin@f.ph');
+        });
+
+        t.it('nothing sends email — the task lives in the system', () =>
+            t.ok(t.read('backend/39-TaskService.gs').indexOf('MailApp') === -1));
+
+        t.it('the picker returns names, sorted, active only', () => {
+            const p = api.getAssignableUsers();
+            t.eq(p.length, 2, 'an inactive account cannot log in to see the task');
+            t.eq(p[0].name, 'Darwin Fabon');
+            t.ok(p.every(x => x.name.indexOf('@') === -1),
+                'an email in a dropdown makes you translate before choosing');
+        });
+    });
+
     t.describe('tasks', () => {
         const src = t.read('backend/39-TaskService.gs');
         t.it('proof is enforced on the server', () => {

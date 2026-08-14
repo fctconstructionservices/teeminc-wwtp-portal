@@ -85,7 +85,11 @@
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
 .cal-day {
     position: relative;
-    min-height: 74px;
+    /* v18.2: taller, because the day now carries the task TITLES rather
+       than a count. A number tells you something is there; the title
+       tells you whether it is worth opening — which is the whole reason
+       to look at a month rather than a list. */
+    min-height: 96px;
     border-right: 1px solid var(--line);
     border-bottom: 1px solid var(--line);
     background: var(--surface);
@@ -95,7 +99,8 @@
     font-family: var(--font-body);
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
+    overflow: hidden;
     transition: background var(--transition);
 }
 .cal-day:nth-child(7n) { border-right: none; }
@@ -117,6 +122,9 @@
 .cal-pip.a { background: var(--amber); }
 .cal-pip.g { background: var(--green); }
 .cal-cnt {
+    /* v18.2: hidden on desktop, where the titles say more than a number.
+       It returns on a phone, where the titles do not fit. */
+    display: none;
     margin-top: auto;
     font-family: var(--font-num);
     font-size: 9.5px;
@@ -258,3 +266,47 @@
 }
 .cm-flag.hi { background: var(--amber); color: #15181A; }
 .cm-more { font-size: 11px; color: var(--ink-soft); align-self: center; }
+
+
+/* v18.2 — the task titles inside a day cell. */
+.cal-top { display: flex; align-items: center; gap: 5px; margin-bottom: 2px; }
+.cal-day.has-overdue { background: rgba(192, 54, 44, .05); }
+
+.cal-t {
+    display: block;
+    font-size: 10px;
+    line-height: 1.3;
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: var(--blueprint-tint);
+    color: var(--ink);
+    border-left: 2px solid var(--blueprint);
+    /* One line each. A wrapped title pushes the rest of the week out of
+       alignment, and the full text is in the tooltip and the day panel. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
+}
+/* Yours stands out — a busy month should still show what is on you. */
+.cal-t.is-mine { border-left-color: var(--amber); font-weight: 600; }
+.cal-t.is-done {
+    opacity: .5;
+    text-decoration: line-through;
+    border-left-color: var(--green);
+}
+.cal-more {
+    font-family: var(--font-num);
+    font-size: 8.5px;
+    color: var(--ink-soft);
+    padding-left: 4px;
+}
+
+@media (max-width: 700px) {
+    /* On a phone the titles do not fit legibly, so the day falls back to
+       pips and a count — the grid stays usable as an overview and the
+       detail is one tap away. */
+    .cal-day { min-height: 52px; }
+    .cal-t, .cal-more { display: none; }
+    .cal-cnt { display: block; }
+}

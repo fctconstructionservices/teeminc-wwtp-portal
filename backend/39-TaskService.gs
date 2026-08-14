@@ -59,9 +59,22 @@ function getTasksForMonth(month) {
     users[String(u.email).toLowerCase()] = u.name || u.email;
   });
 
+  // ── v18.2 FIX: THE DATE COMES BACK AS A DATE ──
+  // A due date is written as the string '2026-08-20'. Google Sheets
+  // recognises that shape and CONVERTS IT to a real date value, so it
+  // reads back as a Date object — and String(date) is
+  // "Wed Aug 20 2026 00:00:00 GMT+0800", which does not begin with
+  // "2026-08".
+  //
+  // So every task was stored correctly and then filtered out of every
+  // month. Assigning appeared to do nothing at all.
+  //
+  // Everything now goes through taskDay_, which accepts either shape.
+  // Fixing it only at the point of writing would leave the tasks
+  // already in the sheet invisible forever.
   var byDay = {};
   var rows = readAll_('Tasks').filter(function (t) {
-    if (String(t.dueDate || '').indexOf(m) !== 0) return false;
+    if (taskDay_(t.dueDate).indexOf(m) !== 0) return false;
     // Someone who is not an admin sees only what concerns them. A task
     // list that shows everybody's work to everybody is a list people
     // stop reading.
@@ -69,9 +82,19 @@ function getTasksForMonth(month) {
         String(t.assignedBy).toLowerCase() !== me) return false;
     return true;
   }).map(function (t) {
-    var day = String(t.dueDate).slice(0, 10);
-    byDay[day] = byDay[day] || { total: 0, open: 0, overdue: 0, mine: 0 };
+    var day = taskDay_(t.dueDate);
+    byDay[day] = byDay[day] || { total: 0, open: 0, overdue: 0, mine: 0, titles: [] };
     byDay[day].total++;
+    // The grid writes the titles into the day, so a month can be read
+    // without clicking anything. Three is what fits a cell; beyond that
+    // the count carries the rest.
+    if (byDay[day].titles.length < 3) {
+      byDay[day].titles.push({
+        title: t.title,
+        status: low_(t.status) || 'open',
+        mine: String(t.assignedTo).toLowerCase() === me
+      });
+    }
     if (low_(t.status) === 'open') {
       byDay[day].open++;
       if (day < Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd')) {
@@ -149,7 +172,11 @@ function createTask(data) {
     id: id,
     title: title,
     detail: String((data && data.detail) || ''),
-    dueDate: due,
+    // Written with a leading apostrophe so Sheets keeps it as TEXT.
+    // Without it the cell is converted to a date value and comes back a
+    // Date — which is the bug above. New rows are now stored in the one
+    // shape, and taskDay_ still handles the old ones.
+    dueDate: "'" + due,
     projectId: String((data && data.projectId) || ''),
     assignedTo: to,
     assignedBy: currentUserEmail_().toLowerCase(),
@@ -161,23 +188,10 @@ function createTask(data) {
     reopenedAt: '', reopenReason: ''
   });
 
-  // The same email path the discussion mentions use. Without it a task
-  // is only seen by someone who happens to open the calendar.
-  try {
-    MailApp.sendEmail({
-      to: to,
-      subject: '[FCTC] Task for ' + due + ': ' + title,
-      htmlBody: '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.5">' +
-        '<p><b>' + _esc_(currentUserName_()) + '</b> assigned you a task.</p>' +
-        '<p style="font-size:16px"><b>' + _esc_(title) + '</b></p>' +
-        (data.detail ? '<p>' + _esc_(String(data.detail)) + '</p>' : '') +
-        '<p>Due <b>' + _esc_(due) + '</b>' +
-        (proof !== 'none' ? ' · requires ' + (proof === 'file' ? 'a photo or file' : 'a note') + ' as proof' : '') +
-        '</p><p style="color:#697077;font-size:12px">Open the Operations Board to mark it done.</p></div>'
-    });
-  } catch (err) {
-    logActivity_('Task email to ' + to + ' failed: ' + err.message, 'a', id);
-  }
+  // v18.2: no email. Tasks live in the system — the assignee sees them
+  // at the top of their calendar the moment they log in, which is where
+  // they can act on them. An email is a second copy that goes stale the
+  // moment the task changes, and it cannot be marked done.
 
   logActivity_('Task assigned to ' + (user.name || to) + ' — "' + title + '" due ' + due,
     'blue', id);
@@ -294,7 +308,7 @@ function getMyTaskSummary() {
   var open = 0, overdue = 0, dueToday = 0, assignedByMe = 0;
   readAll_('Tasks').forEach(function (t) {
     if (low_(t.status) !== 'open') return;
-    var due = String(t.dueDate || '').slice(0, 10);
+    var due = taskDay_(t.dueDate);
     if (String(t.assignedTo).toLowerCase() === me) {
       open++;
       if (due < today) overdue++;
@@ -333,4 +347,30 @@ function getAssignableUsers() {
       };
     })
     .sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+}
+
+
+/**
+ * taskDay_ (v18.2) - a due date as 'YYYY-MM-DD', whatever shape it
+ * arrives in.
+ *
+ * A date written to Sheets as a string is converted to a real date
+ * value, so it reads back as a Date. Both shapes exist in the sheet
+ * already, which is why this accepts either rather than being fixed at
+ * the point of writing.
+ */
+function taskDay_(v) {
+  if (!v) return '';
+  if (Object.prototype.toString.call(v) === '[object Date]') {
+    if (isNaN(v.getTime())) return '';
+    return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+  // The leading apostrophe is Sheets' text marker and is not always
+  // stripped on read.
+  var s = String(v).trim().replace(/^'/, '');
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  // Anything else — a locale string, an ISO timestamp — is parsed.
+  var d = new Date(s);
+  if (isNaN(d.getTime())) return '';
+  return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
 }

@@ -25,6 +25,17 @@ const CalendarPanel = {
     _data: null,
     _selected: null,
 
+    /** Months already fetched, kept for the tab's lifetime.
+     *
+     *  Stepping back and forth between two months was a full round trip
+     *  each way — and people step back and forth constantly, because
+     *  that is how you compare one week against another. A month you
+     *  have already seen is drawn instantly and refreshed behind the
+     *  screen, the same pattern FastCache uses for project data.
+     */
+    _months: {},
+    _people: null,
+
     _esc(v) {
         return String(v == null ? '' : v)
             .replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -44,16 +55,76 @@ const CalendarPanel = {
         await this.load(el);
     },
 
-    async load(el) {
+    /**
+     * load - draws from cache first when there is one, then refreshes.
+     *
+     * @param force  skip the cache; used after a write, where showing
+     *               the old month would hide the change just made.
+     */
+    async load(el, force) {
         this._host = el || this._host;
+        const cached = this._months[this._month];
+
+        if (cached && !force) {
+            this._data = cached;
+            this._paint();
+            // Behind the screen. Not awaited — awaiting it would bring
+            // back the wait this exists to remove.
+            this._refresh(this._month);
+            return;
+        }
+
+        if (!cached) {
+            // Only show a loading state when there is genuinely nothing
+            // to draw. Replacing a good month with "Loading…" for half a
+            // second reads as slower than leaving it alone.
+            this._host.innerHTML =
+                '<div class="cal-shell"><div class="cal-loading">Loading the month…</div></div>';
+        }
+
         try {
-            this._data = await DataService.getTasksForMonth(this._month);
+            const d = await DataService.getTasksForMonth(this._month);
+            this._months[this._month] = d;
+            this._data = d;
         } catch (err) {
             this._host.innerHTML =
                 `<div class="cal-shell"><div class="cal-loading">Could not load: ${this._esc(err.message)}</div></div>`;
             return;
         }
         this._paint();
+    },
+
+    async _refresh(month) {
+        try {
+            const d = await DataService.getTasksForMonth(month);
+            const changed = JSON.stringify(d) !== JSON.stringify(this._months[month]);
+            this._months[month] = d;
+            // Redraw only if the month is still on screen AND something
+            // actually changed — repainting an identical grid throws
+            // away the open day panel for nothing.
+            if (changed && this._month === month) {
+                this._data = d;
+                this._paint();
+            }
+        } catch (err) { /* a failed background refresh needs no alarm */ }
+    },
+
+    /** _prefetch - the neighbouring months, quietly.
+     *
+     *  Almost every use of a calendar is a step to the month either
+     *  side, so both are fetched once the current one is drawn. It costs
+     *  two idle requests and makes the arrows feel like they have no
+     *  latency at all. */
+    _prefetch() {
+        const [y, m] = this._month.split('-').map(Number);
+        [-1, 1].forEach(n => {
+            const d = new Date(y, m - 1 + n, 1);
+            const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+            if (this._months[key]) return;
+            DataService.getTasksForMonth(key)
+                .then(r => { this._months[key] = r; })
+                .catch(() => {});
+        });
     },
 
     async shift(n) {
@@ -99,15 +170,24 @@ const CalendarPanel = {
             const isPast = iso < today;
             const weekend = [0, 6].indexOf(new Date(y, m - 1, day).getDay()) > -1;
 
-            cells += `<button class="cal-day${isToday ? ' is-today' : ''}${isSel ? ' is-sel' : ''}${weekend ? ' is-weekend' : ''}${isPast ? ' is-past' : ''}"
+            // v18.2: the TITLES are written into the day, not just a
+            // count. A number tells you something is there; the title
+            // tells you whether it is worth opening — which is the whole
+            // reason to look at a month rather than a list.
+            const titles = (c.titles || []).map(t =>
+                `<span class="cal-t${t.status === 'done' ? ' is-done' : ''}${t.mine ? ' is-mine' : ''}"
+                       title="${e(t.title)}">${e(t.title)}</span>`).join('');
+            const more = c.total > (c.titles || []).length
+                ? `<span class="cal-more">+${c.total - c.titles.length} more</span>` : '';
+
+            cells += `<button class="cal-day${isToday ? ' is-today' : ''}${isSel ? ' is-sel' : ''}${weekend ? ' is-weekend' : ''}${isPast ? ' is-past' : ''}${c.overdue ? ' has-overdue' : ''}"
                 onclick="CalendarPanel.pick('${iso}')" aria-label="${iso}, ${c.total} task(s)">
-                <span class="cal-n">${day}</span>
-                ${c.total ? `<span class="cal-marks">
+                <span class="cal-top">
+                    <span class="cal-n">${day}</span>
                     ${c.overdue ? `<span class="cal-pip d" title="${c.overdue} overdue"></span>` : ''}
-                    ${c.open - c.overdue > 0 ? `<span class="cal-pip a"></span>` : ''}
-                    ${c.total - c.open > 0 ? `<span class="cal-pip g"></span>` : ''}
                 </span>
-                <span class="cal-cnt${c.mine ? ' is-mine' : ''}">${c.total}</span>` : ''}
+                ${titles}${more}
+                ${c.total ? `<span class="cal-cnt${c.mine ? ' is-mine' : ''}">${c.total}</span>` : ''}
             </button>`;
         }
 
@@ -130,6 +210,8 @@ const CalendarPanel = {
                     onclick="CalendarPanel.openNew('${sel || today}')">+ Assign a task</button>` : ''}
             </div>
 
+            ${this._mineHtml()}
+
             <div class="cal-dow">
                 ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
                     .map(x => `<span>${x}</span>`).join('')}
@@ -148,6 +230,73 @@ const CalendarPanel = {
                     : '<div class="cdp-empty">Nothing due on this day.</div>'}
             </div>` : ''}
         </div>`;
+
+        // Neighbouring months, once the current one is on screen.
+        this._prefetch();
+    },
+
+    /**
+     * _mineHtml (v18.1) - YOUR tasks, above the grid.
+     *
+     * The grid answers "when is the quiet week". It does not answer
+     * "what have I been given", and that is the question the person
+     * assigned a task has the moment they log in. Without this they
+     * would have to hunt for the right day, which means they would
+     * simply rely on the email — and a task nobody can find in the
+     * system is a task the system is not managing.
+     *
+     * Overdue first, then due today, then the rest. Only open ones:
+     * a finished task is not something you still have to do.
+     */
+    _mineHtml() {
+        const d = this._data || { tasks: [] };
+        const today = this._today();
+        const mine = (d.tasks || [])
+            .filter(t => t.isMine && t.status === 'open')
+            .sort((a, b) => a.dueDate < b.dueDate ? -1 : 1);
+
+        if (!mine.length) return '';
+
+        const e = this._esc.bind(this);
+        const overdue = mine.filter(t => t.dueDate < today).length;
+        const due = mine.filter(t => t.dueDate === today).length;
+
+        return `<div class="cal-mine${overdue ? ' has-overdue' : ''}">
+            <div class="cm-head">
+                ${Icon.check({ size: 13 })}
+                <b>Assigned to you</b>
+                <span>${mine.length} open${overdue ? ` · <b class="od">${overdue} overdue</b>` : ''}${due ? ` · ${due} due today` : ''}</span>
+            </div>
+            <div class="cm-list">
+                ${mine.slice(0, 6).map(t => {
+                    const late = t.dueDate < today;
+                    const now = t.dueDate === today;
+                    return `<button class="cm-item${late ? ' is-late' : ''}${now ? ' is-today' : ''}"
+                        onclick="CalendarPanel.jumpTo('${e(t.dueDate)}')">
+                        <span class="cm-when">${late ? 'overdue' : now ? 'today' : e(t.dueDate.slice(5))}</span>
+                        <span class="cm-title">${e(t.title)}</span>
+                        ${t.proofRequired !== 'none' ? '<span class="cm-flag">proof</span>' : ''}
+                        ${t.priority === 'high' ? '<span class="cm-flag hi">high</span>' : ''}
+                    </button>`;
+                }).join('')}
+                ${mine.length > 6 ? `<div class="cm-more">and ${mine.length - 6} more this month</div>` : ''}
+            </div>
+        </div>`;
+    },
+
+    /** jumpTo - opens the day a task is due, from the "assigned to you"
+     *  strip. Selecting the day rather than opening the task directly
+     *  keeps one way of acting on a task instead of two. */
+    jumpTo(iso) {
+        if (iso.slice(0, 7) !== this._month) {
+            this._month = iso.slice(0, 7);
+            this._selected = iso;
+            this.load();
+            return;
+        }
+        this._selected = iso;
+        this._paint();
+        document.querySelector('.cal-day-panel')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     },
 
     _task(t) {
@@ -202,11 +351,16 @@ const CalendarPanel = {
 
     async openNew(iso) {
         const e = this._esc.bind(this);
-        let people = [];
-        try {
-            const home = await DataService.getHomeData();
-            people = (home && home.users) || [];
-        } catch (err) { /* the picker degrades to a typed email */ }
+        // v18.1: its own endpoint. This read getHomeData().users, which
+        // does not exist — so the picker was empty and nothing could be
+        // assigned to anybody. Cached for the session: the user list
+        // changes about once a quarter.
+        if (!this._people) {
+            try {
+                this._people = await DataService.getAssignableUsers();
+            } catch (err) { this._people = []; }
+        }
+        const people = this._people;
 
         document.getElementById('taskModal')?.remove();
         const m = document.createElement('div');
@@ -230,8 +384,8 @@ const CalendarPanel = {
                     <div class="field"><label>Who *</label>
                         <select id="tk-to">
                             <option value="">Select a person...</option>
-                            ${people.filter(p => String(p.status || 'active').toLowerCase() !== 'inactive')
-                                .map(p => `<option value="${e(p.email)}">${e(p.name || p.email)}</option>`).join('')}
+                            ${people.map(p =>
+                                `<option value="${e(p.email)}">${e(p.name)}${p.role ? ' · ' + e(p.role) : ''}</option>`).join('')}
                         </select></div>
                     <div class="field"><label>Due *</label>
                         <input type="date" id="tk-due" value="${e(iso)}" /></div>
@@ -285,7 +439,8 @@ const CalendarPanel = {
                 UI.toast('Task assigned and emailed.', 'success');
                 this._selected = v('tk-due');
                 this._month = v('tk-due').slice(0, 7);
-                await this.load();
+                delete this._months[this._month];
+                await this.load(null, true);
             } catch (err) { UI.toast('' + err.message, 'error'); }
         });
     },
@@ -343,7 +498,8 @@ const CalendarPanel = {
                 await DataService.completeTask(id, proof);
                 document.getElementById('doneModal')?.remove();
                 UI.toast('Marked done.', 'success');
-                await this.load();
+                delete this._months[this._month];
+                await this.load(null, true);
             } catch (err) { UI.toast('' + err.message, 'error'); }
         });
     },
@@ -355,7 +511,8 @@ const CalendarPanel = {
         try {
             await DataService.reopenTask(id, '');
             UI.toast('Reopened.', 'success');
-            await this.load();
+            delete this._months[this._month];
+            await this.load(null, true);
         } catch (err) { UI.toast('' + err.message, 'error'); }
     },
 
@@ -367,7 +524,8 @@ const CalendarPanel = {
         try {
             await DataService.cancelTask(id, '');
             UI.toast('Cancelled.', 'success');
-            await this.load();
+            delete this._months[this._month];
+            await this.load(null, true);
         } catch (err) { UI.toast('' + err.message, 'error'); }
     }
 };
