@@ -68,7 +68,10 @@ const SCHEMAS = {
     'downpaymentPct', 'copiedFrom',
     // v16: archive rather than delete for a real project that ended —
     // a finished job is still needed for tax, warranty and disputes.
-    'archivedAt', 'archiveReason', 'previousStatus'],
+    'archivedAt', 'archiveReason', 'previousStatus',
+    // v18: the contract value is VAT-inclusive; billing works from
+    // the net, then adds VAT back once as its own line.
+    'vatPct', 'vatRegistered'],
   // v3 additions (appended):
   //   budgetMode   -> 'auto' (mat+labor+equip from approved estimate),
   //                   'indirect' (indirect costs only) or 'manual'
@@ -211,6 +214,18 @@ const SCHEMAS = {
   PRLines: ['id', 'prId', 'materialId', 'itemName', 'unit', 'qty', 'rate', 'amount',
     'qtyOrdered', 'qtyReceived', 'notes', 'sortOrder'],
 
+  // ── v18: TASKS ──
+  // Everything else in this system records what HAS happened. Nothing
+  // recorded what SHOULD happen and by when — that gap was filled by
+  // messages that scroll away and by remembering.
+  //
+  // A completed task keeps its proof even when reopened, so a disputed
+  // item shows both attempts rather than only the one that worked.
+  Tasks: ['id', 'title', 'detail', 'dueDate', 'projectId',
+    'assignedTo', 'assignedBy', 'priority', 'proofRequired', 'status',
+    'createdAt', 'completedAt', 'completedBy', 'proofNote', 'proofUrl',
+    'reopenedAt', 'reopenReason'],
+
   // ── v14: DISCUSSION ──
   // A comment is identified by recordType + recordId and nothing else.
   // That single key is why one service covers sixteen surfaces rather
@@ -291,7 +306,7 @@ const SCHEMAS = {
   // of the advance deducted from THIS billing.
   Billings: ['id', 'projectId', 'billingNo', 'period', 'prevPct', 'currentPct',
     'grossAmount', 'retentionAmount', 'netAmount', 'status', 'submittedBy', 'createdAt', 'paidAt',
-    'billingType', 'dpRecoupment'],
+    'billingType', 'dpRecoupment', 'vatAmount', 'vatPct'],
 
   // v6 NEW: variation orders. Client-Approved VOs raise the affected SOW
   // budget and the revised contract value (computed live, non-destructive).

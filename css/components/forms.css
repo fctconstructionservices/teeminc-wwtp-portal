@@ -563,3 +563,44 @@
     color: var(--ink-soft);
     margin-top: 1px;
 }
+
+/* ================================================================
+   v18 — BUSY BUTTONS
+
+   Apps Script round trips take a second or more. A button that looks
+   identical before and after you press it tells the person nothing, so
+   they press it again — and on a Save that is two records, on an
+   Approve two approvals racing.
+
+   The label becomes a verb in progress, because a spinner says
+   "something is happening" while a changed word says "your click
+   registered, and THIS is what it started".
+   ================================================================ */
+
+button.is-busy {
+    opacity: .82;
+    cursor: progress;
+    position: relative;
+}
+button.is-busy:disabled { opacity: .82; }
+
+.busy-dot {
+    display: inline-block;
+    width: 11px;
+    height: 11px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: busy-spin .65s linear infinite;
+    vertical-align: -1px;
+    margin-right: 7px;
+    opacity: .85;
+}
+@keyframes busy-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+    /* A static ring still reads as "in progress" without the movement. */
+    .busy-dot { animation: none; border-top-color: currentColor; opacity: .5; }
+}
+
+.login-btn.is-busy { background: var(--steel); }

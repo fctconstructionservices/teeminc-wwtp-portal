@@ -70,7 +70,7 @@ Object.assign(ProjectPage, {
                 <div class="section-label">Work Accomplished <span class="rule"></span></div>
                 <div id="workEntries"><div class="entry-row" style="display:block;border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;background:var(--bg);">
                     <div style="display:grid;grid-template-columns:2fr 90px 30px;gap:8px;align-items:end;">
-                        <div class="field"><label>1 · Which SOW item was worked on? *</label><select class="wk-scope">${this._sowOptions()}</select></div>
+                        <div class="field"><label>1 · Which SOW item was worked on? *</label><select class="wk-scope" onchange="ProjectPage.syncSowPct(this)">${this._sowOptions()}</select></div>
                         <div class="field"><label>2 · % Complete</label><input type="number" class="wk-pct" min="0" max="100" placeholder="0-100" /></div>
                         <button class="btn-sm danger" style="margin-bottom:6px;" onclick="ProjectPage.removeEntry(this,'work')">${Icon.close({size:12})}</button>
                     </div>
@@ -145,25 +145,83 @@ Object.assign(ProjectPage, {
      * <select> strips leading whitespace and CSS padding does not reach
      * inside an <option> in most browsers.
      */
-    _sowOptions() {
+    /**
+     * _sowOptions (v18) - Only work that is still open, with its current
+     * percentage carried on the option.
+     *
+     * FINISHED ITEMS ARE HIDDEN. A list that keeps offering scopes that
+     * are already at 100% gets longer every week and never shorter, and
+     * the one time somebody picks a finished item by mistake the
+     * progress rolls backwards.
+     *
+     * The current percentage rides along in a data attribute so that
+     * choosing a scope fills in where it stands today. Asking a
+     * foreman for "% complete" with an empty box invites a guess at
+     * TODAY'S work rather than the CUMULATIVE figure — and that is the
+     * number progress and billing are computed from.
+     *
+     * @param includeId  keep this item even if finished, so editing an
+     *                   old record does not silently lose its scope.
+     */
+    _sowOptions(includeId) {
         const items = this._sowItems || [];
         const esc = v => String(v || '').replace(/"/g, '&quot;').replace(/</g, '&lt;');
         const PAD = '\u2007\u2007';   // figure space — survives inside <option>
+        const progress = this._sowProgress || {};
         let html = '<option value="">Select SOW...</option>';
-        let open = false;
+        let open = false, shown = 0, hidden = 0, shownInGroup = 0;
 
         items.forEach(s => {
             if (s.isHeading) {
-                if (open) html += '</optgroup>';
+                // The group is buffered — a heading whose children are
+                // all finished would otherwise print as an empty label.
+                if (open && !shownInGroup) html = html.slice(0, html.lastIndexOf('<optgroup'));
+                else if (open) html += '</optgroup>';
                 html += `<optgroup label="${esc(s.id)} — ${esc(s.description)}">`;
                 open = true;
+                shownInGroup = 0;
                 return;
             }
+            const pct = Math.round(parseFloat(progress[s.id]) || 0);
+            if (pct >= 100 && String(s.id) !== String(includeId || '')) { hidden++; return; }
+
             const indent = PAD.repeat(Math.max(0, (s.level || 1) - 1));
-            html += `<option value="${esc(s.id)}">${indent}${esc(s.id)} — ${esc(s.description)}</option>`;
+            const mark = pct > 0 ? `  ·  ${pct}%` : '';
+            html += `<option value="${esc(s.id)}" data-pct="${pct}">${indent}${esc(s.id)} — ${esc(s.description)}${mark}</option>`;
+            shown++; shownInGroup++;
         });
-        if (open) html += '</optgroup>';
+        if (open && !shownInGroup) html = html.slice(0, html.lastIndexOf('<optgroup'));
+        else if (open) html += '</optgroup>';
+
+        this._sowHiddenCount = hidden;
+        if (!shown) {
+            return '<option value="">Every SOW item is at 100% — nothing left to report</option>';
+        }
         return html;
+    },
+
+    /**
+     * syncSowPct (v18) - Fills the percent box with where the scope
+     * stands TODAY when one is chosen.
+     *
+     * The field is cumulative, not "what we did today", and an empty box
+     * does not say so. Pre-filling with the current figure makes the
+     * question "how far is it now?" rather than "what is this number?",
+     * and the foreman edits upwards from a real starting point.
+     */
+    syncSowPct(sel) {
+        const row = sel.closest('.entry-row');
+        if (!row) return;
+        const pctEl = row.querySelector('.wk-pct');
+        if (!pctEl) return;
+        const opt = sel.selectedOptions[0];
+        const cur = opt ? (parseFloat(opt.dataset.pct) || 0) : 0;
+        // Never overwrite something already typed — a value in the box
+        // is a person's judgement and outranks the stored figure.
+        if (String(pctEl.value).trim() === '') pctEl.value = cur;
+        // The stored figure is the floor: progress cannot go backwards.
+        pctEl.min = cur;
+        pctEl.placeholder = cur ? `now at ${cur}% — enter the new total` : '0-100';
     },
     /**
      * ── v11 BATCH I2: TYPE OR PICK ──

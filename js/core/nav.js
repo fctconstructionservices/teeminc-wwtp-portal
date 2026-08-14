@@ -299,17 +299,20 @@ const Nav = {
                 ${u.total ? `<button onclick="Nav.clearBell()">Mark all read</button>` : ''}
             </div>
             ${u.items && u.items.length ? u.items.map(i => `
-                <button class="bell-item ${i.mentioned ? 'is-mention' : ''}"
+                <button class="bell-item ${i.mentioned ? 'is-mention' : ''} ${i.read ? 'is-read' : ''}"
                         onclick="Nav.openNotification('${e(i.recordType)}','${e(i.recordId)}','${e(i.projectId)}')">
                     <span class="bi-top">
+                        ${i.read ? '' : '<span class="bi-new"></span>'}
                         ${i.mentioned ? '<em>mentioned you</em>' : ''}
                         <b>${e(i.authorName)}</b>
                         <span>${e(label(i.recordType))} ${e(i.recordId)}</span>
                     </span>
                     <span class="bi-body">${e(i.excerpt)}</span>
                 </button>`).join('')
-            : '<div class="bell-empty">Nothing new. Comments you are mentioned in show up here.</div>'}
-            <div class="bell-foot">Checked every 90 seconds. Mentions are emailed to you as well.</div>`;
+            : '<div class="bell-empty">Nothing in the last 30 days. Comments you are mentioned in show up here.</div>'}
+            <div class="bell-foot">
+                ${u.total ? `${u.total} unread of ${u.shown || u.items.length} shown. ` : ''}Last 30 days ·
+                checked every 90 seconds · mentions are emailed to you as well.</div>`;
     },
 
     async clearBell() {

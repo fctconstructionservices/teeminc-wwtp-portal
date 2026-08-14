@@ -78,8 +78,20 @@ function getPortfolioData() {
     var basisSum = 0, earned = 0, plannedSum = 0, plannedToDate = 0;
     var unapproved = [], zeroBudget = [];
 
+    // ── v18 FIX: TITLES ARE NOT MISSING AN ESTIMATE ──
+    // A title has nothing to price — that is what makes it a title. It
+    // was being counted as an SOW item without an approved estimate, so
+    // every project with a properly structured BOQ reported a problem
+    // that could never be cleared. Approving every real estimate did
+    // not silence it, which is the worst kind of alert: one you learn
+    // to ignore.
+    var tree = buildSowTree_(sows);
+    var isHeading = {};
+    tree.forEach(function (n) { if (n.isHeading) isHeading[String(n.id).trim()] = true; });
+
     sows.forEach(function (s) {
       if (String(s.isMilestone) === 'true') return;
+      if (isHeading[String(s.id).trim()]) return;
       var g = groupBySow[s.id];
       var est = (g && g.status === 'approved') ? groupTotal_(g.id) : 0;
       if (est <= 0) unapproved.push(s.id);
