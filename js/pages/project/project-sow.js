@@ -386,6 +386,13 @@ Lagoon Lining Works
             const p = await DataService.getProjectData(this._currentProjectId);
             if (!p) return;
             this._sowItems = Array.isArray(p.sowItems) ? p.sowItems : [];
+            // v18: the daily record's SOW picker needs each item's
+            // current percentage — to hide finished work and to pre-fill
+            // the box with where the scope stands today.
+            this._sowProgress = {};
+            this._sowItems.forEach(s => {
+                this._sowProgress[s.id] = parseFloat(s.progress) || 0;
+            });
             p.sowItems = this._sowItems;
             this._data = p;
             this._estimatesData = p.estimates || {};

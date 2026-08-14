@@ -276,44 +276,67 @@ function getUnread() {
     users[String(u.email).toLowerCase()] = u.name || u.email;
   });
 
+  // ── v18: READ NOTIFICATIONS STAY IN THE LIST ──
+  // They used to disappear the moment the thread was opened. That makes
+  // the panel useless as a record: you glance at a notification, get
+  // pulled into something else, and it is gone with no way back to it
+  // except remembering which record it was on.
+  //
+  // Everything recent is returned now, each marked read or unread. The
+  // BADGE still counts only the unread — the badge answers "is there
+  // anything new", the list answers "what has been happening".
   var items = [], total = 0, mentionCount = 0;
+  var cutoff = Date.now() - (NOTIFICATION_WINDOW_DAYS * 86400000);
 
   readAll_('Comments').forEach(function (c) {
     if (String(c.author).toLowerCase() === me) return;          // your own is not news
     if (String(c.deletedAt || '').trim()) return;
 
-    var key = _commentKey_(c.recordType, c.recordId);
     var when = new Date(c.createdAt).getTime();
-    if (readAt[key] && when <= readAt[key]) return;
+    if (isNaN(when) || when < cutoff) return;
 
-    total++;
+    var key = _commentKey_(c.recordType, c.recordId);
+    var isRead = !!(readAt[key] && when <= readAt[key]);
     var mentioned = safeParse_(c.mentionsJSON, []).indexOf(me) > -1;
-    if (mentioned) mentionCount++;
+
+    if (!isRead) {
+      total++;
+      if (mentioned) mentionCount++;
+    }
 
     items.push({
       id: c.id, recordType: c.recordType, recordId: c.recordId,
       projectId: c.projectId || '',
       authorName: users[String(c.author).toLowerCase()] || c.author,
-      // A short excerpt only. The badge is a prompt to go and read the
-      // thread, not a way to read it from the notification list.
+      // A short excerpt only. The list is a prompt to go and read the
+      // thread, not a way to read it from the notification panel.
       excerpt: String(c.body || '').slice(0, 90),
       mentioned: mentioned,
+      read: isRead,
       createdAt: c.createdAt
     });
   });
 
   items.sort(function (a, b) {
-    // Mentions first: being addressed by name outranks being copied in.
+    // Unread first — the whole point of looking is to find what is new.
+    if (a.read !== b.read) return a.read ? 1 : -1;
+    // Then mentions: being addressed by name outranks being copied in.
     if (a.mentioned !== b.mentioned) return a.mentioned ? -1 : 1;
     return new Date(b.createdAt) - new Date(a.createdAt);
   });
 
   return sanitizeDatesDeep_({
-    total: total,
-    mentions: mentionCount,
-    items: items.slice(0, 15)
+    total: total,               // UNREAD only — this drives the badge
+    mentions: mentionCount,     // unread mentions
+    shown: items.length,
+    items: items.slice(0, 40)
   });
 }
+
+/** How far back the notification list reaches. Long enough to find
+ *  something you skimmed past last week, short enough that the panel
+ *  does not become an archive nobody scrolls. */
+var NOTIFICATION_WINDOW_DAYS = 30;
 
 /** markAllRead - clears the bell in one action. */
 function markAllRead() {

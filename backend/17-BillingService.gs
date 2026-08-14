@@ -126,7 +126,24 @@ function createBilling(projectId, currentPct, period) {
   var rp = parseFloat(proj.retentionPct);
   if (isNaN(rp) || rp < 0 || rp > 0.5) rp = 0.10;
 
-  var gross = (pct - prevPct) / 100 * revised;
+  // ── v18 FIX: ACCOMPLISHMENT IS BILLED ON THE VAT-EXCLUSIVE VALUE ──
+  // The contract value is what the client agreed to pay, VAT included.
+  // Applying the accomplishment percentage to that figure charges VAT
+  // on VAT: the progress amount already contains the tax, and then
+  // output VAT is added on top of it again.
+  //
+  // The percentage applies to the NET value; VAT is added back once, at
+  // the end, as its own line — which is how a SWA reads and how BIR
+  // expects an invoice to be built.
+  var vatPct = parseFloat(proj.vatPct);
+  if (isNaN(vatPct) || vatPct < 0 || vatPct > 0.25) vatPct = 0.12;
+  // A project can be non-VAT or zero-rated. Defaulting to VAT-registered
+  // is right for most work here, but it has to be overridable.
+  if (String(proj.vatRegistered || 'TRUE').toUpperCase() === 'FALSE') vatPct = 0;
+
+  var contractNet = vatPct > 0 ? revised / (1 + vatPct) : revised;
+
+  var gross = (pct - prevPct) / 100 * contractNet;   // VAT-exclusive
   var retention = gross * rp;
 
   // ── DOWNPAYMENT RECOUPMENT ──
@@ -154,10 +171,27 @@ function createBilling(projectId, currentPct, period) {
   if (dp.outstanding > 0) {
     // never more than the advance, and never more than this billing
     // is worth after retention
-    recoup = Math.min(dp.outstanding, Math.max(0, gross - retention));
+    // Capped against what this billing is actually worth once VAT is on
+    // it — the same basis the advance was collected on. Without the cap
+    // a large advance against a small first billing produces a negative
+    // amount due, which is a credit note, and this system does not
+    // issue those.
+    recoup = Math.min(dp.outstanding, Math.max(0, gross - retention + gross * vatPct));
   }
 
-  var net = gross - retention - recoup;
+  // ── THE ORDER OF OPERATIONS, AND WHY IT IS THIS ORDER ──
+  //
+  // VAT is charged on the ACCOMPLISHMENT. Retention is withheld cash,
+  // not a discount, so the tax is due on the work whether or not the
+  // retention has been released.
+  //
+  // The downpayment recoupment comes off LAST, after VAT — because the
+  // advance was itself collected VAT-inclusive. Deducting a
+  // VAT-inclusive advance from a VAT-exclusive subtotal would recoup
+  // more than was ever advanced, and the difference would quietly
+  // accumulate across every billing on the job.
+  var vatAmount = gross * vatPct;
+  var net = gross - retention + vatAmount - recoup;
 
   // count only PROGRESS billings when numbering, so the DP does not
   // consume PB-0001
@@ -173,7 +207,9 @@ function createBilling(projectId, currentPct, period) {
     period: period || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MMM yyyy'),
     prevPct: prevPct,
     currentPct: pct,
-    grossAmount: Math.round(gross * 100) / 100,
+    grossAmount: Math.round(gross * 100) / 100,      // VAT-exclusive
+    vatAmount: Math.round(vatAmount * 100) / 100,
+    vatPct: vatPct,
     retentionAmount: Math.round(retention * 100) / 100,
     netAmount: Math.round(net * 100) / 100,
     status: 'Pending',
@@ -217,13 +253,26 @@ function dpLedger_(projectId, proj) {
     return b.projectId === projectId && String(b.status) !== 'Rejected';
   });
   var isDP = function (b) { return b.billingType === 'Downpayment'; };
-  var live = function (b) {
-    var s = String(b.status || '').toLowerCase();
-    return s === 'approved' || s === 'paid';
+  // ── v18 FIX: RECOUP ONLY WHAT HAS ACTUALLY BEEN RECEIVED ──
+  // This counted an advance as recoupable once the downpayment billing
+  // was APPROVED. Approved means the invoice has been issued, not that
+  // the client has paid it — so the first progress billing deducted
+  // money that had never arrived, and the net came out too low against
+  // a client who still owed the advance.
+  //
+  // Only 'Paid' counts now. markBillingPaid is what sets it, and that
+  // is also what creates the IncomingCash entry, so the two views of
+  // the same money finally agree.
+  var received = function (b) { return String(b.status || '').toLowerCase() === 'paid'; };
+  var invoicedNotPaid = function (b) {
+    var st = String(b.status || '').toLowerCase();
+    return st === 'approved' || st === 'pending';
   };
-  var advance = bills.filter(function (b) { return isDP(b) && live(b); })
+  var advance = bills.filter(function (b) { return isDP(b) && received(b); })
     .reduce(function (s, b) { return s + (parseFloat(b.grossAmount) || 0); }, 0);
-  var pendingAdvance = bills.filter(function (b) { return isDP(b) && !live(b); })
+  // Surfaced separately so the sheet can say WHY an advance was not
+  // deducted, rather than the reader assuming it was forgotten.
+  var pendingAdvance = bills.filter(function (b) { return isDP(b) && invoicedNotPaid(b); })
     .reduce(function (s, b) { return s + (parseFloat(b.grossAmount) || 0); }, 0);
   var recouped = bills.reduce(function (s, b) { return s + (parseFloat(b.dpRecoupment) || 0); }, 0);
   return {
@@ -383,9 +432,18 @@ function reviseBilling(id, clientPct) {
   // supersede the original
   updateRow_('Billings', 'id', id, { status: 'Rejected' });
 
-  var gross = (pct - prevPct) / 100 * revised;
+  // v18: the revise path bills on the same VAT-exclusive basis as the
+  // original. Leaving it on the gross would mean a revised billing came
+  // out higher than the one it replaced, for no reason anyone could see.
+  var vatPct = parseFloat(proj.vatPct);
+  if (isNaN(vatPct) || vatPct < 0 || vatPct > 0.25) vatPct = 0.12;
+  if (String(proj.vatRegistered || 'TRUE').toUpperCase() === 'FALSE') vatPct = 0;
+  var contractNet = vatPct > 0 ? revised / (1 + vatPct) : revised;
+
+  var gross = (pct - prevPct) / 100 * contractNet;
   var retention = gross * rp;
-  var net = gross - retention;
+  var vatAmount = gross * vatPct;
+  var net = gross - retention + vatAmount;
   var newId = nextId_('BIL');
   appendRow_('Billings', {
     id: newId,

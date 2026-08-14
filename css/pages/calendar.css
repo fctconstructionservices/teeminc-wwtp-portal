@@ -1,0 +1,260 @@
+/* ================================================================
+   v18 — THE DASHBOARD CALENDAR
+
+   A month grid rather than a list, deliberately. A list answers "what
+   is next"; a month answers "when is the quiet week", which is the
+   question you ask when deciding WHEN to schedule something. The
+   dashboard already had several lists and nothing showing shape over
+   time.
+   ================================================================ */
+
+.cal-shell {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 18px;
+}
+.cal-loading { padding: 26px 16px; font-size: 12.5px; color: var(--ink-soft); }
+
+.cal-head {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 10px 13px;
+    border-bottom: 1px solid var(--line);
+    flex-wrap: wrap;
+}
+.cal-head b {
+    font-family: var(--font-display);
+    font-size: 16px;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    min-width: 150px;
+}
+.cal-nav {
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    width: 27px;
+    height: 27px;
+    cursor: pointer;
+    font-size: 15px;
+    line-height: 1;
+    color: var(--ink);
+}
+.cal-nav:hover { border-color: var(--blueprint); color: var(--blueprint); }
+.cal-today {
+    background: none;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 4px 11px;
+    font-size: 11.5px;
+    cursor: pointer;
+    color: var(--ink-soft);
+    font-family: var(--font-body);
+}
+.cal-legend {
+    display: flex;
+    gap: 12px;
+    margin-left: auto;
+    font-size: 10.5px;
+    color: var(--ink-soft);
+    align-items: center;
+    flex-wrap: wrap;
+}
+.cal-legend i { margin-right: 4px; }
+.cal-add { flex-shrink: 0; }
+
+.cal-dow {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+}
+.cal-dow span {
+    padding: 6px 4px;
+    text-align: center;
+    font-family: var(--font-num);
+    font-size: 8.5px;
+    letter-spacing: .11em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+}
+
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+.cal-day {
+    position: relative;
+    min-height: 74px;
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+    cursor: pointer;
+    padding: 6px;
+    text-align: left;
+    font-family: var(--font-body);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: background var(--transition);
+}
+.cal-day:nth-child(7n) { border-right: none; }
+.cal-day:hover { background: var(--blueprint-tint); }
+.cal-day.is-blank { background: var(--bg); cursor: default; }
+.cal-day.is-blank:hover { background: var(--bg); }
+.cal-day.is-weekend { background: #FAFBFB; }
+/* Past days recede rather than disappear — an overdue task last week is
+   still the most important thing on the grid. */
+.cal-day.is-past .cal-n { opacity: .45; }
+.cal-day.is-today { box-shadow: inset 0 0 0 2px var(--amber); }
+.cal-day.is-sel { background: var(--blueprint-tint); box-shadow: inset 0 0 0 2px var(--blueprint); }
+
+.cal-n { font-family: var(--font-num); font-size: 12px; }
+.cal-day.is-today .cal-n { font-weight: 700; color: var(--safety-ink); }
+.cal-marks { display: flex; gap: 3px; }
+.cal-pip { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--blueprint); }
+.cal-pip.d { background: var(--red); }
+.cal-pip.a { background: var(--amber); }
+.cal-pip.g { background: var(--green); }
+.cal-cnt {
+    margin-top: auto;
+    font-family: var(--font-num);
+    font-size: 9.5px;
+    color: var(--ink-soft);
+}
+/* Your own work is marked, so a busy month still shows what is yours. */
+.cal-cnt.is-mine { color: var(--safety-ink); font-weight: 700; }
+
+.cal-day-panel { border-top: 1px solid var(--line); background: var(--bg); }
+.cdp-head {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 10px 13px;
+    border-bottom: 1px solid var(--line);
+    flex-wrap: wrap;
+}
+.cdp-head b { font-size: 13px; }
+.cdp-head .muted { font-size: 11px; color: var(--ink-soft); margin-right: auto; }
+.cdp-empty { padding: 16px 13px; font-size: 12.5px; color: var(--ink-soft); }
+
+.cdp-task {
+    display: flex;
+    gap: 12px;
+    padding: 11px 13px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+    align-items: flex-start;
+}
+.cdp-task:last-child { border-bottom: none; }
+.cdp-task.is-high { border-left: 3px solid var(--amber); }
+.cdp-task.is-overdue { border-left: 3px solid var(--red); background: rgba(192, 54, 44, .04); }
+.cdp-task.is-done { opacity: .72; }
+.cdp-task.is-cancelled { opacity: .5; }
+.cdp-task.is-cancelled .cdp-title { text-decoration: line-through; }
+.cdp-main { flex: 1; min-width: 0; }
+.cdp-title { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cdp-flag {
+    font-family: var(--font-num);
+    font-size: 8.5px;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    background: var(--amber);
+    color: #15181A;
+    border-radius: 3px;
+    padding: 1px 6px;
+    font-weight: 700;
+}
+.cdp-flag.proof { background: var(--blueprint); color: #fff; }
+.cdp-detail { margin: 3px 0 0; font-size: 12px; color: var(--ink-soft); line-height: 1.45; }
+.cdp-meta { font-size: 10.5px; color: var(--ink-soft); margin-top: 4px; }
+.cdp-meta .od { color: var(--red); }
+.cdp-proof {
+    margin-top: 7px;
+    padding: 7px 10px;
+    background: rgba(14, 124, 74, .07);
+    border-radius: 6px;
+    font-size: 11.5px;
+    color: var(--ink-soft);
+}
+.cdp-proof p { margin: 3px 0 0; color: var(--ink); }
+.cdp-proof a { color: var(--blueprint); font-size: 11px; }
+.cdp-reopen {
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--safety-ink);
+    background: rgba(217, 138, 0, .1);
+    border-radius: 6px;
+    padding: 5px 9px;
+}
+.cdp-actions { display: flex; gap: 5px; flex-shrink: 0; flex-wrap: wrap; }
+
+@media (max-width: 700px) {
+    .cal-day { min-height: 56px; padding: 4px; }
+    .cal-legend { display: none; }
+    .cdp-task { flex-direction: column; }
+    .cdp-actions { width: 100%; }
+}
+
+/* v18.1 — "Assigned to you", above the grid.
+   The grid answers "when is the quiet week". It does not answer "what
+   have I been given", which is the question the person assigned a task
+   has the moment they log in. Without this they would rely on the
+   email — and a task nobody can find in the system is a task the
+   system is not managing. */
+.cal-mine {
+    border-bottom: 1px solid var(--line);
+    background: var(--blueprint-tint);
+}
+.cal-mine.has-overdue { background: rgba(192, 54, 44, .06); }
+.cm-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 13px 6px;
+    font-size: 12.5px;
+}
+.cm-head b { font-family: var(--font-display); font-size: 13px; letter-spacing: .07em; text-transform: uppercase; }
+.cm-head span { color: var(--ink-soft); font-size: 11.5px; }
+.cm-head .od { color: var(--red); }
+.cm-list { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 13px 10px; }
+.cm-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 99px;
+    padding: 4px 12px 4px 8px;
+    cursor: pointer;
+    font-family: var(--font-body);
+    font-size: 12px;
+    max-width: 100%;
+}
+.cm-item:hover { border-color: var(--blueprint); }
+.cm-item.is-late { border-color: var(--red); }
+.cm-item.is-today { border-color: var(--amber); }
+.cm-when {
+    font-family: var(--font-num);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--ink-soft);
+    flex-shrink: 0;
+}
+.cm-item.is-late .cm-when { color: var(--red); font-weight: 700; }
+.cm-item.is-today .cm-when { color: var(--safety-ink); font-weight: 700; }
+.cm-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-flag {
+    font-family: var(--font-num);
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    background: var(--blueprint);
+    color: #fff;
+    border-radius: 3px;
+    padding: 1px 5px;
+    flex-shrink: 0;
+}
+.cm-flag.hi { background: var(--amber); color: #15181A; }
+.cm-more { font-size: 11px; color: var(--ink-soft); align-self: center; }

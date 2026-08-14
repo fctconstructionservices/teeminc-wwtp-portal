@@ -194,6 +194,16 @@ const API_ACTIONS = {
   markAllRead: markAllRead,
   getThreadCounts: getThreadCounts,
 
+  // ── v18: TASKS ──
+  getTasksForMonth: getTasksForMonth,
+  getMyTaskSummary: getMyTaskSummary,
+  getAssignableUsers: getAssignableUsers,
+  createTask: createTask,
+  completeTask: completeTask,
+  reopenTask: reopenTask,
+  cancelTask: cancelTask,
+  deleteTask: deleteTask,
+
   // ── v15: BULK SOW ──
   previewSowOutline: previewSowOutline,
   addSOWItemsBulk: addSOWItemsBulk,

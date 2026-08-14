@@ -347,8 +347,18 @@ Object.assign(ProjectPage, {
             .filter(x => String(x.status || '').toLowerCase() !== 'rejected' &&
                          String(x.billingNo || '') <= String(b.billingNo || ''))
             .reduce((sm, x) => sm + (parseFloat(x.dpRecoupment) || 0), 0));
-        const vat12 = net * 0.12;
-        const totalWithVat = net + vat12;
+        // ── v18 FIX ──
+        // This recomputed VAT on the NET — that is, on the amount after
+        // retention and downpayment recoupment — which charged tax on a
+        // figure that already had tax in it and understated the VAT due.
+        //
+        // The backend now computes VAT on the accomplishment and stores
+        // it. The sheet reads the stored figure rather than deriving its
+        // own, so the printed invoice and the books cannot disagree.
+        const vat12 = b.vatAmount !== undefined && b.vatAmount !== ''
+            ? (parseFloat(b.vatAmount) || 0)
+            : (b.grossAmount || 0) * 0.12;   // older records, pre-v18
+        const totalWithVat = net;            // netAmount already includes VAT
 
         const overlay = document.createElement('div');
         overlay.id = 'swaModal';
@@ -442,15 +452,16 @@ Object.assign(ProjectPage, {
                 <div class="r"><span>Downpayment received (${Math.round((p.downpaymentPct || 0) * 100)}% of contract)</span><b>₱${fmtMoney((p.contractValueRevised || 0) * (p.downpaymentPct || 0))}</b></div>
                 <div class="r"><span>Less: Downpayment recoupment</span><b>${(b.dpRecoupment || 0) > 0 ? '₱' + fmtMoney(b.dpRecoupment) : '—'}</b></div>
                 <div class="r"><span>Downpayment recouped to date</span><b>₱${fmtMoney(dpRecoupedToDate)} of ₱${fmtMoney((p.contractValueRevised || 0) * (p.downpaymentPct || 0))}</b></div>` : ''}
-                <div class="r"><span>Amount Due for this Billing</span><b>₱${fmtMoney(net)}</b></div>
+                <div class="r"><span>Amount Due (VAT-exclusive)</span><b>₱${fmtMoney(net - vat12)}</b></div>
                 <div class="r"><span>VAT (12%)</span><b>₱${fmtMoney(vat12)}</b></div>
-                <div class="r" style="border-bottom:2px solid #1C2321;"><span><b>Total Amount with VAT</b></span><b>₱${fmtMoney(totalWithVat)}</b></div>
+                <div class="r" style="border-bottom:2px solid #1C2321;"><span><b>Total Amount Due</b></span><b>₱${fmtMoney(totalWithVat)}</b></div>
             </div>
-            <div class="swa-sign">
-                <div class="s"><div class="line">Prepared by</div></div>
-                <div class="s"><div class="line">Reviewed by</div></div>
-                <div class="s"><div class="line">Noted by</div></div>
-            </div>
+            <!-- v18: the Prepared / Reviewed / Noted blocks are removed.
+                 Every billing already carries the four-admin approval
+                 signatures recorded in the system, with names and
+                 timestamps. Blank lines underneath them invited a second,
+                 handwritten approval that means nothing and matches
+                 nothing in the record. -->
             <div class="swa-noprint" style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">
                 <button class="btn-primary" onclick="ProjectPage.printSWA()">Print (A4 Landscape)</button>
                 <button class="btn-ghost" onclick="ProjectPage.closeSWA()">Close</button>

@@ -130,7 +130,7 @@
                     <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password" required />
                     <div class="error-msg">Password is required.</div>
                 </div>
-                <button type="submit" class="login-btn">Log In</button>
+                <button type="submit" class="login-btn" id="loginBtn">Log In</button>
             </form>
             <p class="login-note">
                 <span data-cfg="company.notice">For FCTC Construction Services internal use only.</span>
@@ -165,6 +165,11 @@
                  it does. Two routes to the same page is two things to keep
                  in step, and these were already behind: no Purchase Orders,
                  no Suppliers, no Timeline. -->
+
+            <!-- v18: the calendar is FIRST. Everything else on this page
+                 records what has happened; this is the only thing that says
+                 what should happen and by when. -->
+            <div id="calendarHost"></div>
 
             <div class="section-head" id="projectsSectionHead">
                 <h2>Projects</h2>
@@ -885,6 +890,8 @@
     <script src="js/core/nav.js"></script>
     <script src="js/core/config.js"></script>
     <script src="js/core/fast-cache.js"></script>
+    <script src="js/core/busy.js"></script>
+    <script src="js/pages/calendar.js"></script>
     <script src="js/services/data-service.js"></script>
     <script src="js/pages/home.js"></script>
     <script src="js/pages/project/project-core.js"></script>

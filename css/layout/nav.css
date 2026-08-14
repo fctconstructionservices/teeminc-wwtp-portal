@@ -287,3 +287,23 @@
 @media (max-width: 620px) {
     .bell-panel { left: 8px; right: 8px; width: auto; }
 }
+
+/* v18 — read notifications stay in the list.
+   They used to vanish the moment a thread was opened, which made the
+   panel useless as a record: you glance at one, get pulled into
+   something else, and it is gone. Read entries are dimmed rather than
+   removed, so the list answers "what has been happening" while the
+   badge still answers "is there anything new". */
+.bell-item.is-read { opacity: .58; }
+.bell-item.is-read:hover { opacity: 1; }
+.bell-item.is-read.is-mention { border-left-color: rgba(217, 138, 0, .4); }
+
+.bi-new {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--blueprint);
+    margin-right: 6px;
+    vertical-align: 1px;
+}

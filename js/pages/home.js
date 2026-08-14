@@ -143,6 +143,13 @@ const HomePage = {
             let ticketHtml = '';
 
             // Remove the tile strip and its heading outright.
+            // v18: the calendar mounts itself and loads independently, so
+            // the rest of the dashboard is not held up waiting for it.
+            const calHost = document.getElementById('calendarHost');
+            if (calHost && typeof CalendarPanel !== 'undefined') {
+                CalendarPanel.mount(calHost);
+            }
+
             const ticketsContainer = document.querySelector('.tickets');
             if (ticketsContainer) {
                 ticketsContainer.remove();
