@@ -130,10 +130,26 @@ function readMany_(names) {
     const lastRow = sh.getLastRow();
     const heads = headers_(n);
     if (lastRow < 2 || !heads || !heads.length) { out[n] = []; _READ_MEMO_[n] = []; return; }
-    pending.push({ name: n, range: sh.getRange(2, 1, lastRow - 1, heads.length), heads: heads });
+    // lastRow is carried so the batch path can build its A1 range.
+    pending.push({ name: n, range: sh.getRange(2, 1, lastRow - 1, heads.length), heads: heads, lastRow: lastRow });
   });
 
-  // Phase 2: fetch values — consecutive getValues on an already-open
+  // ── v17: ONE HTTP CALL INSTEAD OF TWENTY-FOUR ──
+  //
+  // SpreadsheetApp.getValues() is one round trip to Google per sheet.
+  // Twenty-four sheets is twenty-four round trips, and the latency —
+  // not the reading — is where the time goes.
+  //
+  // The Sheets API v4 advanced service has batchGet, which fetches
+  // every range in a SINGLE call. Same data, one trip.
+  //
+  // It is attempted first and falls back silently to the original path,
+  // because the advanced service has to be enabled by hand in the Apps
+  // Script project. A deployment where somebody forgot should be slow,
+  // not broken.
+  if (_trySheetsBatch_(pending, out)) return out;
+
+  // Phase 2 (fallback): consecutive getValues on an already-open
   // spreadsheet are served from one flush instead of one per call.
   pending.forEach(function (item) {
     const values = item.range.getValues();
@@ -424,4 +440,87 @@ function sanitizeDatesDeep_(v) {
     return out;
   }
   return v;
+}
+
+
+/**
+ * _trySheetsBatch_ (v17) - Fetches every pending range in one HTTP call
+ * using the Sheets API v4 advanced service.
+ *
+ * SETUP: Apps Script editor → Services → add "Google Sheets API" as
+ * `Sheets`. Without it this returns false and everything still works,
+ * just at the old speed.
+ *
+ * Returns true if it filled `out`, false to fall through.
+ */
+function _trySheetsBatch_(pending, out) {
+  if (typeof Sheets === 'undefined' || !pending.length) return false;
+
+  try {
+    var ranges = pending.map(function (item) {
+      // A1 notation with the sheet quoted — names with spaces or
+      // apostrophes are real, and an unquoted range fails the whole
+      // batch rather than one sheet.
+      return "'" + String(item.name).replace(/'/g, "''") + "'!A2:" +
+        _colLetter_(item.heads.length) + item.lastRow;
+    });
+
+    var res = Sheets.Spreadsheets.Values.batchGet(SHEET_ID, {
+      ranges: ranges,
+      valueRenderOption: 'UNFORMATTED_VALUE',
+      // Dates come back as ISO strings rather than serial numbers.
+      // Without this, every date in the system arrives as 45789.
+      dateTimeRenderOption: 'FORMATTED_STRING'
+    });
+
+    var vr = res && res.valueRanges;
+    if (!vr || vr.length !== pending.length) return false;
+
+    for (var i = 0; i < pending.length; i++) {
+      var item = pending[i];
+      var values = vr[i].values || [];
+      var heads = item.heads;
+      var rows = [];
+      for (var r = 0; r < values.length; r++) {
+        var row = values[r];
+        var blank = true;
+        for (var c = 0; c < row.length; c++) {
+          if (row[c] !== '' && row[c] !== null && row[c] !== undefined) { blank = false; break; }
+        }
+        if (blank) continue;
+        var obj = {};
+        for (var h = 0; h < heads.length; h++) {
+          // batchGet truncates trailing empty cells, so a short row is
+          // normal and the missing tail must read as '' rather than
+          // undefined — half the code does String(x) on these.
+          obj[heads[h]] = row[h] === undefined ? '' : row[h];
+        }
+        rows.push(obj);
+      }
+      out[item.name] = rows;
+      _READ_MEMO_[item.name] = rows;
+    }
+    return true;
+  } catch (err) {
+    // Not enabled, quota, a malformed range — any of these means fall
+    // back rather than fail. Logged once so it is visible that the fast
+    // path is not being taken.
+    if (!_batchWarned_) {
+      _batchWarned_ = true;
+      console.warn('Sheets batchGet unavailable, using the slower path: ' + err.message);
+    }
+    return false;
+  }
+}
+var _batchWarned_ = false;
+
+/** _colLetter_ - 1 → A, 26 → Z, 27 → AA. */
+function _colLetter_(n) {
+  var s = '';
+  while (n > 0) {
+    var m = (n - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    n = Math.floor((n - m) / 26);
+  }
+  return s || 'A';
 }

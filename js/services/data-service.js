@@ -75,8 +75,29 @@ function handleSessionExpired() {
  * gasCall - Generic API caller
  * PURPOSE: Sends requests to the backend with proper authentication
  */
+/**
+ * gasCall - every request goes through here.
+ *
+ * v17: the cache is wired in at this ONE point, so it covers every
+ * endpoint without a single page knowing it exists. That is the same
+ * property that makes a future database migration a rewrite of this
+ * function rather than of the whole app.
+ */
 async function gasCall(action) {
     const params = Array.prototype.slice.call(arguments, 1);
+
+    // ── v17: WRITES CLEAR THE CACHE, ALWAYS ──
+    // Seeing your own change missing is the failure people notice and
+    // lose trust over, so it is prevented at the source rather than
+    // patched per page.
+    if (typeof FastCache !== 'undefined' && !FastCache.CACHEABLE[action]) {
+        FastCache.clear();
+    }
+
+    return _gasCallRaw(action, params);
+}
+
+async function _gasCallRaw(action, params) {
     const payload = {
         action: action,
         params: params,
@@ -125,8 +146,13 @@ const DataService = {
     },
 
     // ─── HOME ──────────────────────────────────────────────────
-    async getHomeData() {
-        return await gasCall('getHomeData');
+    /**
+     * getHomeData - v17: served from memory when it is fresh, refreshed
+     * behind the screen. onFresh redraws only if something changed.
+     */
+    async getHomeData(onFresh) {
+        return await FastCache.wrap('getHomeDataCached', [],
+            () => gasCall('getHomeDataCached'), onFresh);
     },
 
     // ─── PROJECT ──────────────────────────────────────────────
@@ -163,8 +189,13 @@ const DataService = {
         return this._catalogCache;
     },
 
-    async getProjectData(projectId) {
-        return await gasCall('getProjectData', projectId);
+    /**
+     * getProjectData - v17: served from memory when it is fresh, refreshed
+     * behind the screen. onFresh redraws only if something changed.
+     */
+    async getProjectData(projectId, onFresh) {
+        return await FastCache.wrap('getProjectDataCached', [projectId],
+            () => gasCall('getProjectDataCached', projectId), onFresh);
     },
 
     // v3: status/revenue removed from the form — backend fixes status
@@ -486,8 +517,13 @@ const DataService = {
         return await gasCall('getViewAsUsers');
     },
     // v7.2: portfolio dashboard
-    async getPortfolioData() {
-        return await gasCall('getPortfolioData');
+    /**
+     * getPortfolioData - v17: served from memory when it is fresh, refreshed
+     * behind the screen. onFresh redraws only if something changed.
+     */
+    async getPortfolioData(onFresh) {
+        return await FastCache.wrap('getPortfolioDataCached', [],
+            () => gasCall('getPortfolioDataCached'), onFresh);
     },
     async getBackupStatus() {
         return await gasCall('getBackupStatus');

@@ -48,7 +48,37 @@ const PUBLIC_ACTIONS = { loginWithPassword: true };
  * and corrupt each other's changes (e.g. two admins approving the same
  * item, or two estimate saves racing on the same sheet rewrite).
  */
-const WRITE_ACTION_RE = /^(add|create|update|delete|submit|request|approve|reject|save|set|mark|revise|force|review|migrate|setup|liquidat|transfer|move)/i;
+/**
+ * READ_ACTION_RE (v17) - THE DEFAULT IS NOW "THIS WRITES".
+ *
+ * This used to be WRITE_ACTION_RE — a list of prefixes that meant a
+ * write, and anything unmatched was treated as a read. Nineteen actions
+ * fell through it, including receiveGoods, paySupplierInvoice,
+ * awardQuotation and cancelPurchaseRequest. Every one of those moves
+ * money, and none of them was taking the document lock.
+ *
+ * Two people receiving against the same PO at the same moment could
+ * both read the outstanding quantity, both write, and the second write
+ * would silently overwrite the first — leaving stock and cost wrong
+ * with nothing in the log to explain it.
+ *
+ * The direction is now inverted: an action must PROVE it is a read.
+ * Anything else takes the lock and clears the cache. A read
+ * misclassified as a write costs a few milliseconds; a write
+ * misclassified as a read corrupts data, and the default has to be the
+ * cheap mistake.
+ */
+const READ_ACTION_RE = /^(get|list|search|preview|export|find|check|is|has|whoAmI|duplicatePreview|audit)/i;
+
+/** Reads whose names do not start with a read verb. Listed rather than
+ *  loosening the pattern, so each exception is a decision on the
+ *  record. */
+const READ_ACTION_EXTRA = { whoAmI: 1, logout: 1, loginWithPassword: 1 };
+
+function isWriteAction_(action) {
+  if (READ_ACTION_EXTRA[action]) return false;
+  return !READ_ACTION_RE.test(action);
+}
 
 function doPost(e) {
   var lock = null;
@@ -85,7 +115,7 @@ function doPost(e) {
     // request with "cannot read properties of null". A lock is a safety
     // measure, not a precondition — if the service will not give us one,
     // continue without it rather than blocking the user entirely.
-    if (WRITE_ACTION_RE.test(action)) {
+    if (isWriteAction_(action)) {
       try {
         lock = LockService.getDocumentLock() || LockService.getScriptLock();
       } catch (lockErr) {
@@ -100,6 +130,16 @@ function doPost(e) {
         lock = null;
       }
       _resetReadCache_();   // re-read fresh inside the lock
+
+      // ── v17: THE ONLY PLACE THE CACHE IS INVALIDATED ──
+      // The dispatcher already knows which actions write — that is what
+      // WRITE_ACTION_RE is for. Clearing here covers every write path
+      // there will ever be, including ones nobody has written yet.
+      //
+      // The alternative is calling an invalidate function from forty-odd
+      // write functions, where the one that gets forgotten is the one
+      // that serves somebody a stale budget months later.
+      invalidateProjectCache_();
     }
 
     const result = fn.apply(null, params);
@@ -134,6 +174,14 @@ const API_ACTIONS = {
   getProjectData: getProjectData,
   getFinanceData: getFinanceData,
   search: search,
+  // ── v17: CACHED READS ──
+  // The uncached functions stay exported, so anything that must be
+  // certain of freshness can bypass the cache entirely.
+  getProjectDataCached: getProjectDataCached,
+  getHomeDataCached: getHomeDataCached,
+  getPortfolioDataCached: getPortfolioDataCached,
+  clearAllCaches: clearAllCaches,
+
   searchCoverage: searchCoverage,   // v11 BATCH I4
 
   // ── v14: DISCUSSION ──
