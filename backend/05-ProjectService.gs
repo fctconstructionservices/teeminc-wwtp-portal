@@ -198,7 +198,11 @@ function getProjectData(projectId) {
     'EstimateLabor', 'EstimateEquipment', 'EstimateIndirect', 'DailyRecords',
     'CashAdvanceRequests', 'CashRelease', 'IncomingCashRequests', 'Liquidations',
     'VariationOrders', 'Billings', 'Approvals', 'ClientLists', 'Transfers', 'Equipment',
-    'Users', 'OTRequests', 'Punchlist', 'SafetyRecords', 'Drawings', 'Personnel']);
+    'Users', 'OTRequests', 'Punchlist', 'SafetyRecords', 'Drawings', 'Personnel',
+    // v17: these were read by getProjectData but left out of the batch,
+    // so each cost its own round trip. Receipts arrived in G2 and
+    // Comments in v14; both were missed.
+    'Receipts', 'Comments']);
 
   const projects = readAll_('Projects');
   const proj = projects.find(function (p) { return p.id === projectId; });

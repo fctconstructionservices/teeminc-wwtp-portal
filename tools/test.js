@@ -35,6 +35,7 @@ const only = process.argv[2];
 let pass = 0, fail = 0, files = 0;
 const failures = [];
 const pending = [];   // async tests awaited before the summary
+let queue = Promise.resolve();   // v17: and run one at a time
 
 const C = process.stdout.isTTY
     ? { g: '\x1b[32m', r: '\x1b[31m', d: '\x1b[2m', b: '\x1b[1m', x: '\x1b[0m' }
@@ -55,14 +56,23 @@ const suite = {
             // silently dropped, which is how an async test "passes"
             // without ever running its assertions.
             if (r && typeof r.then === 'function') {
-                pending.push(r.then(
+                // ── v17: ASYNC TESTS RUN IN SEQUENCE, NOT IN PARALLEL ──
+                // These used to all be started at once and awaited at the
+                // end of the file. Two tests sharing any state — a cache,
+                // a stub, a counter — then interfered with each other,
+                // and the failure looked like a bug in the code under
+                // test rather than in the runner.
+                //
+                // Each async test is now chained behind the previous one.
+                queue = queue.then(() => r).then(
                     () => { pass++; console.log(`  ${C.g}pass${C.x}  ${what}`); },
                     err => {
                         fail++;
                         failures.push({ what, message: err.message });
                         console.log(`  ${C.r}FAIL${C.x}  ${what}`);
                         console.log(`        ${C.d}${err.message}${C.x}`);
-                    }));
+                    });
+                pending.push(queue);
                 return;
             }
             pass++;
