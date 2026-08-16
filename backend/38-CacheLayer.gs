@@ -193,3 +193,24 @@ function clearAllCaches() {
   logActivity_('Cache cleared by ' + currentUserName_(), 'a');
   return { success: true };
 }
+
+
+/**
+ * getTasksForMonthCached (v20) - the calendar, served from cache.
+ *
+ * The dashboard calendar was the one heavy read still going to the
+ * sheet on every single load. It is also the FIRST thing drawn on the
+ * page, so its latency is the latency of opening the system.
+ *
+ * Keyed per user as well as per month: the calendar shows what YOU can
+ * see, and a shared entry would show one person's tasks to another.
+ */
+function getTasksForMonthCached(month) {
+  var key = _cacheKey_('tasks', String(month || '') + '|' +
+    currentUserEmail_().toLowerCase());
+  var hit = _cacheGet_(key);
+  if (hit) { hit._cached = true; return hit; }
+  var data = getTasksForMonth(month);
+  if (data) _cachePut_(key, data);
+  return data;
+}

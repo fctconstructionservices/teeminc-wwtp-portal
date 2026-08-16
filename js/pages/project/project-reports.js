@@ -750,14 +750,14 @@ Object.assign(ProjectPage, {
                 ${groups.map(g => `
                     <div class="rp-group">
                         <div class="rp-group-head">
-                            <span>${g.name}</span>
-                            <button class="btn-sm" onclick="ProjectPage.reportToggleGroup('${g.name}')">Toggle all</button>
+                            <span>${esc(g.name)}</span>
+                            <button class="btn-sm" onclick="ProjectPage.reportToggleGroup('${esc(g.name)}')">Toggle all</button>
                         </div>
                         ${g.items.map(s => {
                             const on = saved ? saved.indexOf(s.id) > -1 : s.def;
-                            return `<label class="rp-opt" data-group="${g.name}">
+                            return `<label class="rp-opt" data-group="${esc(g.name)}">
                                 <input type="checkbox" id="rp-${s.id}" ${on ? 'checked' : ''} onchange="ProjectPage.reportCount()" />
-                                <span><b>${s.label}</b><em>${s.sub}</em></span>
+                                <span><b>${esc(s.label)}</b><em>${s.sub}</em></span>
                             </label>`;
                         }).join('')}
                     </div>`).join('')}

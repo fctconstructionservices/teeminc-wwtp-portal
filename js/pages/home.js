@@ -89,7 +89,7 @@ const HomePage = {
                         <circle cx="20" cy="20" r="16" fill="none" stroke="#EFE7D2" stroke-width="5"/>
                         <circle cx="20" cy="20" r="16" fill="none" stroke="${g.color}" stroke-width="5" stroke-dasharray="100.5" stroke-dashoffset="${g.dashOffset}" stroke-linecap="round" transform="rotate(-90 20 20)"/>
                     </svg>
-                    <div><div class="g-num">${g.value}</div><div class="g-label">${g.label}</div></div>
+                    <div><div class="g-num">${g.value}</div><div class="g-label">${esc(g.label)}</div></div>
                 </div>`;
             });
             gaugeHtml += `</div>`;
@@ -177,7 +177,7 @@ const HomePage = {
                 queueHtml += `<table><thead><tr><th>Request</th><th>Project</th><th style="text-align:right">Amount</th><th>Status</th></tr></thead><tbody>`;
                 activePending.slice(0, 10).forEach(r => {
                     const projectDisplay = r.projectId || r.project || '—';
-                    queueHtml += `<tr><td><span class="req-id">${r.id}</span><br><span style="color:var(--ink-soft);font-size:11px">${r.requestor}</span></td><td>${projectDisplay}</td><td class="amt">₱${fmtMoney((r.amount || 0))}</td><td><span class="stamp pending">${r.status}</span></td></tr>`;
+                    queueHtml += `<tr><td><span class="req-id">${r.id}</span><br><span style="color:var(--ink-soft);font-size:11px">${r.requestor}</span></td><td>${projectDisplay}</td><td class="amt">₱${fmtMoney((r.amount || 0))}</td><td><span class="stamp pending">${esc(r.status)}</span></td></tr>`;
                 });
                 queueHtml += `</tbody></table>`;
             }
@@ -256,7 +256,7 @@ const HomePage = {
             projHtml += `
                 <button class="project-card" onclick="ProjectPage.open('${p.id}')">
                     <div class="pc-head">
-                        <div class="pc-name">${p.name}</div>
+                        <div class="pc-name">${esc(p.name)}</div>
                         <span class="stamp ${statusClass}">${p.status || 'Ongoing'}</span>
                     </div>
                     <div class="pc-stats">

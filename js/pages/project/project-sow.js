@@ -818,7 +818,7 @@ Lagoon Lining Works
                     maintainAspectRatio: false,
                     plugins: {
                         legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8 } },
-                        tooltip: { callbacks: { label: c => `${c.dataset.label}: ₱${fmtMoney(c.parsed.y)}` } }
+                        tooltip: { callbacks: { label: c => `${esc(c.dataset.label)}: ₱${fmtMoney(c.parsed.y)}` } }
                     },
                     scales: {
                         y: { ticks: { callback: fmtAxisMoney }, grid: { color: '#EEEBE0' } },
@@ -877,9 +877,7 @@ Object.assign(ProjectPage, {
         const group = groups.find(g => g.sowId === sowId);
         const est = String((group && group.status) || 'draft').toLowerCase();
         const idLocked = est === 'pending' || est === 'approved';
-
-        const esc = v => String(v == null ? '' : v)
-            .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        // v20: uses the global esc() from js/core/esc.js.
 
         const unitOptions = this.SOW_UNITS.map(u =>
             `<option value="${u}" ${String(item.unit) === u ? 'selected' : ''}>${u}</option>`).join('');

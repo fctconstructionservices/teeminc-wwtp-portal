@@ -145,7 +145,7 @@ const EquipmentPage = {
         }
         let html = '';
         list.forEach(e => {
-            const imgHtml = e.image ? `<img src="${e.image}" alt="${e.brand}" loading="lazy" />` :
+            const imgHtml = e.image ? `<img src="${e.image}" alt="${esc(e.brand)}" loading="lazy" />` :
                 `<span>${Icon.wrench({size:24})}</span>`;
             html += `
             <div class="mat-card" onclick="EquipmentPage.viewEquipment('${e.id}', this)" style="transition:transform .08s ease, box-shadow .08s ease;">
@@ -235,7 +235,7 @@ const EquipmentPage = {
         } else {
             eqs.forEach(e => {
                 html += `<tr>
-                    <td>${e.item}</td>
+                    <td>${esc(e.item)}</td>
                     <td class="amt"><b>${fmtNum(e.qty)}</b></td>
                     <td class="mono" style="font-size:11px">${e.lastFrom}</td>
                     <td class="mono" style="font-size:11px">${e.lastDate || '—'}</td>

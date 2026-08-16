@@ -92,10 +92,10 @@ Object.assign(ProjectPage, {
                     <td><span class="req-id">${tr.id}</span></td>
                     <td class="mono" style="font-size:11.5px">${tr.transferDate}</td>
                     <td style="font-size:11.5px">${arrow}</td>
-                    <td>${tr.item}<div class="mono" style="font-size:10px;color:var(--ink-soft)">${tr.itemType}</div></td>
+                    <td>${esc(tr.item)}<div class="mono" style="font-size:10px;color:var(--ink-soft)">${tr.itemType}</div></td>
                     <td class="amt">${fmtNum(tr.qty)} ${tr.unit || ''}</td>
                     <td style="font-size:11.5px;color:var(--ink-soft)">${tr.reason || '—'}</td>
-                    <td><span class="stamp ${cls}">${tr.status}</span></td>
+                    <td><span class="stamp ${cls}">${esc(tr.status)}</span></td>
                     <td>${actions}</td>
                 </tr>`;
             });
@@ -146,7 +146,7 @@ Object.assign(ProjectPage, {
             const body = document.getElementById('trfBody');
             if (!body) return;
             const locOpts = (sel) => this._trfLocations.map(l =>
-                `<option value="${l.id}" ${l.id === sel ? 'selected' : ''}>${l.isWarehouse ? '${Icon.warehouse({size:13})} ' : '&#9970; '}${l.label}</option>`).join('');
+                `<option value="${l.id}" ${l.id === sel ? 'selected' : ''}>${l.isWarehouse ? '${Icon.warehouse({size:13})} ' : '&#9970; '}${esc(l.label)}</option>`).join('');
             body.innerHTML = `
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
                     <div style="margin-bottom:11px;"><label style="display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:3px;">From</label>
@@ -173,7 +173,7 @@ Object.assign(ProjectPage, {
     _transferItemOptions(items) {
         if (!items || !items.length) return '<option value="">- No items available at this location -</option>';
         return '<option value="">Select item...</option>' + items.map(i =>
-            `<option value="${String(i.item).replace(/"/g, '&quot;')}" data-max="${i.qty}" data-unit="${i.unit || ''}">${i.item} — available: ${fmtNum(i.qty)} ${i.unit || ''}</option>`
+            `<option value="${String(i.item).replace(/"/g, '&quot;')}" data-max="${i.qty}" data-unit="${i.unit || ''}">${esc(i.item)} — available: ${fmtNum(i.qty)} ${i.unit || ''}</option>`
         ).join('');
     },
 

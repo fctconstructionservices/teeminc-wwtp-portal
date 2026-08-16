@@ -621,8 +621,8 @@ Object.assign(ProjectPage, {
         const confirmed = await Confirm.open(
             isSuper ? 'Approve this estimate?' : 'Submit for Approval?',
             isSuper
-                ? `Approve ${group.sowId} — ${group.sowDescription}? It locks immediately and becomes the contract basis for billing.`
-                : `Submit ${group.sowId} — ${group.sowDescription} for approval?`);
+                ? `Approve ${group.sowId} — ${esc(group.sowDescription)}? It locks immediately and becomes the contract basis for billing.`
+                : `Submit ${group.sowId} — ${esc(group.sowDescription)} for approval?`);
         if (!confirmed) return;
 
         const submitBtn = document.querySelector(`.est-group-card[data-group-idx="${gIdx}"] .eg-footer-actions button`);
@@ -678,7 +678,7 @@ Object.assign(ProjectPage, {
         }
         
         const confirmed = await Confirm.open('Approve Estimate?',
-            `Approve ${group.sowId} — ${group.sowDescription}? This will lock it from further edits and set it as this SOW's official Budget.`);
+            `Approve ${group.sowId} — ${esc(group.sowDescription)}? This will lock it from further edits and set it as this SOW's official Budget.`);
         if (!confirmed) return;
         
         try {
@@ -950,7 +950,7 @@ Object.assign(ProjectPage, {
             if (r.isHeading) {
                 body += `<tr class="head">
                     <td><b>${r.itemNo}</b></td>
-                    <td style="padding-left:${pad}px"><b>${r.description}</b></td>
+                    <td style="padding-left:${pad}px"><b>${esc(r.description)}</b></td>
                     <td class="amt"></td><td></td><td class="amt"></td>
                     <td class="amt"><b>₱${fmtMoney(r.matCost)}</b></td>
                     <td class="amt"><b>₱${fmtMoney(r.labCost)}</b></td>
@@ -960,8 +960,8 @@ Object.assign(ProjectPage, {
             }
             body += `<tr>
                 <td>${r.itemNo}</td>
-                <td style="padding-left:${pad}px">${r.description}</td>
-                <td class="amt">${fmtNum(r.qty)}</td><td>${r.unit}</td>
+                <td style="padding-left:${pad}px">${esc(r.description)}</td>
+                <td class="amt">${fmtNum(r.qty)}</td><td>${esc(r.unit)}</td>
                 <td class="amt">₱${fmtMoney(r.unitCost)}</td>
                 <td class="amt">₱${fmtMoney(r.matCost)}</td>
                 <td class="amt">₱${fmtMoney(r.labCost)}</td>

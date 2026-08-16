@@ -492,7 +492,7 @@ const RequestDetailModal = {
         return `
         <div class="print-header">
             <h2>${data.id} — ${this._typeLabel(data.type)}</h2>
-            <div class="print-meta">${data.createdAt || new Date().toLocaleDateString()} · <span class="stamp ${statusCls}">${data.status}</span></div>
+            <div class="print-meta">${data.createdAt || new Date().toLocaleDateString()} · <span class="stamp ${statusCls}">${esc(data.status)}</span></div>
         </div>
         ${detailsHtml}
         <!-- ── v14: ONE MOUNT, THIRTEEN RECORD TYPES ──
@@ -696,7 +696,7 @@ const ApprovalsPage = {
         const isSuperAdmin = user && user.role === 'superadmin';
         const isApprover = user && user.role === 'admin';
 
-        let html = `<div class="section-head"><h3>${section.title}</h3><div class="rule"></div>
+        let html = `<div class="section-head"><h3>${esc(section.title)}</h3><div class="rule"></div>
             ${items.length ? `<span class="badge">${items.length}</span>` : ''}</div>`;
 
         if (!items.length) {
@@ -787,7 +787,7 @@ const ApprovalsPage = {
                         <div class="ar-meta">
                             <span class="ar-id">${r.id}</span>
                             <span>₱${fmtMoney(parseFloat(r.amount) || 0)}</span>
-                            <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${r.status}</span>
+                            <span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">${esc(r.status)}</span>
                         </div>
                     </div>
                     <div class="ar-actions">${actionsHtml}</div>
@@ -849,11 +849,11 @@ const ApprovalsPage = {
                     <div class="mr-meta">
                         <span class="mr-id">${r.id}</span>
                         ${amount ? `<span>₱${fmtMoney(amount)}</span>` : ''}
-                        ${r.description ? `<span>${r.description}</span>` : ''}
+                        ${r.description ? `<span>${esc(r.description)}</span>` : ''}
                         ${r.sowId ? `<span>SOW ${r.sowId}</span>` : ''}
                         ${r.type === 'OTRequest' ? `<span>OT ${r.otDate || ''} ${r.otStart || ''}–${r.otEnd || ''}</span>` : ''}
                         <span>${this._date(r.createdAt)}</span>
-                        <span class="stamp ${statusCls}" style="transform:none;padding:1px 8px;font-size:9px;">${r.status}</span>
+                        <span class="stamp ${statusCls}" style="transform:none;padding:1px 8px;font-size:9px;">${esc(r.status)}</span>
                     </div>
                 </div>
                 <div style="font-size:11px;color:var(--ink-soft);">›</div>

@@ -195,7 +195,14 @@ const API_ACTIONS = {
   getThreadCounts: getThreadCounts,
 
   // ── v18: TASKS ──
+  // ── v20: PROJECT DOCUMENTS ──
+  getProjectDocuments: getProjectDocuments,
+  addProjectDocument: addProjectDocument,
+  updateProjectDocument: updateProjectDocument,
+  deleteProjectDocument: deleteProjectDocument,
+
   getTasksForMonth: getTasksForMonth,
+  getTasksForMonthCached: getTasksForMonthCached,   // v20
   getMyTaskSummary: getMyTaskSummary,
   getAssignableUsers: getAssignableUsers,
   createTask: createTask,

@@ -214,6 +214,19 @@ const SCHEMAS = {
   PRLines: ['id', 'prId', 'materialId', 'itemName', 'unit', 'qty', 'rate', 'amount',
     'qtyOrdered', 'qtyReceived', 'notes', 'sortOrder'],
 
+  // ── v20: PROJECT DOCUMENTS ──
+  // Everything that ARRIVES about a project and has nowhere else to
+  // live: the signed contract, the notice to proceed, a permit, a
+  // client email confirming a change.
+  //
+  // A document is never edited and never overwritten — a revision is a
+  // NEW row that supersedes the old one, and the old one stays. In a
+  // dispute the question is rarely "what does it say" but "what did it
+  // say in March, and when did it change".
+  ProjectDocuments: ['id', 'projectId', 'docNo', 'title', 'category', 'description',
+    'fileUrl', 'fileName', 'receivedFrom', 'receivedDate', 'version',
+    'supersedes', 'superseded', 'confidential', 'uploadedBy', 'uploadedAt'],
+
   // ── v18: TASKS ──
   // Everything else in this system records what HAS happened. Nothing
   // recorded what SHOULD happen and by when — that gap was filled by

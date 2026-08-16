@@ -573,7 +573,7 @@ ${this._gShort(hs)} → ${this._gShort(he)} · ${item.childCount} item(s)${rp ==
                 inner += `
                     <div class="gt-bar ${critCls}" data-idx="${idx}" data-start="${item.startDate}" data-end="${item.endDate}"
                         style="left:${x(s)}px;width:${w}px;background:${health.color}"
-                        title="${item.id} — ${item.description || ''}&#10;${item.startDate} → ${item.endDate} · ${dur} day(s) · ${progress.toFixed(0)}% · ${health.label}${t ? (t.critical ? ' · CRITICAL' : ' · float ' + t.float + 'd') : ''}">
+                        title="${item.id} — ${item.description || ''}&#10;${item.startDate} → ${item.endDate} · ${dur} day(s) · ${progress.toFixed(0)}% · ${esc(health.label)}${t ? (t.critical ? ' · CRITICAL' : ' · float ' + t.float + 'd') : ''}">
                         <div class="gt-fill" style="width:${progress}%"></div>
                         ${w > 62 ? `<span class="gt-bar-lbl">${item.id} · ${progress.toFixed(0)}%</span>` : ''}
                         <div class="gt-handle left" data-action="resize-left"></div>
@@ -860,7 +860,7 @@ ${this._gShort(hs)} → ${this._gShort(he)} · ${item.childCount} item(s)${rp ==
                 <div class="print-header">
                     <h2>${item.id} — ${item.description || ''}</h2>
                     <div class="print-meta">
-                        <span class="stamp" style="transform:none;font-size:10px;background:${health.color};color:#fff;">${health.label}</span>
+                        <span class="stamp" style="transform:none;font-size:10px;background:${health.color};color:#fff;">${esc(health.label)}</span>
                         ${t && t.critical ? '<span class="stamp rejected" style="transform:none;font-size:10px;margin-left:6px;">CRITICAL PATH</span>' : ''}
                     </div>
                 </div>

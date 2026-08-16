@@ -75,7 +75,7 @@ Object.assign(ProjectPage, {
                         </div>` : `
                         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;">
                             <div><div class="k-label">Advance</div><div class="mono" style="font-size:15px;">₱${fmtMoney(dpAdvance)}</div>
-                                <div class="k-sub">${dpBill.billingNo} &middot; <span class="stamp ${dpBill.status === 'Paid' ? 'approved' : dpBill.status === 'Approved' ? 'approved' : 'pending'}">${dpBill.status}</span></div></div>
+                                <div class="k-sub">${esc(dpBill.billingNo)} &middot; <span class="stamp ${dpBill.status === 'Paid' ? 'approved' : dpBill.status === 'Approved' ? 'approved' : 'pending'}">${esc(dpBill.status)}</span></div></div>
                             <div><div class="k-label">Recouped to date</div><div class="mono" style="font-size:15px;color:var(--green);">₱${fmtMoney(dpRecouped)}</div>
                                 <div class="k-sub">${pctRecouped}% of the advance</div></div>
                             <div><div class="k-label">Still outstanding</div><div class="mono" style="font-size:15px;color:${dpOutstanding > 0 ? 'var(--amber)' : 'var(--green)'};">₱${fmtMoney(dpOutstanding)}</div>
@@ -140,12 +140,12 @@ Object.assign(ProjectPage, {
                 // been approved yet (Pending only — approved/paid billings
                 // are part of the financial record and stay).
                 if (b.status === 'Pending' && isSuper) {
-                    actions += ` <button class="btn-sm danger" title="Delete this unapproved billing" onclick="ProjectPage.deleteBillingPrompt('${b.id}', '${b.billingNo}')">${Icon.trash({size:12})}</button>`;
+                    actions += ` <button class="btn-sm danger" title="Delete this unapproved billing" onclick="ProjectPage.deleteBillingPrompt('${b.id}', '${esc(b.billingNo)}')">${Icon.trash({size:12})}</button>`;
                 }
                 const isDP = b.billingType === 'Downpayment';
                 const recoup = parseFloat(b.dpRecoupment) || 0;
                 html += `<tr>
-                    <td><span class="req-id" style="cursor:pointer;text-decoration:underline;" title="${isDP ? 'Downpayment — an advance against the contract' : 'View Statement of Work Accomplishment'}" onclick="ProjectPage.openSWA('${b.id}')">${b.billingNo}</span>
+                    <td><span class="req-id" style="cursor:pointer;text-decoration:underline;" title="${isDP ? 'Downpayment — an advance against the contract' : 'View Statement of Work Accomplishment'}" onclick="ProjectPage.openSWA('${b.id}')">${esc(b.billingNo)}</span>
                         ${isDP ? '<div style="font-size:9.5px;color:var(--amber);font-family:\'IBM Plex Mono\',monospace;text-transform:uppercase;letter-spacing:.07em;">advance</div>' : ''}</td>
                     <td>${b.period || '—'}</td>
                     <td class="amt">${isDP ? '—' : b.prevPct + '% → ' + b.currentPct + '%'}</td>
@@ -153,7 +153,7 @@ Object.assign(ProjectPage, {
                     <td class="amt">${recoup ? '<span style="color:var(--amber)">−₱' + fmtMoney(recoup) + '</span>' : '—'}</td>
                     <td class="amt">${(parseFloat(b.retentionAmount) || 0) ? '₱' + fmtMoney(b.retentionAmount) : '—'}</td>
                     <td class="amt"><b>₱${fmtMoney(b.netAmount || 0)}</b></td>
-                    <td><span class="stamp ${cls}">${b.status}</span></td>
+                    <td><span class="stamp ${cls}">${esc(b.status)}</span></td>
                     <td>${actions}</td>
                 </tr>`;
             });
@@ -176,7 +176,7 @@ Object.assign(ProjectPage, {
         if (isNaN(pct)) { UI.toast('Enter a valid %.', 'error'); return; }
         try {
             const res = await DataService.reviseBilling(id, pct);
-            UI.toast(`Revised as ${res.billingNo} — for admin approval. The original is kept as superseded.`, 'success');
+            UI.toast(`Revised as ${esc(res.billingNo)} — for admin approval. The original is kept as superseded.`, 'success');
             await this.open(this._currentProjectId, true);   // v6.5: stays on this tab
         } catch (err) { UI.toast('' + err.message, 'error'); }
     },
@@ -218,7 +218,7 @@ Object.assign(ProjectPage, {
         if (!ok) return;
         try {
             const res = await DataService.createDownpaymentBilling(this._currentProjectId);
-            UI.toast(`${res.billingNo} recorded (₱${fmtMoney(res.net)}) — awaiting approval.`, 'success');
+            UI.toast(`${esc(res.billingNo)} recorded (₱${fmtMoney(res.net)}) — awaiting approval.`, 'success');
             await this.open(this._currentProjectId, true);
             this.switchTab('billings');
             if (typeof App.updateApprovalBadge === 'function') App.updateApprovalBadge();
@@ -231,7 +231,7 @@ Object.assign(ProjectPage, {
         if (!confirm(`Generate a progress billing up to ${pct}% accomplishment?`)) return;
         try {
             const res = await DataService.createBilling(this._currentProjectId, pct, '');
-            UI.toast(`${res.billingNo} generated — for admin approval.`, 'success');
+            UI.toast(`${esc(res.billingNo)} generated — for admin approval.`, 'success');
             await this.open(this._currentProjectId, true);   // v6.5: stays on this tab
         } catch (err) { UI.toast('' + err.message, 'error'); }
     },
@@ -407,7 +407,7 @@ Object.assign(ProjectPage, {
                     <div><b>Owner / Client:</b> ${p.clientName || '—'}</div>
                 </div>
                 <div style="text-align:right;">
-                    <div><b>Subject:</b> ${b.billingNo}</div>
+                    <div><b>Subject:</b> ${esc(b.billingNo)}</div>
                     <div><b>Period:</b> ${b.period || '—'}</div>
                     <div><b>Date:</b> ${b.createdAt || '—'}</div>
                 </div>

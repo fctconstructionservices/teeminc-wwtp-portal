@@ -19,6 +19,7 @@
 @import url('layout/shell.css');
 @import url('layout/nav.css');   /* v12 CONTROL ROOM shell */
 @import url('pages/calendar.css');   /* v18 */
+@import url('pages/documents.css');   /* v20 */
 @import url('layout/two-column.css');
 
 /* ─── shared components ─── */

@@ -60,9 +60,9 @@ Object.assign(ProjectPage, {
                     ? ` <span style="font-size:10px;color:var(--amber);font-family:'IBM Plex Mono';" title="No recent log entry - the report may simply not have been updated">${Icon.warning({size:13})} ${e.staleDays}d stale</span>`
                     : '';
                 html += `<tr>
-                    <td><b>${e.name}</b>${e.brand ? `<div class="mono" style="font-size:10.5px;color:var(--ink-soft)">${e.brand}</div>` : ''}</td>
+                    <td><b>${esc(e.name)}</b>${e.brand ? `<div class="mono" style="font-size:10.5px;color:var(--ink-soft)">${esc(e.brand)}</div>` : ''}</td>
                     <td class="amt">${fmtNum(e.qty)}</td>
-                    <td><span class="stamp ${this._eqStatusClass(e.status)}">${e.status}</span></td>
+                    <td><span class="stamp ${this._eqStatusClass(e.status)}">${esc(e.status)}</span></td>
                     <td class="amt">${e.daysOnSite}</td>
                     <td class="amt">${e.operationalDays}</td>
                     <td>
@@ -87,8 +87,8 @@ Object.assign(ProjectPage, {
             downtime.forEach(d => {
                 html += `<tr>
                     <td class="mono" style="font-size:11.5px">${d.date}</td>
-                    <td>${d.name}</td>
-                    <td><span class="stamp ${this._eqStatusClass(d.status)}">${d.status}</span></td>
+                    <td>${esc(d.name)}</td>
+                    <td><span class="stamp ${this._eqStatusClass(d.status)}">${esc(d.status)}</span></td>
                     <td style="color:var(--ink-soft);font-size:12px">${d.remarks || '—'}</td>
                 </tr>`;
             });

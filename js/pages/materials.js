@@ -142,7 +142,7 @@ const MaterialsPage = {
                     <div class="mc-title">${m.name || m.brand || 'Unnamed'}</div>
                     <div class="mc-meta">
                         <span class="req-id">${m.id}</span>
-                        ${m.brand ? `<span>${m.brand}</span>` : ''}
+                        ${m.brand ? `<span>${esc(m.brand)}</span>` : ''}
                         <span>${m.category || ''} ${m.subcategory ? '→ ' + m.subcategory : ''}</span>
                         <span>${m.unit || ''}</span>
                         ${m.status === 'pending' ? '<span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">Pending</span>' : ''}
@@ -224,7 +224,7 @@ const MaterialsPage = {
         } else {
             mats.forEach(m => {
                 html += `<tr>
-                    <td>${m.item}</td>
+                    <td>${esc(m.item)}</td>
                     <td class="mono" style="font-size:11.5px">${m.unit || '—'}</td>
                     <td class="amt"><b>${fmtNum(m.qty)}</b></td>
                     <td class="mono" style="font-size:11px">${m.lastFrom}</td>
@@ -240,7 +240,7 @@ const MaterialsPage = {
         } else {
             eqs.forEach(e => {
                 html += `<tr>
-                    <td>${e.item}</td>
+                    <td>${esc(e.item)}</td>
                     <td class="amt"><b>${fmtNum(e.qty)}</b></td>
                     <td class="mono" style="font-size:11px">${e.lastFrom}</td>
                     <td class="mono" style="font-size:11px">${e.lastDate || '—'}</td>

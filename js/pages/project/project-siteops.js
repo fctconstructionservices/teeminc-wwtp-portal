@@ -50,15 +50,15 @@ Object.assign(ProjectPage, {
                         <div>
                             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px;">
                                 <span class="req-id">${it.id}</span>
-                                <b style="font-size:13px;">${it.item}</b>
+                                <b style="font-size:13px;">${esc(it.item)}</b>
                                 <span class="stamp ${prioCls(it.priority)}" style="transform:none;padding:1px 8px;font-size:9px;">${it.priority || 'Medium'}</span>
                                 ${it.sowId ? `<span class="mono" style="font-size:10.5px;color:var(--ink-soft);">${it.sowId}</span>` : ''}
                             </div>
                             <div style="font-size:11.5px;color:var(--ink-soft);">
-                                ${it.location ? `${Icon.pin({size:11})} ${it.location} &middot; ` : ''}${it.assignedTo ? `${Icon.user({size:11})} ${it.assignedTo} &middot; ` : ''}${it.dueDate ? `${Icon.calendar({size:11})} Due ${it.dueDate} &middot; ` : ''}Raised by ${it.raisedBy || '—'}
+                                ${it.location ? `${Icon.pin({size:11})} ${esc(it.location)} &middot; ` : ''}${it.assignedTo ? `${Icon.user({size:11})} ${it.assignedTo} &middot; ` : ''}${it.dueDate ? `${Icon.calendar({size:11})} Due ${it.dueDate} &middot; ` : ''}Raised by ${it.raisedBy || '—'}
                                 ${it.status === 'Closed' ? ` · <span style="color:var(--green,#2F7A46);">Closed ${it.closedAt || ''} by ${it.closedBy || ''}</span>` : ''}
                             </div>
-                            ${it.remarks ? `<div style="font-size:11.5px;margin-top:4px;">${it.remarks}</div>` : ''}
+                            ${it.remarks ? `<div style="font-size:11.5px;margin-top:4px;">${esc(it.remarks)}</div>` : ''}
 ${AttachmentGallery.render([
                                 it.beforeImage ? { url: it.beforeImage, name: 'Before (finding)' } : null,
                                 it.afterImage ? { url: it.afterImage, name: 'After (rectified)' } : null
@@ -101,7 +101,7 @@ ${AttachmentGallery.render([
                     </div>
                     <div class="field" style="margin-top:6px;"><label>Assigned To</label>
                         <input type="text" id="pl-assigned" list="pl-people" placeholder="Name or subcontractor" />
-                        <datalist id="pl-people">${people.map(pp => `<option value="${pp.name}"></option>`).join('')}</datalist>
+                        <datalist id="pl-people">${people.map(pp => `<option value="${esc(pp.name)}"></option>`).join('')}</datalist>
                     </div>
                     <div class="field" style="margin-top:6px;"><label>Remarks</label><input type="text" id="pl-remarks" /></div>
                     <div class="field" style="margin-top:6px;"><label>BEFORE Photo (finding)</label><input type="file" accept="image/*" id="pl-before" /></div>
@@ -452,8 +452,8 @@ ${AttachmentGallery.render([
             html += `<div class="panel"><table><thead><tr><th>Drawing No.</th><th>Title</th><th>Discipline</th><th>Rev</th><th>Date</th><th>File</th><th>Uploaded By</th>${isSuper ? '<th></th>' : ''}</tr></thead><tbody>`;
             list.forEach(d => {
                 html += `<tr>
-                    <td><span class="req-id">${d.drawingNo}</span></td>
-                    <td><b>${d.title || '—'}</b>${d.remarks ? `<div style="font-size:10.5px;color:var(--ink-soft);">${d.remarks}</div>` : ''}</td>
+                    <td><span class="req-id">${esc(d.drawingNo)}</span></td>
+                    <td><b>${d.title || '—'}</b>${d.remarks ? `<div style="font-size:10.5px;color:var(--ink-soft);">${esc(d.remarks)}</div>` : ''}</td>
                     <td style="font-size:11.5px;">${d.discipline || '—'}</td>
                     <td class="mono" style="font-size:11px;">${d.revision || '0'}</td>
                     <td class="mono" style="font-size:11px;white-space:nowrap;">${d.drawingDate || '—'}</td>

@@ -165,7 +165,8 @@ Object.assign(ProjectPage, {
      */
     _sowOptions(includeId) {
         const items = this._sowItems || [];
-        const esc = v => String(v || '').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        // v20: uses the global esc() from js/core/esc.js — the local
+        // one here escaped only " and <, leaving & and > through.
         const PAD = '\u2007\u2007';   // figure space — survives inside <option>
         const progress = this._sowProgress || {};
         let html = '<option value="">Select SOW...</option>';
@@ -399,7 +400,7 @@ Object.assign(ProjectPage, {
         const list = (this._data && this._data.personnel) || [];
         if (!list.length) return '<option value="">No personnel — add names via Manpower DB → Personnel</option>';
         return '<option value="">Select person...</option>' +
-            list.map(pp => `<option value="${pp.id}" data-role="${(pp.role || '').replace(/"/g, '&quot;')}" data-name="${(pp.name || '').replace(/"/g, '&quot;')}" ${selectedId === pp.id ? 'selected' : ''}>${pp.name}${pp.role ? ' — ' + pp.role : ''}</option>`).join('');
+            list.map(pp => `<option value="${pp.id}" data-role="${(pp.role || '').replace(/"/g, '&quot;')}" data-name="${(pp.name || '').replace(/"/g, '&quot;')}" ${selectedId === pp.id ? 'selected' : ''}>${esc(pp.name)}${pp.role ? ' — ' + pp.role : ''}</option>`).join('');
     },
 
     /** _manpowerRowHTML (v9) - One attendance row: person → auto role,
@@ -538,19 +539,19 @@ Object.assign(ProjectPage, {
         const list = this._approvedManpower || [];
         if (!list.length) return '<option value="">No approved roles — add via Manpower DB</option>';
         return '<option value="">Select role...</option>' +
-            list.map(m => `<option value="${(m.role || '').replace(/"/g, '&quot;')}">${m.role}${m.classification ? ' (' + m.classification + ')' : ''}</option>`).join('');
+            list.map(m => `<option value="${(m.role || '').replace(/"/g, '&quot;')}">${esc(m.role)}${m.classification ? ' (' + m.classification + ')' : ''}</option>`).join('');
     },
     _equipmentOptionsDaily() {
         const list = this._approvedEquipment || [];
         if (!list.length) return '<option value="">No approved equipment</option>';
         return '<option value="">Select equipment...</option>' +
-            list.map(e => `<option value="${(e.name || '').replace(/"/g, '&quot;')}">${e.name}${e.brand ? ' — ' + e.brand : ''}</option>`).join('');
+            list.map(e => `<option value="${(e.name || '').replace(/"/g, '&quot;')}">${esc(e.name)}${e.brand ? ' — ' + e.brand : ''}</option>`).join('');
     },
     _materialOptionsDaily() {
         const list = this._approvedMaterials || [];
         if (!list.length) return '<option value="">No approved materials</option>';
         return '<option value="">Select material...</option>' +
-            list.map(m => `<option value="${(m.name || '').replace(/"/g, '&quot;')}" data-unit="${(m.unit || '').replace(/"/g, '&quot;')}">${m.name}${m.brand ? ' — ' + m.brand : ''}</option>`).join('');
+            list.map(m => `<option value="${(m.name || '').replace(/"/g, '&quot;')}" data-unit="${(m.unit || '').replace(/"/g, '&quot;')}">${esc(m.name)}${m.brand ? ' — ' + m.brand : ''}</option>`).join('');
     },
     /**
      * syncMaterialUnit (v11 BATCH I2) - Fills the unit when the typed
@@ -827,7 +828,7 @@ Object.assign(ProjectPage, {
         </tr></thead><tbody>`;
         list.forEach(pp => {
             html += `<tr>
-                <td style="position:sticky;left:0;background:var(--surface);z-index:1;"><b>${pp.name}</b></td>
+                <td style="position:sticky;left:0;background:var(--surface);z-index:1;"><b>${esc(pp.name)}</b></td>
                 <td style="font-size:11px;">${pp.role || '—'}</td>
                 ${days.map(dd => cell(pp.byDay[dd])).join('')}
                 <td class="amt"><b>${pp.daysPresent}</b></td>

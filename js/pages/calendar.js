@@ -145,6 +145,12 @@ const CalendarPanel = {
         const e = this._esc.bind(this);
         const d = this._data || { tasks: [], byDay: {} };
         const today = this._today();
+        // v20: a malformed month falls back to the current one rather
+        // than rendering "Invalid Date". A calendar showing a broken
+        // header is worse than one quietly showing today.
+        if (!/^\d{4}-\d{2}$/.test(String(this._month || ''))) {
+            this._month = this._today().slice(0, 7);
+        }
         const [y, m] = this._month.split('-').map(Number);
 
         const first = new Date(y, m - 1, 1);
@@ -435,10 +441,21 @@ const CalendarPanel = {
                     assignedTo: v('tk-to'), dueDate: v('tk-due'),
                     priority: v('tk-pri'), proofRequired: v('tk-proof')
                 });
+                // ── v20 FIX: READ THE FIELDS BEFORE REMOVING THE MODAL ──
+                // The due date was read on the two lines AFTER the modal
+                // was removed from the DOM — so getElementById returned
+                // null, v() fell back to '', and _month became an empty
+                // string. _paint then did ''.split('-') and built
+                // `new Date(NaN, NaN, 1)`, which renders as "Invalid
+                // Date" until Today is pressed and resets it.
+                //
+                // Everything needed is captured while the modal still
+                // exists.
+                const due = v('tk-due');
                 document.getElementById('taskModal')?.remove();
-                UI.toast('Task assigned and emailed.', 'success');
-                this._selected = v('tk-due');
-                this._month = v('tk-due').slice(0, 7);
+                UI.toast('Task assigned.', 'success');
+                this._selected = due;
+                this._month = due.slice(0, 7);
                 delete this._months[this._month];
                 await this.load(null, true);
             } catch (err) { UI.toast('' + err.message, 'error'); }

@@ -42,6 +42,7 @@ const FastCache = {
         getProjectDataCached: 1, getProjectData: 1,
         getHomeDataCached: 1, getHomeData: 1,
         getPortfolioDataCached: 1, getPortfolioData: 1,
+        getTasksForMonthCached: 1,
         getAllPersonnel: 1, getSuppliers: 1, getMaterials: 1, getEquipment: 1,
         getCatalogs: 1, getPrintTemplate: 1
     },

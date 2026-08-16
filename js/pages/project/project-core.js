@@ -200,6 +200,9 @@ const ProjectPage = {
                 <button data-tab="punchlist" onclick="ProjectPage.switchTab('punchlist')">${Icon.punchlist({size:13})} Punchlist</button>
                 <button data-tab="safety" onclick="ProjectPage.switchTab('safety')">${Icon.safety({size:13})} Safety</button>
                 <button data-tab="drawings" onclick="ProjectPage.switchTab('drawings')">${Icon.drawing({size:13})} Drawings</button>
+                <!-- v20: everything received about the project that is not a
+                     drawing — contracts, permits, client correspondence. -->
+                <button data-tab="documents" onclick="ProjectPage.switchTab('documents')">${Icon.fileText ? Icon.fileText({size:13}) : ''} Documents</button>
                 <button data-tab="reports" onclick="ProjectPage.switchTab('reports')">${Icon.fileText({size:13})} Reports</button>
             </div>
 
@@ -216,6 +219,7 @@ const ProjectPage = {
             <div id="proj-tab-punchlist" class="project-tab-content"></div>
             <div id="proj-tab-safety" class="project-tab-content"></div>
             <div id="proj-tab-drawings" class="project-tab-content"></div>
+            <div id="proj-tab-documents" class="project-tab-content"></div>
             <div id="proj-tab-reports" class="project-tab-content"></div>
 
             <div class="data-source-note">Estimates are grouped by SOW with draft / pending / approved states.</div>`;
@@ -277,7 +281,7 @@ const ProjectPage = {
                                 <input type="checkbox" value="${em}" ${current.includes(em) ? 'checked' : ''} ${u.role === 'superadmin' ? 'checked disabled title="Super Admin always has access"' : ''} style="accent-color:var(--safety);width:15px;height:15px;">
                                 <span class="editor-avatar">${init}</span>
                                 <span style="font-weight:600;font-size:12.5px;">${u.name || em}</span>
-                                <span style="font-family:'IBM Plex Mono';font-size:10px;color:var(--ink-soft);margin-left:auto;border:1px solid var(--line);border-radius:4px;padding:1px 6px;">${u.role}</span>
+                                <span style="font-family:'IBM Plex Mono';font-size:10px;color:var(--ink-soft);margin-left:auto;border:1px solid var(--line);border-radius:4px;padding:1px 6px;">${esc(u.role)}</span>
                             </label>`;
                         }).join('')}
                     </div>
@@ -328,6 +332,10 @@ const ProjectPage = {
         // the project, because the picker is cheap to build and there is
         // no reason to pay for it on every project open.
         if (tab === 'reports' && this._data) this.renderReports(this._data);
+        // v20: fetched on demand. Documents are not needed to open a
+        // project, and loading a register of files on every project open
+        // would slow down the tabs people actually use.
+        if (tab === 'documents' && this._data) this.renderDocuments(this._data);
     },
 
     // ─── SHOW ADD PROJECT MODAL ──────────────────────────────
@@ -439,7 +447,7 @@ const ProjectPage = {
         try {
             const clients = await DataService.getClients();
             sel.innerHTML = '<option value="">Select client...</option>' +
-                clients.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+                clients.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
             if (selectId) sel.value = selectId;
         } catch (err) {
             sel.innerHTML = '<option value="">Failed to load clients</option>';
@@ -636,7 +644,7 @@ const ProjectPage = {
         try {
             const res = await DataService.deleteProject(projectId, name);
             document.getElementById('delProjModal')?.remove();
-            UI.toast(`"${res.name}" deleted — ${res.rowsRemoved} row(s) removed.`, 'success');
+            UI.toast(`"${esc(res.name)}" deleted — ${res.rowsRemoved} row(s) removed.`, 'success');
             App.navigate('home');
         } catch (err) {
             UI.toast('' + err.message, 'error');
@@ -651,7 +659,7 @@ const ProjectPage = {
         if (!ok) return;
         try {
             const res = await DataService.archiveProject(this._currentProjectId, '');
-            UI.toast(`"${res.name}" archived.`, 'success');
+            UI.toast(`"${esc(res.name)}" archived.`, 'success');
             App.navigate('home');
         } catch (err) { UI.toast('' + err.message, 'error'); }
     },
@@ -777,7 +785,7 @@ const ProjectPage = {
                     ]},
                     options: { responsive: true, maintainAspectRatio: false,
                         plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, font: { size: 10.5 } } },
-                            tooltip: { callbacks: { label: c => `${c.dataset.label}: ₱${fmtMoney(c.parsed.y ?? 0)}` } } },
+                            tooltip: { callbacks: { label: c => `${esc(c.dataset.label)}: ₱${fmtMoney(c.parsed.y ?? 0)}` } } },
                         scales: { y: { ticks: { callback: fmtAxisMoney }, grid: { color: '#EEEBE0' } },
                             x: { grid: { display: false }, ticks: this._cfView === 'weekly' ? { maxRotation: 60, minRotation: 40, font: { size: 9.5 }, autoSkip: true, maxTicksLimit: 26 } : {} } } }
                 });
@@ -798,7 +806,7 @@ const ProjectPage = {
                     ]},
                     options: { responsive: true, maintainAspectRatio: false,
                         plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, font: { size: 10.5 } } },
-                            tooltip: { callbacks: { label: c => `${c.dataset.label}: ₱${fmtMoney(c.parsed.y ?? 0)}` } } },
+                            tooltip: { callbacks: { label: c => `${esc(c.dataset.label)}: ₱${fmtMoney(c.parsed.y ?? 0)}` } } },
                         scales: { y: { ticks: { callback: fmtAxisMoney }, grid: { color: '#EEEBE0' } },
                             x: { grid: { display: false }, ticks: this._evmView === 'weekly' ? { maxRotation: 60, minRotation: 40, font: { size: 9.5 }, autoSkip: true, maxTicksLimit: 26 } : {} } } }
                 });

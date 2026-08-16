@@ -45,6 +45,10 @@ var TASK_PROOF = { none: 'none', note: 'note', file: 'file' };
 function getTasksForMonth(month) {
   requireLogin_();
   ensureSheet_('Tasks');
+  // v20: Tasks and Users in one batch. Two separate readAll_ calls are
+  // two round trips, and this runs on every dashboard load and every
+  // month step — it is the most frequently called read in the system.
+  readMany_(['Tasks', 'Users']);
 
   var m = String(month || '').trim();
   if (!/^\d{4}-\d{2}$/.test(m)) {
