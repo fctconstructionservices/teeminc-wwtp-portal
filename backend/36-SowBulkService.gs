@@ -173,6 +173,21 @@ function addSOWItemsBulk(projectId, text, opts) {
   assertProjectEditor_(projectId);
   opts = opts || {};
 
+  // ── v19 FIX: AN IMPORTED ITEM NEEDS A SCHEDULE ──
+  // Imported items were written with no start, no finish and no
+  // duration. On the Timeline that is not "not scheduled yet" — it is a
+  // BROKEN row: changing the duration cannot move a finish date that
+  // does not exist, and changing a start cannot recalculate a duration
+  // from a missing finish. The whole interdependence relies on two of
+  // the three values being present.
+  //
+  // Every item therefore starts on the project's start date with a
+  // duration of one working day. That is a placeholder, not a plan —
+  // but it is a WORKING placeholder, and a real one-day task is a
+  // truthful thing to say about a scope nobody has scheduled yet.
+  var proj = readAll_('Projects').find(function (p) { return p.id === projectId; });
+  var kickoff = _bulkStartDate_(proj && proj.startDate);
+
   var parsed = parseSowOutline_(text);
   if (parsed.errors.length) {
     throw new Error(parsed.errors.length + ' line(s) need fixing before anything can be imported:\n' +
@@ -201,7 +216,12 @@ function addSOWItemsBulk(projectId, text, opts) {
       id: r.id, projectId: projectId,
       description: r.description,
       budget: 0, actual: 0,
-      startDate: '', endDate: '', status: '',
+      // v19: a real one-day window, so the Timeline behaves from the
+      // moment the item exists. Titles get none — their span is derived
+      // from their children.
+      startDate: r.isTitle ? '' : kickoff,
+      endDate: r.isTitle ? '' : kickoff,
+      status: '',
       qty: r.qty, unit: r.unit,
       budgetMode: 'manual', predecessors: '',
       isMilestone: '', baselineStart: '', baselineEnd: '',
@@ -247,4 +267,70 @@ function addSOWItemsBulk(projectId, text, opts) {
     priced: parsed.rows.filter(function (r) { return !r.isTitle; }).length,
     estimateGroups: groups
   };
+}
+
+
+/**
+ * _bulkStartDate_ (v19) - the day imported items begin on.
+ *
+ * The project's own start date when it has one, otherwise the next
+ * working day from today. Never a weekend: an item that begins on a
+ * Sunday shows a duration the site cannot work, and every dependent
+ * date inherits the error.
+ */
+function _bulkStartDate_(projectStart) {
+  var d = null;
+  if (projectStart) {
+    d = new Date(projectStart);
+    if (isNaN(d.getTime())) d = null;
+  }
+  if (!d) d = new Date();
+  // Sunday is 0, Saturday is 6.
+  while (d.getDay() === 0 || d.getDay() === 6) {
+    d.setDate(d.getDate() + 1);
+  }
+  return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+
+
+/**
+ * repairSowSchedules (v19) - gives a working schedule to items that
+ * were imported before the fix above.
+ *
+ * WHY THIS IS NEEDED SEPARATELY. Fixing the import only helps the next
+ * one. Every item already imported still has no start and no finish,
+ * and on the Timeline that is a broken row rather than an unscheduled
+ * one — the interdependence between start, duration and finish needs
+ * two of the three to be present before it can compute the third.
+ *
+ * Only items with NEITHER date are touched. Anything already scheduled,
+ * even partially, is left exactly as it is: a placeholder must never
+ * overwrite a decision somebody made.
+ */
+function repairSowSchedules(projectId) {
+  assertProjectEditor_(projectId);
+  var proj = readAll_('Projects').find(function (p) { return p.id === projectId; });
+  var kickoff = _bulkStartDate_(proj && proj.startDate);
+
+  var sows = readAll_('SOWItems').filter(function (s) { return s.projectId === projectId; });
+  var tree = buildSowTree_(sows);
+  var heading = {};
+  tree.forEach(function (n) { if (n.isHeading) heading[String(n.id).trim()] = true; });
+
+  var fixed = 0;
+  sows.forEach(function (s) {
+    if (heading[String(s.id).trim()]) return;          // titles span their children
+    if (String(s.startDate || '').trim()) return;      // already has a start
+    if (String(s.endDate || '').trim()) return;        // or a finish
+    updateRowWhere_('SOWItems', { id: s.id, projectId: projectId },
+      { startDate: kickoff, endDate: kickoff });
+    fixed++;
+  });
+
+  if (fixed) {
+    logActivity_(fixed + ' SOW item(s) on ' + projectId +
+      ' given a one-day placeholder schedule starting ' + kickoff +
+      ' so the Timeline can compute from them', 'blue', projectId);
+  }
+  return { success: true, fixed: fixed, startDate: kickoff };
 }

@@ -207,6 +207,7 @@ const API_ACTIONS = {
   // ── v15: BULK SOW ──
   previewSowOutline: previewSowOutline,
   addSOWItemsBulk: addSOWItemsBulk,
+  repairSowSchedules: repairSowSchedules,   // v19
 
   // ── v16: PROJECT DELETE / ARCHIVE ──
   previewProjectDelete: previewProjectDelete,
