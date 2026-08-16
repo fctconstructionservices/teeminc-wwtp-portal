@@ -549,7 +549,7 @@ const QuotationsPage = {
             const res = await DataService.reviseQuotation(id,
                 document.getElementById('qt-revnote')?.value || '');
             document.getElementById('qtReviseModal')?.remove();
-            UI.toast(`Snapshot saved. Now working on revision ${res.revision}.`, 'success');
+            UI.toast(`Snapshot saved. Now working on revision ${esc(res.revision)}.`, 'success');
             await this.load();
         } catch (err) { UI.toast('' + err.message, 'error'); }
     },

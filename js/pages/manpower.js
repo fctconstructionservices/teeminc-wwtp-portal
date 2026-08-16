@@ -61,7 +61,7 @@ const ManpowerPage = {
     _approvedRoleOptions(selected) {
         const roles = this._all.filter(m => m.status === 'approved');
         return '<option value="">Select position...</option>' +
-            roles.map(r => `<option value="${String(r.role).replace(/"/g, '&quot;')}" data-class="${r.classification || ''}" ${selected === r.role ? 'selected' : ''}>${r.role}${r.classification ? ' (' + r.classification + ')' : ''}</option>`).join('');
+            roles.map(r => `<option value="${String(r.role).replace(/"/g, '&quot;')}" data-class="${r.classification || ''}" ${selected === r.role ? 'selected' : ''}>${esc(r.role)}${r.classification ? ' (' + r.classification + ')' : ''}</option>`).join('');
     },
 
     renderShell(container) {
@@ -220,7 +220,7 @@ const ManpowerPage = {
                     <div class="mc-meta">
                         <span class="req-id">${m.id}</span>
                         <span>${m.classification || '—'}</span>
-                        ${m.notes ? `<span>${m.notes}</span>` : ''}
+                        ${m.notes ? `<span>${esc(m.notes)}</span>` : ''}
                         ${isPending ? '<span class="stamp pending" style="transform:none;padding:1px 8px;font-size:9px;">Pending</span>' : '<span class="stamp approved" style="transform:none;padding:1px 8px;font-size:9px;">Approved</span>'}
                         ${isPending && App.isApprover() ? `<button class="btn-sm success" onclick="event.stopPropagation();ManpowerPage.approveRole('${m.id}')" style="margin-left:8px;">Approve</button>` : ''}
                     </div>
@@ -260,7 +260,7 @@ const ManpowerPage = {
                 <td><span class="req-id">${p.id}</span></td>
                 <td class="prs-name-cell">
                     ${p.image ? `<img class="prs-thumb" src="${driveImgSrc(p.image)}" alt="" onerror="this.style.display='none'" />` : ''}
-                    <span><b>${p.name}</b>${p.notes ? `<div style="font-size:10.5px;color:var(--ink-soft)">${p.notes}</div>` : ''}</span>
+                    <span><b>${esc(p.name)}</b>${p.notes ? `<div style="font-size:10.5px;color:var(--ink-soft)">${esc(p.notes)}</div>` : ''}</span>
                 </td>
                 <td>${p.role || '—'}</td>
                 <td>${p.classification || '—'}</td>
@@ -433,7 +433,7 @@ const ManpowerPage = {
             if (p.image) { pvImg.src = driveImgSrc(p.image); pv.style.display = 'block'; }
             else { pv.style.display = 'none'; }
         }
-        document.getElementById('mpPersonFormTitle').textContent = `Edit ${p.name}`;
+        document.getElementById('mpPersonFormTitle').textContent = `Edit ${esc(p.name)}`;
         document.getElementById('prsSubmitBtn').textContent = 'Save Changes';
         el.style.display = 'block';
         el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -593,10 +593,10 @@ const ManpowerPage = {
             }
             if (id) {
                 await DataService.updatePersonnel(id, data);
-                UI.toast(`${data.name} updated.`, 'success');
+                UI.toast(`${esc(data.name)} updated.`, 'success');
             } else {
                 const res = await DataService.addPersonnel(data);
-                UI.toast(`${data.name} added to Personnel (${res.id}).`, 'success');
+                UI.toast(`${esc(data.name)} added to Personnel (${res.id}).`, 'success');
             }
             this.hidePersonForm();
             await this._refreshCache();

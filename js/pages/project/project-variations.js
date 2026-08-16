@@ -80,7 +80,7 @@ Object.assign(ProjectPage, {
                     <td>${v.description || '—'}</td>
                     <td class="mono" style="font-size:11.5px">${v.sowId}</td>
                     <td class="amt">${amt >= 0 ? '+' : '−'}₱${fmtMoney(Math.abs(amt))}</td>
-                    <td><span class="stamp ${cls}">${v.status}</span></td>
+                    <td><span class="stamp ${cls}">${esc(v.status)}</span></td>
                     <td style="font-size:11px;color:var(--ink-soft)">${effect}</td>
                     <td>${actions}</td>
                 </tr>`;

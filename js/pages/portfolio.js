@@ -120,7 +120,7 @@ const PortfolioPage = {
                     return `<span class="idx-chip ${c}">${v.toFixed(2)}</span>`;
                 };
                 html += `<tr style="cursor:pointer" onclick="PortfolioPage.goToProject('${p.id}','overview')">
-                    <td><b>${p.name}</b><div class="mono" style="font-size:10px;color:var(--ink-soft)">${p.id}${p.client ? ' · ' + p.client : ''}</div></td>
+                    <td><b>${esc(p.name)}</b><div class="mono" style="font-size:10px;color:var(--ink-soft)">${p.id}${p.client ? ' · ' + p.client : ''}</div></td>
                     <td>
                         <div style="height:6px;background:var(--bg);border-radius:20px;overflow:hidden;min-width:64px;"><div style="height:100%;border-radius:20px;width:${Math.min(p.progress, 100)}%;background:${barColor};"></div></div>
                         <span class="mono" style="font-size:10px;color:var(--ink-soft)">${p.progress}%</span>

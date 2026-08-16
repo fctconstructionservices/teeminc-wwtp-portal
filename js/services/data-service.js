@@ -800,7 +800,18 @@ const DataService = {
     },
 
     // ── v18: TASKS ──
-    async getTasksForMonth(month) { return await gasCall('getTasksForMonth', month); },
+    // v20: through the cache. This is the first thing the dashboard
+    // draws, so its latency is the latency of opening the system.
+    async getTasksForMonth(month) {
+        return await FastCache.wrap('getTasksForMonthCached', [month],
+            () => gasCall('getTasksForMonthCached', month));
+    },
+    // ── v20: PROJECT DOCUMENTS ──
+    async getProjectDocuments(projectId) { return await gasCall('getProjectDocuments', projectId); },
+    async addProjectDocument(data) { return await gasCall('addProjectDocument', data); },
+    async updateProjectDocument(id, data) { return await gasCall('updateProjectDocument', id, data); },
+    async deleteProjectDocument(id) { return await gasCall('deleteProjectDocument', id); },
+
     async getMyTaskSummary() { return await gasCall('getMyTaskSummary'); },
     async getAssignableUsers() { return await gasCall('getAssignableUsers'); },
     async createTask(data) { return await gasCall('createTask', data); },

@@ -876,6 +876,8 @@
          4. features   — search + form submissions
          5. init.js    — boots the app; must stay LAST
          ============================================================ -->
+    <!-- v20: esc() must be defined before anything that renders. -->
+    <script src="js/core/esc.js"></script>
     <script src="js/core/icons.js"></script>
     <!-- v10: searchable pickers for the Estimates tab -->
     <script src="js/components/search-select.js"></script>
@@ -908,6 +910,7 @@
     <script src="js/pages/project/project-billings.js"></script>
     <script src="js/pages/project/project-variations.js"></script>
     <script src="js/pages/project/project-siteops.js"></script>
+    <script src="js/pages/project/project-documents.js"></script>
     <script src="js/pages/approvals.js"></script>
     <!-- v11 BATCH E: PrintDoc must load BEFORE any page that prints -->
     <script src="js/pages/print-template.js"></script>

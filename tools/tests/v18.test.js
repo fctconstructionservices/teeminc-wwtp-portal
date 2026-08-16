@@ -299,6 +299,7 @@ module.exports = function (t) {
         const SHEETS = { Tasks: [], Users: [] };
         const harness = `
             function ensureSheet_(n){ if(!SHEETS[n]) SHEETS[n]=[]; return SHEETS[n]; }
+            function readMany_(){}   // v20: batched read
             function readAll_(n){ return (SHEETS[n]||[]).map(r=>Object.assign({},r)); }
             function appendRow_(n,row){ (SHEETS[n]=SHEETS[n]||[]).push(Object.assign({},row)); }
             function updateRow_(n,k,v,p){ (SHEETS[n]||[]).forEach(r=>{ if(String(r[k])===String(v)) Object.assign(r,p); }); }

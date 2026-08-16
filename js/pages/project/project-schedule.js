@@ -129,8 +129,7 @@ Object.assign(ProjectPage, {
      * someone to set one that the chart then ignores.
      */
     renderScheduleHeadingCells(item) {
-        const esc = v => String(v == null ? '' : v)
-            .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        // v20: uses the global esc() from js/core/esc.js.
         const collapsed = (this._gCollapsed || {})[item.id];
         const rp = item.rollupProgress;
         return `
@@ -159,9 +158,7 @@ Object.assign(ProjectPage, {
         const e = this._sDay(item.endDate);
         const dur = (s && e) ? this._sWorkBetween(s, e) : 1;
         const crit = t && t.critical;
-
-        const esc = v => String(v == null ? '' : v)
-            .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        // v20: uses the global esc() from js/core/esc.js.
 
         // v11 BATCH H5: headings are excluded — see openTaskModal.
         const predOpts = (this._sowItems || [])

@@ -22,7 +22,7 @@ const FinancePage = {
             <div class="kpi-strip">`;
             data.kpis.forEach(k => {
                 html +=
-                    `<div class="kpi-card ${k.cls}"><div class="k-label">${k.label}</div><div class="k-val mono">${k.value}</div><div class="k-sub">${k.sub}</div></div>`;
+                    `<div class="kpi-card ${k.cls}"><div class="k-label">${esc(k.label)}</div><div class="k-val mono">${k.value}</div><div class="k-sub">${k.sub}</div></div>`;
             });
             html += `</div>
             <div class="section-head"><h2>Cashflow</h2><div class="rule"></div>
@@ -37,7 +37,7 @@ const FinancePage = {
             <div class="chart-grid" style="margin-top:16px"><div class="chart-card"><div class="cc-head"><h3>Cash Advance Liquidation Aging</h3><span class="cc-note">unliquidated advances</span></div><div class="canvas-wrap short"><canvas id="agingChart"></canvas></div></div><div class="chart-card"><div class="cc-head"><h3>Project Cost Status</h3></div><table><thead><tr><th>Project</th><th style="text-align:right">Budget</th><th style="text-align:right">Actual</th><th>Status</th></tr></thead><tbody>`;
             data.costStatus.forEach(c => {
                 html +=
-                    `<tr><td>${c.project}</td><td class="amt">₱${fmtMoney(c.budget)}</td><td class="amt">₱${fmtMoney(c.actual)}</td><td><span class="stamp ${c.cls}">${c.status}</span></td></tr>`;
+                    `<tr><td>${c.project}</td><td class="amt">₱${fmtMoney(c.budget)}</td><td class="amt">₱${fmtMoney(c.actual)}</td><td><span class="stamp ${c.cls}">${esc(c.status)}</span></td></tr>`;
             });
             html += `</tbody></table></div></div>
             `;
@@ -101,7 +101,7 @@ const FinancePage = {
                 maintainAspectRatio: false,
                 plugins: {
                     legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, font: { size: 10.5 } } },
-                    tooltip: { callbacks: { label: c => `${c.dataset.label}: ₱${fmtMoney(c.parsed.y ?? 0)}` } }
+                    tooltip: { callbacks: { label: c => `${esc(c.dataset.label)}: ₱${fmtMoney(c.parsed.y ?? 0)}` } }
                 },
                 scales: { y: { ticks: { callback: fmtAxisMoney }, grid: { color: '#EEEBE0' } }, x: { grid: { display: false } } }
             }
@@ -196,7 +196,7 @@ const FinancePage = {
                     plugins: {
                         legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8,
                                 font: { size: 10.5 } } },
-                        tooltip: { callbacks: { label: c => `${c.label}: ${c.parsed}%` } }
+                        tooltip: { callbacks: { label: c => `${esc(c.label)}: ${c.parsed}%` } }
                     }
                 }
             });
