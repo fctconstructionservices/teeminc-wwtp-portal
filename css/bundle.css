@@ -16,7 +16,7 @@
 
 /* ─── base: tokens first, then reset/typography ─── */
 
-/* ═══════ base/variables.css ═══════ */
+/* ═══════ base\variables.css ═══════ */
 /* ================================================================
    base/variables.css — Design tokens
    All colors, radii, shadows and transitions for light + dark themes.
@@ -83,7 +83,7 @@
 }
 
 
-/* ═══════ base/reset.css ═══════ */
+/* ═══════ base\reset.css ═══════ */
 /* ================================================================
    base/reset.css — Reset, base typography, focus states
    Box-sizing, body defaults, .mono utility, form-control font
@@ -169,7 +169,7 @@ textarea:focus-visible {
 
 /* ─── layout ─── */
 
-/* ═══════ layout/shell.css ═══════ */
+/* ═══════ layout\shell.css ═══════ */
 /* ================================================================
    layout/shell.css — App shell
    Topbar, brand, nav actions, page container and section headers.
@@ -331,7 +331,7 @@ textarea:focus-visible {
 }
 
 
-/* ═══════ layout/nav.css ═══════ */
+/* ═══════ layout\nav.css ═══════ */
 /* ================================================================
    layout/nav.css — The app shell (v12 CONTROL ROOM)
 
@@ -643,7 +643,7 @@ textarea:focus-visible {
 }
    /* v12 CONTROL ROOM shell */
 
-/* ═══════ pages/calendar.css ═══════ */
+/* ═══════ pages\calendar.css ═══════ */
 /* ================================================================
    v18 — THE DASHBOARD CALENDAR
 
@@ -958,7 +958,7 @@ textarea:focus-visible {
 }
    /* v18 */
 
-/* ═══════ layout/two-column.css ═══════ */
+/* ═══════ layout\two-column.css ═══════ */
 /* ================================================================
    layout/two-column.css — Two-column layout helper
    Generic side-by-side panel arrangement used on Home.
@@ -980,7 +980,7 @@ textarea:focus-visible {
 
 /* ─── shared components ─── */
 
-/* ═══════ components/cards.css ═══════ */
+/* ═══════ components\cards.css ═══════ */
 /* ================================================================
    components/cards.css — Tickets, project cards, gauges
    Request ticket rows, home project cards and the SVG gauge strip.
@@ -1158,7 +1158,7 @@ textarea:focus-visible {
 }
 
 
-/* ═══════ components/tables.css ═══════ */
+/* ═══════ components\tables.css ═══════ */
 /* ================================================================
    components/tables.css — Panels & data tables
    Panel container and the standard striped data table.
@@ -1421,7 +1421,7 @@ textarea:focus-visible {
     .gallery-sow-select { max-width: 100%; width: 100%; }
 }
 
-/* ═══════ components/stamps.css ═══════ */
+/* ═══════ components\stamps.css ═══════ */
 /* ================================================================
    components/stamps.css — Status stamps & badges
    Approved / pending / rejected stamps used across all lists.
@@ -1474,7 +1474,7 @@ textarea:focus-visible {
 }
 
 
-/* ═══════ components/attachments.css ═══════ */
+/* ═══════ components\attachments.css ═══════ */
 /* ================================================================
    components/attachments.css — AttachmentGallery (v10)
    Thumbnails + lightbox used by every modal that can hold files.
@@ -1711,7 +1711,7 @@ textarea:focus-visible {
 }
 
 
-/* ═══════ components/search-select.css ═══════ */
+/* ═══════ components\search-select.css ═══════ */
 /* ================================================================
    components/search-select.css — SearchSelect (v10)
    Searchable pickers for the Estimates tab, replacing native <select>
@@ -1816,7 +1816,7 @@ textarea:focus-visible {
 }
 
 
-/* ═══════ components/forms.css ═══════ */
+/* ═══════ components\forms.css ═══════ */
 /* ================================================================
    components/forms.css — Forms
    Field blocks, selects, textareas, error states, requester badge
@@ -2425,7 +2425,7 @@ button.is-busy:disabled { opacity: .82; }
 .login-btn.is-busy { background: var(--steel); }
 
 
-/* ═══════ components/charts.css ═══════ */
+/* ═══════ components\charts.css ═══════ */
 /* ================================================================
    components/charts.css — Chart panels
    Canvas wrappers and chart legends (Finance + Project charts).
@@ -2502,7 +2502,7 @@ button.is-busy:disabled { opacity: .82; }
 }
 
 
-/* ═══════ components/toast.css ═══════ */
+/* ═══════ components\toast.css ═══════ */
 /* ================================================================
    components/toast.css — Toast notifications
    Bottom toast with success / error variants.
@@ -2547,7 +2547,7 @@ button.is-busy:disabled { opacity: .82; }
 }
 
 
-/* ═══════ components/dialogs.css ═══════ */
+/* ═══════ components\dialogs.css ═══════ */
 /* ================================================================
    components/dialogs.css — Confirm dialog
    Promise-based confirm overlay (see core/ui.js Confirm).
@@ -2616,7 +2616,7 @@ button.is-busy:disabled { opacity: .82; }
 }
 
 
-/* ═══════ components/print-modal.css ═══════ */
+/* ═══════ components\print-modal.css ═══════ */
 /* ================================================================
    components/print-modal.css — Print/detail modals
    Shared print modal shell, detail grids and @media print rules for
@@ -3277,7 +3277,7 @@ button.is-busy:disabled { opacity: .82; }
 }
 
 
-/* ═══════ components/utilities.css ═══════ */
+/* ═══════ components\utilities.css ═══════ */
 /* ================================================================
    components/utilities.css — Misc utilities
    badge-count, spacing and flex helpers.
@@ -3319,7 +3319,7 @@ button.is-busy:disabled { opacity: .82; }
 
 /* ─── pages ─── */
 
-/* ═══════ pages/login.css ═══════ */
+/* ═══════ pages\login.css ═══════ */
 /* ================================================================
    pages/login.css — Login screen
    Blueprint-styled login card and validation error states.
@@ -3462,7 +3462,7 @@ button.is-busy:disabled { opacity: .82; }
 }
 
 
-/* ═══════ pages/home.css ═══════ */
+/* ═══════ pages\home.css ═══════ */
 /* ================================================================
    pages/home.css — Activity log
    Home page activity log list.
@@ -3509,7 +3509,7 @@ button.is-busy:disabled { opacity: .82; }
 }
 
 
-/* ═══════ pages/finance.css ═══════ */
+/* ═══════ pages\finance.css ═══════ */
 /* ================================================================
    pages/finance.css — Finance KPIs
    Finance dashboard KPI strip.
@@ -3684,7 +3684,7 @@ button.is-busy:disabled { opacity: .82; }
 }
 
 
-/* ═══════ pages/search.css ═══════ */
+/* ═══════ pages\search.css ═══════ */
 /* ================================================================
    pages/search.css — Search page
    Search input row and result count.
@@ -3741,7 +3741,7 @@ button.is-busy:disabled { opacity: .82; }
 }
 
 
-/* ═══════ pages/project.css ═══════ */
+/* ═══════ pages\project.css ═══════ */
 /* ================================================================
    pages/project.css — Project page: tabs, daily records, photos
    Project tab bar (1176), daily form (1214), record list (1322),
@@ -4721,7 +4721,7 @@ button.is-busy:disabled { opacity: .82; }
 }
 
 
-/* ═══════ pages/project-sow.css ═══════ */
+/* ═══════ pages\project-sow.css ═══════ */
 /* ================================================================
    pages/project-sow.css — SOW budget + enhancements
    SOW budget list (1577) and the enhanced status badges, legend,
@@ -5091,7 +5091,7 @@ gap: 12px;
 }
 
 
-/* ═══════ pages/gantt.css ═══════ */
+/* ═══════ pages\gantt.css ═══════ */
 /* ================================================================
    pages/gantt.css — v11 Timeline (frozen-pane layout)
 
@@ -5182,9 +5182,16 @@ gap: 12px;
     display: grid;
     grid-template-columns: minmax(120px, 1fr) 116px 124px 54px 124px;
 }
+/* ── v19: ONLY THE SOW NAME IS FROZEN ──
+   The whole left pane used to be sticky — nearly 540px of it — so
+   scrolling right left very little room for the bars, and the pane sat
+   over the chart the moment you moved the slider.
+   Now the pane scrolls away and the NAME alone stays. Predecessor,
+   start, days and finish slide out of view, which is fine: they are
+   reference detail, whereas a bar with no name attached to it is not
+   readable at all. */
 .gt-cell-left {
-    position: sticky;
-    left: 0;
+    position: relative;
     z-index: 2;
     background: var(--surface);
     border-right: 2px solid var(--line);
@@ -5193,16 +5200,41 @@ gap: 12px;
     height: var(--gt-row-h);
     font-size: 11.5px;
 }
+.gt-cell-left .gt-task {
+    position: sticky;
+    left: 0;
+    z-index: 3;
+    background: var(--surface);
+    height: 100%;
+    display: flex;
+    align-items: center;
+    /* A shadow rather than a border: it only appears once the column is
+       actually overlapping something, so a chart scrolled to the left
+       has no stray line down it. */
+    box-shadow: 6px 0 6px -6px rgba(21, 24, 26, .22);
+}
+.gt-cell-left.is-heading .gt-task { background: var(--blueprint-tint); }
 .gt-cell-left > * {
     padding: 0 7px;
     min-width: 0;
     overflow: hidden;
     white-space: nowrap;
 }
+/* The header's first cell tracks the rows below it, so "SOW item" stays
+   above the names it labels. */
+.gt-head-left > div:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 5;
+    background: var(--surface);
+    height: 100%;
+    display: flex;
+    align-items: center;
+    box-shadow: 6px 0 6px -6px rgba(21, 24, 26, .22);
+}
 .gt-head-left {
     position: sticky;
     top: 0;
-    left: 0;
     z-index: 4;
     background: var(--surface);
     border-right: 2px solid var(--line);
@@ -5387,7 +5419,11 @@ gap: 12px;
 }
 .gt-bar-lbl {
     position: relative;
-    z-index: 2;
+    /* v19: 1, not 2. At 2 it tied with the frozen name column and, being
+       later in the DOM, painted OVER it — so the percentage covered the
+       SOW name instead of passing behind it. It only needs to sit above
+       .gt-fill, which is what 1 does. */
+    z-index: 1;
     padding: 0 7px;
     pointer-events: none;
     font-family: var(--font-num);
@@ -5577,8 +5613,32 @@ gap: 12px;
     .gantt-tooltip { transition: none; }
 }
 
+/* v19 — the repair prompt.
+   Shown only when there is something to repair. A permanent button for a
+   one-off problem is a button people press out of curiosity. */
+.sched-repair {
+    background: var(--blueprint-tint);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--amber);
+    border-radius: var(--radius);
+    padding: 10px 13px;
+    margin-bottom: 11px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+.sched-repair b { font-size: 12.5px; display: flex; align-items: center; gap: 6px; }
+.sched-repair p {
+    margin: 0;
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    line-height: 1.45;
+    flex: 1 1 320px;
+}
 
-/* ═══════ pages/materials-equipment.css ═══════ */
+
+/* ═══════ pages\materials-equipment.css ═══════ */
 /* ================================================================
    pages/materials-equipment.css — Materials & Equipment DB
    Database toolbars, item grids and detail drawers shared by the
@@ -5772,7 +5832,7 @@ gap: 12px;
 }
 
 
-/* ═══════ pages/approvals.css ═══════ */
+/* ═══════ pages\approvals.css ═══════ */
 /* ================================================================
    pages/approvals.css — Approvals page
    Approvals inbox (2352), My Requests section (2437) and the
@@ -5944,7 +6004,7 @@ gap: 12px;
 }
 
 
-/* ═══════ pages/knowledge-base.css ═══════ */
+/* ═══════ pages\knowledge-base.css ═══════ */
 /* ================================================================
    pages/knowledge-base.css — Knowledge Base Center (v11 BATCH F1)
 
@@ -6153,7 +6213,7 @@ gap: 12px;
 }
    /* v11 BATCH F1 */
 
-/* ═══════ pages/quotations.css ═══════ */
+/* ═══════ pages\quotations.css ═══════ */
 /* ================================================================
    pages/quotations.css — Quotation lifecycle (v11 BATCH F2)
 
@@ -6443,7 +6503,7 @@ gap: 12px;
 }
        /* v11 BATCH F2 */
 
-/* ═══════ pages/purchase-requests.css ═══════ */
+/* ═══════ pages\purchase-requests.css ═══════ */
 /* ================================================================
    pages/purchase-requests.css — Purchase Requests (v11 BATCH G1)
 

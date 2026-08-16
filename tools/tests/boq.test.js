@@ -11,17 +11,26 @@ const path = require('path');
 
 module.exports = function (t) {
 
-    const SHEETS = { SOWItems: [], EstimateGroups: [] };
+    const SHEETS = { SOWItems: [], EstimateGroups: [], Projects: [] };
     const harness = `
         function readAll_(n){ return (SHEETS[n]||[]).map(r=>Object.assign({},r)); }
         function appendRow_(n,row){ (SHEETS[n]=SHEETS[n]||[]).push(Object.assign({},row)); }
         function updateRowWhere_(n,m,p){ (SHEETS[n]||[]).forEach(r=>{ if(Object.keys(m).every(k=>String(r[k])===String(m[k]))) Object.assign(r,p); }); }
         var _s=0; function nextId_(p){return p+'-'+(++_s);}
         function requireLogin_(){} function assertProjectEditor_(){} function logActivity_(){}
+        // v19: imported items are now given a real one-day schedule, so
+        // the service needs the date helpers.
+        function buildSowTree_(r){ return (r||[]).map(x=>Object.assign({isHeading:false},x)); }
+        var Utilities={formatDate:(d)=>{
+            const m=new Date(d.getTime()+8*3600*1000);
+            const p=n=>String(n).padStart(2,'0');
+            return m.getUTCFullYear()+'-'+p(m.getUTCMonth()+1)+'-'+p(m.getUTCDate());
+        }};
+        var Session={getScriptTimeZone:()=>'Asia/Manila'};
     `;
     const api = new Function('SHEETS', harness +
         fs.readFileSync(path.join(t.ROOT, 'backend/36-SowBulkService.gs'), 'utf8') +
-        '\nreturn {parseSowOutline_, previewSowOutline, addSOWItemsBulk};')(SHEETS);
+        '\nreturn {parseSowOutline_, previewSowOutline, addSOWItemsBulk, repairSowSchedules, _bulkStartDate_};')(SHEETS);
 
     t.describe('BOQ outline — structure', () => {
         const p = api.parseSowOutline_(
@@ -115,11 +124,74 @@ module.exports = function (t) {
         });
     });
 
+    t.describe('imported items are schedulable', () => {
+        // Items were written with no start and no finish. On the Timeline
+        // that is a BROKEN row, not an unscheduled one: the chain needs
+        // two of start, duration and finish before it can derive the
+        // third, so changing a duration did nothing at all.
+        t.it('a priced item gets a real one-day window', () => {
+            const rows = SHEETS.SOWItems.filter(s => s.isTitle !== 'TRUE');
+            t.ok(rows.length > 0);
+            t.ok(rows.every(r => !!r.startDate && !!r.endDate),
+                'an item with no dates cannot compute a duration from anything');
+        });
+        t.it('a title gets none — its span comes from its children', () => {
+            const titles = SHEETS.SOWItems.filter(s => s.isTitle === 'TRUE');
+            t.ok(titles.every(r => !r.startDate));
+        });
+        t.it('the placeholder never lands on a weekend', () => {
+            // A Sunday start shows a duration the site cannot work, and
+            // every dependent date inherits the error.
+            const d = new Date(api._bulkStartDate_('2026-08-15') + 'T00:00:00Z');
+            t.ok(d.getUTCDay() !== 0 && d.getUTCDay() !== 6,
+                'got ' + api._bulkStartDate_('2026-08-15'));
+        });
+        t.it('repair never overwrites a date somebody set', () => {
+            SHEETS.SOWItems.push({ id: '9.9', projectId: 'PX', isTitle: '',
+                startDate: '2026-03-01', endDate: '2026-03-10' });
+            SHEETS.SOWItems.push({ id: '9.8', projectId: 'PX', isTitle: '',
+                startDate: '', endDate: '' });
+            SHEETS.Projects = [{ id: 'PX', startDate: '2026-09-01' }];
+            const res = api.repairSowSchedules('PX');
+            t.eq(res.fixed, 1, 'only the empty one');
+            t.eq(SHEETS.SOWItems.find(s => s.id === '9.9').startDate, '2026-03-01',
+                'a placeholder must never overwrite a decision');
+        });
+    });
+
     t.describe('BOQ preview', () => {
         t.it('reports collisions and the split before anything is written', () => {
             const pv = api.previewSowOutline('P1', 'General Requirements\n  Mobilization | 1 | lot');
             t.ok(pv.collisions > 0);
             t.ok(pv.titles === 1 && pv.priced === 1);
+        });
+    });
+
+    t.describe('the Gantt frozen column', () => {
+        const css = t.read('css/pages/gantt.css');
+
+        t.it('only the SOW name is frozen, not the whole left pane', () => {
+            // The pane was ~540px of sticky, so scrolling right left
+            // almost no room for the bars and covered the chart.
+            t.ok(/\.gt-cell-left \.gt-task\s*\{[^}]*position: sticky/.test(css),
+                'the name column must stay while the detail columns scroll away');
+            t.ok(!/\.gt-cell-left \{[^}]*position: sticky/.test(css),
+                'the whole left pane must no longer be sticky');
+        });
+
+        t.it('the bar percentage passes BEHIND the name column', () => {
+            // At z-index 2 the label tied with the frozen column and,
+            // being later in the DOM, painted over the SOW name.
+            const lbl = /\.gt-bar-lbl\s*\{([^}]*)\}/.exec(css)[1];
+            const z = parseInt(/z-index:\s*(\d+)/.exec(lbl)[1], 10);
+            const task = /\.gt-cell-left \.gt-task\s*\{([^}]*)\}/.exec(css)[1];
+            const tz = parseInt(/z-index:\s*(\d+)/.exec(task)[1], 10);
+            t.ok(z < tz, `bar label z-index ${z} must be below the name column's ${tz}`);
+        });
+
+        t.it('the header cell tracks the rows below it', () => {
+            t.ok(/\.gt-head-left > div:first-child\s*\{[^}]*position: sticky/.test(css),
+                '"SOW item" must stay above the names it labels');
         });
     });
 };

@@ -88,9 +88,16 @@
     display: grid;
     grid-template-columns: minmax(120px, 1fr) 116px 124px 54px 124px;
 }
+/* ── v19: ONLY THE SOW NAME IS FROZEN ──
+   The whole left pane used to be sticky — nearly 540px of it — so
+   scrolling right left very little room for the bars, and the pane sat
+   over the chart the moment you moved the slider.
+   Now the pane scrolls away and the NAME alone stays. Predecessor,
+   start, days and finish slide out of view, which is fine: they are
+   reference detail, whereas a bar with no name attached to it is not
+   readable at all. */
 .gt-cell-left {
-    position: sticky;
-    left: 0;
+    position: relative;
     z-index: 2;
     background: var(--surface);
     border-right: 2px solid var(--line);
@@ -99,16 +106,41 @@
     height: var(--gt-row-h);
     font-size: 11.5px;
 }
+.gt-cell-left .gt-task {
+    position: sticky;
+    left: 0;
+    z-index: 3;
+    background: var(--surface);
+    height: 100%;
+    display: flex;
+    align-items: center;
+    /* A shadow rather than a border: it only appears once the column is
+       actually overlapping something, so a chart scrolled to the left
+       has no stray line down it. */
+    box-shadow: 6px 0 6px -6px rgba(21, 24, 26, .22);
+}
+.gt-cell-left.is-heading .gt-task { background: var(--blueprint-tint); }
 .gt-cell-left > * {
     padding: 0 7px;
     min-width: 0;
     overflow: hidden;
     white-space: nowrap;
 }
+/* The header's first cell tracks the rows below it, so "SOW item" stays
+   above the names it labels. */
+.gt-head-left > div:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 5;
+    background: var(--surface);
+    height: 100%;
+    display: flex;
+    align-items: center;
+    box-shadow: 6px 0 6px -6px rgba(21, 24, 26, .22);
+}
 .gt-head-left {
     position: sticky;
     top: 0;
-    left: 0;
     z-index: 4;
     background: var(--surface);
     border-right: 2px solid var(--line);
@@ -293,7 +325,11 @@
 }
 .gt-bar-lbl {
     position: relative;
-    z-index: 2;
+    /* v19: 1, not 2. At 2 it tied with the frozen name column and, being
+       later in the DOM, painted OVER it — so the percentage covered the
+       SOW name instead of passing behind it. It only needs to sit above
+       .gt-fill, which is what 1 does. */
+    z-index: 1;
     padding: 0 7px;
     pointer-events: none;
     font-family: var(--font-num);
@@ -481,4 +517,28 @@
 @media (prefers-reduced-motion: reduce) {
     .gt-bar { transition: none; }
     .gantt-tooltip { transition: none; }
+}
+
+/* v19 — the repair prompt.
+   Shown only when there is something to repair. A permanent button for a
+   one-off problem is a button people press out of curiosity. */
+.sched-repair {
+    background: var(--blueprint-tint);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--amber);
+    border-radius: var(--radius);
+    padding: 10px 13px;
+    margin-bottom: 11px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+.sched-repair b { font-size: 12.5px; display: flex; align-items: center; gap: 6px; }
+.sched-repair p {
+    margin: 0;
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    line-height: 1.45;
+    flex: 1 1 320px;
 }

@@ -181,6 +181,19 @@ Object.assign(ProjectPage, {
                  staged locally and written in ONE go, so fixing four items
                  no longer means four server round-trips redrawing the rows
                  under your cursor. -->
+            <!-- v19: only shown when there is something to repair. A
+                 permanent button for a one-off problem is a button people
+                 press out of curiosity. -->
+            ${(this._sowItems || []).some(x => !x.isHeading && !x.startDate && !x.endDate)
+                ? `<div class="sched-repair">
+                    <b>${Icon.warning({ size: 12 })} Some items have no dates</b>
+                    <p>Imported scopes were created without a start or finish. The Timeline needs two
+                    of start, duration and finish before it can work out the third, so changing a
+                    duration on those rows does nothing.</p>
+                    <button class="btn-sm primary" onclick="ProjectPage.repairSchedules(this)">
+                        Give them a one-day placeholder</button>
+                </div>` : ''}
+
             <div class="sched-dirty" id="schedDirtyBar" style="display:none;">
                 ${Icon.warning({size:13})}
                 <span id="schedDirtyLabel"></span>
@@ -370,6 +383,27 @@ Object.assign(ProjectPage, {
     },
 
     // ─── the chart ──────────────────────────────────────────────
+
+    /**
+     * repairSchedules (v19) - a one-day window for every item that has
+     * neither a start nor a finish.
+     *
+     * A placeholder, not a plan. But a real one-day task is a truthful
+     * thing to say about a scope nobody has scheduled, and it makes the
+     * row work — which an empty one does not.
+     */
+    async repairSchedules(btn) {
+        await Busy.run(btn, 'Fixing', async () => {
+            try {
+                const res = await DataService.repairSowSchedules(this._currentProjectId);
+                UI.toast(res.fixed
+                    ? `${res.fixed} item(s) now start on ${res.startDate}. Set the real dates from here.`
+                    : 'Nothing needed fixing.', 'success');
+                await this.open(this._currentProjectId, true);
+                this.switchTab('gantt');
+            } catch (err) { UI.toast('' + err.message, 'error'); }
+        });
+    },
 
     _renderGanttChart(p) {
         const items = this._sowItems || [];

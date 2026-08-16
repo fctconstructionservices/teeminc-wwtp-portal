@@ -818,6 +818,9 @@ const DataService = {
     async addSOWItemsBulk(projectId, text, opts) {
         return await gasCall('addSOWItemsBulk', projectId, text, opts || {});
     },
+    async repairSowSchedules(projectId) {
+        return await gasCall('repairSowSchedules', projectId);
+    },
 
     // ── v16: PROJECT DELETE / ARCHIVE ──
     async previewProjectDelete(projectId) {
