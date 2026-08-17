@@ -219,8 +219,9 @@ function addSOWItemsBulk(projectId, text, opts) {
       // v19: a real one-day window, so the Timeline behaves from the
       // moment the item exists. Titles get none — their span is derived
       // from their children.
+      // v21: the SAME default as Add One — see defaultSowEnd_.
       startDate: r.isTitle ? '' : kickoff,
-      endDate: r.isTitle ? '' : kickoff,
+      endDate: r.isTitle ? '' : defaultSowEnd_(kickoff),
       status: '',
       qty: r.qty, unit: r.unit,
       budgetMode: 'manual', predecessors: '',
@@ -323,7 +324,7 @@ function repairSowSchedules(projectId) {
     if (String(s.startDate || '').trim()) return;      // already has a start
     if (String(s.endDate || '').trim()) return;        // or a finish
     updateRowWhere_('SOWItems', { id: s.id, projectId: projectId },
-      { startDate: kickoff, endDate: kickoff });
+      { startDate: kickoff, endDate: defaultSowEnd_(kickoff) });
     fixed++;
   });
 
@@ -333,4 +334,42 @@ function repairSowSchedules(projectId) {
       ' so the Timeline can compute from them', 'blue', projectId);
   }
   return { success: true, fixed: fixed, startDate: kickoff };
+}
+
+
+/**
+ * defaultSowStart_ / defaultSowEnd_ (v21) - THE one definition of "a
+ * scope nobody has scheduled yet".
+ *
+ * Both creation paths call these. They previously disagreed — Import
+ * BOQ produced a one-day span and Add One produced a two-day span — and
+ * the Timeline then behaved differently depending on which button had
+ * been used to create the row. That is the hardest kind of bug to
+ * report, because both screens look correct in isolation.
+ *
+ * The default is TWO working days, deliberately, and not one.
+ *
+ * A one-day task has start === finish, so moving the start immediately
+ * pushes the finish with it and the duration can never change on
+ * screen. It looks broken even though the arithmetic is right. Two days
+ * leaves room for the start to move inwards, which is what makes the
+ * interdependence visible the first time somebody tries it.
+ */
+var DEFAULT_SOW_DAYS = 2;
+
+function defaultSowStart_(projectId) {
+  var proj = readAll_('Projects').find(function (p) { return p.id === projectId; });
+  return _bulkStartDate_(proj && proj.startDate);
+}
+
+function defaultSowEnd_(startDate) {
+  var d = new Date(startDate);
+  if (isNaN(d.getTime())) d = new Date();
+  // Inclusive: two working days means the start plus one more.
+  var left = DEFAULT_SOW_DAYS - 1;
+  while (left > 0) {
+    d.setDate(d.getDate() + 1);
+    if (d.getDay() !== 0 && d.getDay() !== 6) left--;
+  }
+  return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
 }

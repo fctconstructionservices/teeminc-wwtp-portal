@@ -807,6 +807,10 @@ const DataService = {
             () => gasCall('getTasksForMonthCached', month));
     },
     // ── v20: PROJECT DOCUMENTS ──
+    // ── v21: QA/QC ──
+    async saveQaqcRecord(data) { return await gasCall('saveQaqcRecord', data); },
+    async closeQaqcRecord(id, outcome, note) { return await gasCall('closeQaqcRecord', id, outcome, note || ''); },
+
     async getProjectDocuments(projectId) { return await gasCall('getProjectDocuments', projectId); },
     async addProjectDocument(data) { return await gasCall('addProjectDocument', data); },
     async updateProjectDocument(id, data) { return await gasCall('updateProjectDocument', id, data); },

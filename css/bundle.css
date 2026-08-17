@@ -16,7 +16,7 @@
 
 /* ─── base: tokens first, then reset/typography ─── */
 
-/* ═══════ base/variables.css ═══════ */
+/* ═══════ base\variables.css ═══════ */
 /* ================================================================
    base/variables.css — Design tokens
    All colors, radii, shadows and transitions for light + dark themes.
@@ -83,7 +83,7 @@
 }
 
 
-/* ═══════ base/reset.css ═══════ */
+/* ═══════ base\reset.css ═══════ */
 /* ================================================================
    base/reset.css — Reset, base typography, focus states
    Box-sizing, body defaults, .mono utility, form-control font
@@ -169,7 +169,7 @@ textarea:focus-visible {
 
 /* ─── layout ─── */
 
-/* ═══════ layout/shell.css ═══════ */
+/* ═══════ layout\shell.css ═══════ */
 /* ================================================================
    layout/shell.css — App shell
    Topbar, brand, nav actions, page container and section headers.
@@ -331,7 +331,7 @@ textarea:focus-visible {
 }
 
 
-/* ═══════ layout/nav.css ═══════ */
+/* ═══════ layout\nav.css ═══════ */
 /* ================================================================
    layout/nav.css — The app shell (v12 CONTROL ROOM)
 
@@ -643,7 +643,7 @@ textarea:focus-visible {
 }
    /* v12 CONTROL ROOM shell */
 
-/* ═══════ pages/calendar.css ═══════ */
+/* ═══════ pages\calendar.css ═══════ */
 /* ================================================================
    v18 — THE DASHBOARD CALENDAR
 
@@ -1152,7 +1152,7 @@ textarea:focus-visible {
 
 /* ─── shared components ─── */
 
-/* ═══════ components/cards.css ═══════ */
+/* ═══════ components\cards.css ═══════ */
 /* ================================================================
    components/cards.css — Tickets, project cards, gauges
    Request ticket rows, home project cards and the SVG gauge strip.
@@ -1330,7 +1330,7 @@ textarea:focus-visible {
 }
 
 
-/* ═══════ components/tables.css ═══════ */
+/* ═══════ components\tables.css ═══════ */
 /* ================================================================
    components/tables.css — Panels & data tables
    Panel container and the standard striped data table.
@@ -1593,7 +1593,7 @@ textarea:focus-visible {
     .gallery-sow-select { max-width: 100%; width: 100%; }
 }
 
-/* ═══════ components/stamps.css ═══════ */
+/* ═══════ components\stamps.css ═══════ */
 /* ================================================================
    components/stamps.css — Status stamps & badges
    Approved / pending / rejected stamps used across all lists.
@@ -1646,7 +1646,7 @@ textarea:focus-visible {
 }
 
 
-/* ═══════ components/attachments.css ═══════ */
+/* ═══════ components\attachments.css ═══════ */
 /* ================================================================
    components/attachments.css — AttachmentGallery (v10)
    Thumbnails + lightbox used by every modal that can hold files.
@@ -1883,7 +1883,7 @@ textarea:focus-visible {
 }
 
 
-/* ═══════ components/search-select.css ═══════ */
+/* ═══════ components\search-select.css ═══════ */
 /* ================================================================
    components/search-select.css — SearchSelect (v10)
    Searchable pickers for the Estimates tab, replacing native <select>
@@ -1988,7 +1988,7 @@ textarea:focus-visible {
 }
 
 
-/* ═══════ components/forms.css ═══════ */
+/* ═══════ components\forms.css ═══════ */
 /* ================================================================
    components/forms.css — Forms
    Field blocks, selects, textareas, error states, requester badge
@@ -2597,7 +2597,7 @@ button.is-busy:disabled { opacity: .82; }
 .login-btn.is-busy { background: var(--steel); }
 
 
-/* ═══════ components/charts.css ═══════ */
+/* ═══════ components\charts.css ═══════ */
 /* ================================================================
    components/charts.css — Chart panels
    Canvas wrappers and chart legends (Finance + Project charts).
@@ -2674,7 +2674,7 @@ button.is-busy:disabled { opacity: .82; }
 }
 
 
-/* ═══════ components/toast.css ═══════ */
+/* ═══════ components\toast.css ═══════ */
 /* ================================================================
    components/toast.css — Toast notifications
    Bottom toast with success / error variants.
@@ -2719,7 +2719,7 @@ button.is-busy:disabled { opacity: .82; }
 }
 
 
-/* ═══════ components/dialogs.css ═══════ */
+/* ═══════ components\dialogs.css ═══════ */
 /* ================================================================
    components/dialogs.css — Confirm dialog
    Promise-based confirm overlay (see core/ui.js Confirm).
@@ -2788,7 +2788,7 @@ button.is-busy:disabled { opacity: .82; }
 }
 
 
-/* ═══════ components/print-modal.css ═══════ */
+/* ═══════ components\print-modal.css ═══════ */
 /* ================================================================
    components/print-modal.css — Print/detail modals
    Shared print modal shell, detail grids and @media print rules for
@@ -3449,7 +3449,7 @@ button.is-busy:disabled { opacity: .82; }
 }
 
 
-/* ═══════ components/utilities.css ═══════ */
+/* ═══════ components\utilities.css ═══════ */
 /* ================================================================
    components/utilities.css — Misc utilities
    badge-count, spacing and flex helpers.
@@ -3491,7 +3491,7 @@ button.is-busy:disabled { opacity: .82; }
 
 /* ─── pages ─── */
 
-/* ═══════ pages/login.css ═══════ */
+/* ═══════ pages\login.css ═══════ */
 /* ================================================================
    pages/login.css — Login screen
    Blueprint-styled login card and validation error states.
@@ -3634,7 +3634,7 @@ button.is-busy:disabled { opacity: .82; }
 }
 
 
-/* ═══════ pages/home.css ═══════ */
+/* ═══════ pages\home.css ═══════ */
 /* ================================================================
    pages/home.css — Activity log
    Home page activity log list.
@@ -3681,7 +3681,7 @@ button.is-busy:disabled { opacity: .82; }
 }
 
 
-/* ═══════ pages/finance.css ═══════ */
+/* ═══════ pages\finance.css ═══════ */
 /* ================================================================
    pages/finance.css — Finance KPIs
    Finance dashboard KPI strip.
@@ -3856,7 +3856,7 @@ button.is-busy:disabled { opacity: .82; }
 }
 
 
-/* ═══════ pages/search.css ═══════ */
+/* ═══════ pages\search.css ═══════ */
 /* ================================================================
    pages/search.css — Search page
    Search input row and result count.
@@ -3913,7 +3913,7 @@ button.is-busy:disabled { opacity: .82; }
 }
 
 
-/* ═══════ pages/project.css ═══════ */
+/* ═══════ pages\project.css ═══════ */
 /* ================================================================
    pages/project.css — Project page: tabs, daily records, photos
    Project tab bar (1176), daily form (1214), record list (1322),
@@ -4892,8 +4892,213 @@ button.is-busy:disabled { opacity: .82; }
     .dz-row button { align-self: stretch; }
 }
 
+/* ================================================================
+   v21 — ATTENDANCE, BY DATE
 
-/* ═══════ pages/project-sow.css ═══════ */
+   This was a matrix of personnel × days with a check mark in each cell.
+   That answers "who came in this month" — a payroll question. The sheet
+   people actually need is the DAILY one: who was here on the 14th, what
+   time did they arrive, what time did they leave, and their signature
+   against it.
+
+   That is the document a client asks for in a claim and the one a
+   foreman prints and files. A month matrix cannot be either: it has no
+   times on it and nowhere to sign.
+   ================================================================ */
+
+.att-bar {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+.att-bar > div:first-child { flex: 1; min-width: 240px; }
+.att-bar h3 {
+    font-family: var(--font-display);
+    font-size: 16px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    margin: 0 0 2px;
+}
+.att-bar p { margin: 0; font-size: 12px; color: var(--ink-soft); line-height: 1.45; }
+.att-bar select {
+    padding: 6px 10px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    font-size: 12px;
+    background: var(--surface);
+    color: var(--ink);
+    font-family: var(--font-body);
+}
+
+.att-day {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 12px;
+}
+.att-day-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 13px;
+    background: var(--blueprint-tint);
+    border-bottom: 1px solid var(--line);
+    flex-wrap: wrap;
+}
+.att-day-head b { font-size: 13px; }
+.att-day-head span { font-size: 11.5px; color: var(--ink-soft); }
+.att-day-head .att-w { margin-right: auto; }
+
+.att-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.att-table th {
+    font-family: var(--font-num);
+    font-size: 8.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    text-align: left;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+}
+.att-table td { padding: 7px 10px; border-bottom: 1px solid var(--line); }
+.att-table tr:last-child td { border-bottom: none; }
+.att-table .c { text-align: center; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.att-table th.c { text-align: center; }
+/* Wide enough for a real signature. A narrow column is a tick box, and
+   a tick box is not a signature. */
+.att-table .sg { width: 150px; }
+.att-sig { max-height: 26px; max-width: 140px; display: block; }
+.att-blank { color: var(--line); }
+.att-none { padding: 14px 13px; font-size: 12px; color: var(--ink-soft); margin: 0; }
+
+@media (max-width: 720px) {
+    .att-table { font-size: 11.5px; }
+    .att-table .sg { width: 90px; }
+}
+
+/* ================================================================
+   v21 — QA/QC
+
+   The Punchlist tab became QA/QC with the punchlist inside it. A
+   punchlist is one quality record among several; naming the whole
+   discipline after one of its outputs is why inspections, NCRs and test
+   results had nowhere to live.
+   ================================================================ */
+
+.qa-head { margin-bottom: 12px; }
+.qa-head h3 {
+    font-family: var(--font-display);
+    font-size: 16px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    margin: 0 0 2px;
+}
+.qa-head p {
+    margin: 0;
+    font-size: 12px;
+    color: var(--ink-soft);
+    line-height: 1.5;
+    max-width: 660px;
+}
+
+.qa-tabs {
+    display: flex;
+    gap: 3px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 14px;
+    overflow-x: auto;
+}
+.qa-tabs button {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 8px 13px;
+    font-family: var(--font-body);
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    cursor: pointer;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.qa-tabs button:hover { color: var(--ink); }
+.qa-tabs button.is-on { color: var(--ink); font-weight: 600; border-bottom-color: var(--steel); }
+/* The badge counts only what is still OPEN. A badge counting history is
+   a badge people stop reading. */
+.qa-tabs button span {
+    background: var(--red);
+    color: #fff;
+    font-family: var(--font-num);
+    font-size: 9px;
+    border-radius: 99px;
+    padding: 1px 6px;
+}
+
+.qa-bar {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+.qa-bar p {
+    flex: 1;
+    min-width: 260px;
+    margin: 0;
+    font-size: 12px;
+    color: var(--ink-soft);
+    line-height: 1.5;
+}
+
+.qa-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.qa-table th {
+    font-family: var(--font-num);
+    font-size: 8.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+}
+.qa-table td { padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.qa-table tr:last-child td { border-bottom: none; }
+.qa-table .mono { font-family: var(--font-num); font-size: 11.5px; }
+.qa-table .num { text-align: right; font-family: var(--font-num); }
+.qa-table .muted { font-size: 10.5px; color: var(--ink-soft); margin-top: 2px; }
+/* A failed test is tinted across the whole row. Colour on the outcome
+   cell alone is easy to miss on a wide table. */
+.qa-table tr.is-fail { background: rgba(192, 54, 44, .06); }
+
+.qa-pill {
+    font-family: var(--font-num);
+    font-size: 9.5px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    white-space: nowrap;
+}
+.qa-pill.g { background: rgba(14, 124, 74, .12); color: var(--green); }
+.qa-pill.a { background: rgba(217, 138, 0, .14); color: var(--safety-ink); }
+.qa-pill.d { background: rgba(192, 54, 44, .12); color: var(--red); }
+.qa-pill.n { background: var(--bg); color: var(--ink-soft); }
+
+.qa-empty {
+    background: var(--surface);
+    border: 1px dashed var(--line);
+    border-radius: var(--radius);
+    padding: 26px 20px;
+    text-align: center;
+}
+.qa-empty p { margin: 0; font-size: 12.5px; color: var(--ink-soft); }
+
+
+/* ═══════ pages\project-sow.css ═══════ */
 /* ================================================================
    pages/project-sow.css — SOW budget + enhancements
    SOW budget list (1577) and the enhanced status badges, legend,
@@ -5263,7 +5468,7 @@ gap: 12px;
 }
 
 
-/* ═══════ pages/gantt.css ═══════ */
+/* ═══════ pages\gantt.css ═══════ */
 /* ================================================================
    pages/gantt.css — v11 Timeline (frozen-pane layout)
 
@@ -5290,7 +5495,10 @@ gap: 12px;
    ================================================================ */
 
 :root {
-    --gt-lw: 470px;
+    /* v21: 486px. The Days column gained 16px — a three-digit duration
+       in a 54px cell was clipped, and a duration you cannot read is the
+       one number on this row people are checking. */
+    --gt-lw: 486px;
     --gt-week-w: 63px;
     --gt-row-h: 36px;
     --gt-head-h: 44px;
@@ -5352,7 +5560,9 @@ gap: 12px;
 .gt-cell-left,
 .gt-head-left {
     display: grid;
-    grid-template-columns: minmax(120px, 1fr) 116px 124px 54px 124px;
+    /* SOW name · predecessor · start · DAYS · finish
+       Days is 70px, not 54: at 54 a three-digit figure was cut off. */
+    grid-template-columns: 152px 116px 124px 70px 124px;
 }
 /* ── v19: ONLY THE SOW NAME IS FROZEN ──
    The whole left pane used to be sticky — nearly 540px of it — so
@@ -5376,6 +5586,14 @@ gap: 12px;
     position: sticky;
     left: 0;
     z-index: 3;
+    /* v21: a FIXED width, not minmax(120px, 1fr).
+       With 1fr the name column stretched to fill the pane, so when the
+       four detail columns scrolled away it kept its full stretched
+       width and covered them — the collapse Darwin was seeing. A fixed
+       152px means the name occupies exactly its own column and the rest
+       slide cleanly underneath it. */
+    width: 152px;
+    flex-shrink: 0;
     background: var(--surface);
     height: 100%;
     display: flex;
@@ -5810,7 +6028,7 @@ gap: 12px;
 }
 
 
-/* ═══════ pages/materials-equipment.css ═══════ */
+/* ═══════ pages\materials-equipment.css ═══════ */
 /* ================================================================
    pages/materials-equipment.css — Materials & Equipment DB
    Database toolbars, item grids and detail drawers shared by the
@@ -6004,7 +6222,7 @@ gap: 12px;
 }
 
 
-/* ═══════ pages/approvals.css ═══════ */
+/* ═══════ pages\approvals.css ═══════ */
 /* ================================================================
    pages/approvals.css — Approvals page
    Approvals inbox (2352), My Requests section (2437) and the
@@ -6176,7 +6394,7 @@ gap: 12px;
 }
 
 
-/* ═══════ pages/knowledge-base.css ═══════ */
+/* ═══════ pages\knowledge-base.css ═══════ */
 /* ================================================================
    pages/knowledge-base.css — Knowledge Base Center (v11 BATCH F1)
 
@@ -6385,7 +6603,7 @@ gap: 12px;
 }
    /* v11 BATCH F1 */
 
-/* ═══════ pages/quotations.css ═══════ */
+/* ═══════ pages\quotations.css ═══════ */
 /* ================================================================
    pages/quotations.css — Quotation lifecycle (v11 BATCH F2)
 
@@ -6675,7 +6893,7 @@ gap: 12px;
 }
        /* v11 BATCH F2 */
 
-/* ═══════ pages/purchase-requests.css ═══════ */
+/* ═══════ pages\purchase-requests.css ═══════ */
 /* ================================================================
    pages/purchase-requests.css — Purchase Requests (v11 BATCH G1)
 

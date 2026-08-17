@@ -24,7 +24,10 @@
    ================================================================ */
 
 :root {
-    --gt-lw: 470px;
+    /* v21: 486px. The Days column gained 16px — a three-digit duration
+       in a 54px cell was clipped, and a duration you cannot read is the
+       one number on this row people are checking. */
+    --gt-lw: 486px;
     --gt-week-w: 63px;
     --gt-row-h: 36px;
     --gt-head-h: 44px;
@@ -86,7 +89,9 @@
 .gt-cell-left,
 .gt-head-left {
     display: grid;
-    grid-template-columns: minmax(120px, 1fr) 116px 124px 54px 124px;
+    /* SOW name · predecessor · start · DAYS · finish
+       Days is 70px, not 54: at 54 a three-digit figure was cut off. */
+    grid-template-columns: 152px 116px 124px 70px 124px;
 }
 /* ── v19: ONLY THE SOW NAME IS FROZEN ──
    The whole left pane used to be sticky — nearly 540px of it — so
@@ -110,6 +115,14 @@
     position: sticky;
     left: 0;
     z-index: 3;
+    /* v21: a FIXED width, not minmax(120px, 1fr).
+       With 1fr the name column stretched to fill the pane, so when the
+       four detail columns scrolled away it kept its full stretched
+       width and covered them — the collapse Darwin was seeing. A fixed
+       152px means the name occupies exactly its own column and the rest
+       slide cleanly underneath it. */
+    width: 152px;
+    flex-shrink: 0;
     background: var(--surface);
     height: 100%;
     display: flex;

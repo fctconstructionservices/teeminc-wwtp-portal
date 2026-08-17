@@ -754,91 +754,271 @@ Object.assign(ProjectPage, {
      * counted in the record but can't be attributed to a person.
      */
     _renderAttendanceHTML(p) {
-        const records = (p.dailyRecords || []).filter(r => r.status !== 'rejected');
+        // ── v21: BY DATE, WITH TIMES AND SIGNATURES ──
+        //
+        // This was a matrix of personnel × days with a check mark in each
+        // cell. It answers "who came in this month", which is a payroll
+        // question — but the sheet people actually need is the DAILY one:
+        // who was here on the 14th, what time did they arrive, what time
+        // did they leave, and their signature against it.
+        //
+        // That is the document a client asks for in a claim, and the one
+        // a foreman prints and files. A month matrix cannot be that: it
+        // has no times on it and nowhere to sign.
+        const records = (p.dailyRecords || [])
+            .filter(r => r.status !== 'rejected')
+            .sort((a, b) => String(b.date).localeCompare(String(a.date)));
 
-        // months that actually have records (yyyy-MM), newest first
-        const months = [...new Set(records.map(r => String(r.date || '').slice(0, 7)).filter(m => /^\d{4}-\d{2}$/.test(m)))].sort().reverse();
-        if (!months.length) {
-            return `<div class="empty"><p>No daily records yet. Attendance is derived from the Manpower section of each Daily Site Record.</p></div>`;
+        if (!records.length) {
+            return `<div class="empty"><p>No daily site records yet. Attendance is derived
+                from the <b>Manpower</b> section of each record, so nothing is encoded twice.</p></div>`;
         }
+
+        const months = [...new Set(records.map(r => String(r.date || '').slice(0, 7))
+            .filter(m => /^\d{4}-\d{2}$/.test(m)))].sort().reverse();
         if (!this._attMonth || !months.includes(this._attMonth)) this._attMonth = months[0];
         const month = this._attMonth;
+        const inMonth = records.filter(r => String(r.date || '').indexOf(month) === 0);
 
-        // days in the month that have a record
-        const monthRecords = records.filter(r => String(r.date || '').startsWith(month))
-            .sort((a, b) => String(a.date).localeCompare(String(b.date)));
-        const days = monthRecords.map(r => String(r.date).slice(8, 10));
-
-        // person → { name, role, byDay: { dd: rowdata }, otHours }
-        const people = {};
-        const hrs = (tin, tout) => {
-            if (!tin || !tout) return 0;
-            const [h1, m1] = String(tin).split(':').map(Number);
-            const [h2, m2] = String(tout).split(':').map(Number);
-            if (isNaN(h1) || isNaN(h2)) return 0;
-            let diff = (h2 * 60 + (m2 || 0)) - (h1 * 60 + (m1 || 0));
-            if (diff < 0) diff += 24 * 60;   // OT past midnight
-            return diff / 60;
-        };
-        let legacyRows = 0;
-        monthRecords.forEach(r => {
-            const dd = String(r.date).slice(8, 10);
-            (r.manpower || []).forEach(m => {
-                if (!m.name && !m.personnelId) { legacyRows++; return; }
-                const key = m.personnelId || m.name;
-                if (!people[key]) people[key] = { name: m.name || key, role: m.role || '', byDay: {}, otHours: 0, daysPresent: 0 };
-                people[key].byDay[dd] = m;
-                people[key].daysPresent++;
-                people[key].otHours += hrs(m.otIn, m.otOut);
-                if (m.role) people[key].role = m.role;
-            });
-        });
-        const list = Object.values(people).sort((a, b) => a.name.localeCompare(b.name));
-
-        const cell = m => {
-            if (!m) return '<td style="text-align:center;color:var(--line);">·</td>';
-            const ot = (m.otIn || m.otOut);
-            const tip = [
-                m.amIn || m.amOut ? `AM ${m.amIn || '?'}-${m.amOut || '?'}` : '',
-                m.pmIn || m.pmOut ? `PM ${m.pmIn || '?'}-${m.pmOut || '?'}` : '',
-                ot ? `OT ${m.otIn || '?'}-${m.otOut || '?'}` : ''
-            ].filter(Boolean).join(' · ') || 'Present';
-            return `<td style="text-align:center;" title="${tip}">
-                <span style="color:var(--green,#2F7A46);font-weight:700;">${Icon.check({size:12})}</span>${ot ? '<sup style="color:var(--amber,#C2860F);font-size:8px;font-weight:700;">OT</sup>' : ''}
-            </td>`;
-        };
+        const monthLabel = new Date(month + '-01T00:00:00')
+            .toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
         let html = `
-            <div class="section-head"><h2>Attendance Monitoring</h2><div class="rule"></div>
-                <select onchange="ProjectPage._attMonth=this.value;ProjectPage.renderDailyRecords(ProjectPage._data);" style="padding:5px 9px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--surface);color:var(--ink);">
-                    ${months.map(m => `<option value="${m}" ${m === month ? 'selected' : ''}>${new Date(m + '-02').toLocaleDateString('en-PH', { year: 'numeric', month: 'long' })}</option>`).join('')}
+            <div class="att-bar">
+                <div>
+                    <h3>Attendance</h3>
+                    <p>One sheet per day, taken from the Manpower section of each daily site
+                    record. Nothing is encoded twice.</p>
+                </div>
+                <select onchange="ProjectPage._attMonth=this.value;ProjectPage.renderDailyRecords(ProjectPage._data);">
+                    ${months.map(m => `<option value="${esc(m)}" ${m === month ? 'selected' : ''}>
+                        ${new Date(m + '-01T00:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                    </option>`).join('')}
                 </select>
-                <button class="btn-sm" onclick="ProjectPage.exportAttendanceExcel()">${Icon.spreadsheet({size:12})} Export Excel</button>
+                <button class="btn-sm" onclick="ProjectPage.printAttendance()">
+                    ${Icon.printer({ size: 12 })} Print the month</button>
             </div>`;
 
-        if (!list.length) {
-            html += `<div class="empty"><p>No attendance rows are linked to Personnel for this month.${legacyRows ? ' (' + legacyRows + ' legacy rows record a role but no name, so they cannot be attributed. Select the person from the Personnel dropdown going forward.)' : ''}</p></div>`;
-            return html;
+        if (!inMonth.length) {
+            return html + `<div class="empty"><p>No records in ${esc(monthLabel)}.</p></div>`;
         }
 
-        html += `<div class="panel" style="overflow:auto;"><table style="min-width:${360 + days.length * 34}px;"><thead><tr>
-            <th style="position:sticky;left:0;background:var(--surface);z-index:1;">Personnel</th><th>Role</th>
-            ${days.map(dd => `<th style="text-align:center;font-size:9.5px;">${parseInt(dd, 10)}</th>`).join('')}
-            <th style="text-align:right;">Days</th><th style="text-align:right;">OT hrs</th>
-        </tr></thead><tbody>`;
-        list.forEach(pp => {
-            html += `<tr>
-                <td style="position:sticky;left:0;background:var(--surface);z-index:1;"><b>${esc(pp.name)}</b></td>
-                <td style="font-size:11px;">${pp.role || '—'}</td>
-                ${days.map(dd => cell(pp.byDay[dd])).join('')}
-                <td class="amt"><b>${pp.daysPresent}</b></td>
-                <td class="amt">${pp.otHours ? pp.otHours.toFixed(1) : '—'}</td>
-            </tr>`;
+        // A running total, so the month still answers the payroll
+        // question the old matrix answered — just underneath the daily
+        // sheets rather than instead of them.
+        const totals = {};
+
+        inMonth.forEach(r => {
+            const crew = (r.manpower || []).filter(m => m.name || m.role);
+            const heads = crew.reduce((n, m) => n + (parseInt(m.count, 10) || 1), 0);
+            const day = new Date(String(r.date) + 'T00:00:00');
+
+            crew.forEach(m => {
+                const k = (m.name || m.role || '?').trim();
+                totals[k] = totals[k] || { name: k, role: m.role || '', days: 0, ot: 0 };
+                totals[k].days++;
+                if (m.otIn || m.otOut) totals[k].ot += this._otHours(m);
+            });
+
+            html += `
+            <div class="att-day">
+                <div class="att-day-head">
+                    <b>${esc(day.toLocaleDateString('en-US',
+                        { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' }))}</b>
+                    <span>${heads} on site</span>
+                    <span class="att-w">${esc(r.weatherAM || '—')} / ${esc(r.weatherPM || '—')}</span>
+                    <button class="btn-sm" onclick="ProjectPage.printAttendance('${esc(r.date)}')">
+                        ${Icon.printer({ size: 11 })} Print</button>
+                </div>
+                ${crew.length ? `<div class="scroll-x"><table class="att-table">
+                    <thead><tr>
+                        <th>Name</th><th>Trade</th>
+                        <th class="c">AM in</th><th class="c">AM out</th>
+                        <th class="c">PM in</th><th class="c">PM out</th>
+                        <th class="c">OT in</th><th class="c">OT out</th>
+                        <th class="c">Hrs</th><th class="sg">Signature</th>
+                    </tr></thead>
+                    <tbody>${crew.map(m => this._attRow(m)).join('')}</tbody>
+                </table></div>` : '<p class="att-none">No manpower recorded on this day.</p>'}
+            </div>`;
         });
-        html += `</tbody></table></div>
-            <div class="data-source-note">Hover a check mark to see the AM, PM, and OT times. Attendance is derived from the <b>Manpower &mdash; Attendance</b> section of each Daily Site Record, so nothing is encoded twice. The OT marker appears only on days with an approved OT request.${legacyRows ? ' <b>' + legacyRows + '</b> legacy rows record a role but no name and are excluded.' : ''}</div>`;
+
+        const list = Object.values(totals).sort((a, b) => a.name.localeCompare(b.name));
+        html += `
+            <div class="att-day">
+                <div class="att-day-head"><b>${esc(monthLabel)} — totals</b>
+                    <span>${list.length} people</span></div>
+                <div class="scroll-x"><table class="att-table">
+                    <thead><tr><th>Name</th><th>Trade</th>
+                        <th class="c">Days present</th><th class="c">OT hours</th></tr></thead>
+                    <tbody>${list.map(x => `<tr>
+                        <td><b>${esc(x.name)}</b></td><td>${esc(x.role) || '—'}</td>
+                        <td class="c">${x.days}</td>
+                        <td class="c">${x.ot ? x.ot.toFixed(1) : '—'}</td>
+                    </tr>`).join('')}</tbody>
+                </table></div>
+            </div>`;
+
         return html;
     },
+
+    /**
+     * printAttendance (v21) - the month, or one day, on the company
+     * letterhead.
+     *
+     * Goes through PrintDoc like every other printed document in the
+     * system, so the header, the logo and the footer are the ones set
+     * under Print template. An attendance sheet with a different
+     * letterhead from the daily report it came from looks like it came
+     * from somewhere else — which is the opposite of what a signed
+     * attendance record is for.
+     *
+     * @param onlyDate  print a single day; omit for the whole month
+     */
+    async printAttendance(onlyDate) {
+        const p = this._data;
+        if (!p) return;
+        const month = this._attMonth;
+        const records = (p.dailyRecords || [])
+            .filter(r => r.status !== 'rejected')
+            .filter(r => onlyDate
+                ? String(r.date) === onlyDate
+                : String(r.date || '').indexOf(month) === 0)
+            .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+
+        if (!records.length) { UI.toast('Nothing to print.', 'error'); return; }
+
+        await PrintDoc.load();
+
+        const rows = m => `<tr>
+            <td>${esc(m.name || '—')}</td>
+            <td>${esc(m.role) || '—'}</td>
+            <td class="c">${esc(m.amIn) || ''}</td><td class="c">${esc(m.amOut) || ''}</td>
+            <td class="c">${esc(m.pmIn) || ''}</td><td class="c">${esc(m.pmOut) || ''}</td>
+            <td class="c">${esc(m.otIn) || ''}</td><td class="c">${esc(m.otOut) || ''}</td>
+            <td class="c">${this._dayHours(m) ? this._dayHours(m).toFixed(1) : ''}</td>
+            <td class="sg">${m.signature
+                ? `<img src="${driveImgSrc(m.signature)}" alt="" onerror="this.style.display='none'" />`
+                : ''}</td>
+        </tr>`;
+
+        const body = records.map(r => {
+            const crew = (r.manpower || []).filter(m => m.name || m.role);
+            const day = new Date(String(r.date) + 'T00:00:00');
+            const heads = crew.reduce((n, m) => n + (parseInt(m.count, 10) || 1), 0);
+            return `<section class="att-sheet">
+                <div class="ah">
+                    <div><b>DAILY ATTENDANCE</b>
+                        <span>${esc(p.name)}${p.location ? ' · ' + esc(p.location) : ''}</span></div>
+                    <div class="am">
+                        <div><em>Date</em>${esc(day.toLocaleDateString('en-US',
+                            { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' }))}</div>
+                        <div><em>On site</em>${heads}</div>
+                        <div><em>Weather</em>${esc(r.weatherAM || '—')} / ${esc(r.weatherPM || '—')}</div>
+                    </div>
+                </div>
+                <table>
+                    <thead><tr>
+                        <th>Name</th><th>Trade</th>
+                        <th class="c">AM in</th><th class="c">AM out</th>
+                        <th class="c">PM in</th><th class="c">PM out</th>
+                        <th class="c">OT in</th><th class="c">OT out</th>
+                        <th class="c">Hrs</th><th class="sg">Signature</th>
+                    </tr></thead>
+                    <tbody>${crew.length ? crew.map(rows).join('')
+                        : '<tr><td colspan="10" class="c">No manpower recorded.</td></tr>'}</tbody>
+                </table>
+                <div class="asign">
+                    <div><div class="ln"></div><span>Prepared by</span></div>
+                    <div><div class="ln"></div><span>Checked by</span></div>
+                    <div><div class="ln"></div><span>Approved by</span></div>
+                </div>
+            </section>`;
+        }).join('');
+
+        const css = `
+            .att-sheet { page-break-before: always; padding-top: 3mm; }
+            .att-sheet:first-of-type { page-break-before: avoid; }
+            .ah { border-bottom: 2px solid var(--pd-accent); padding-bottom: 6px; margin-bottom: 9px; }
+            .ah b { font-family: 'Oswald', sans-serif; font-size: 14px; letter-spacing: .09em; }
+            .ah span { display: block; font-size: 10.5px; color: #5B6360; margin-top: 1px; }
+            .am { display: flex; gap: 26px; margin-top: 7px; font-size: 11px; flex-wrap: wrap; }
+            .am em { display: block; font-style: normal; font-family: 'IBM Plex Mono', monospace;
+                font-size: 7.5px; letter-spacing: .12em; text-transform: uppercase; color: #5B6360; }
+            table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+            th { background: #EAF0F3; text-align: left; padding: 5px 6px;
+                border-bottom: 1px solid #1C2321; font-family: 'IBM Plex Mono', monospace;
+                font-size: 7.5px; letter-spacing: .09em; text-transform: uppercase; }
+            td { padding: 4px 6px; border-bottom: 1px solid #D6D2C4; }
+            .c { text-align: center; }
+            /* Room for a real signature. A 12mm-wide box is a tick box,
+               and a tick box is not a signature. */
+            th.sg, td.sg { width: 42mm; }
+            td.sg img { max-height: 9mm; max-width: 40mm; display: block; }
+            .asign { display: flex; gap: 22px; margin-top: 12mm; page-break-inside: avoid; }
+            .asign > div { flex: 1; text-align: center; }
+            .asign .ln { border-bottom: 1px solid #1C2321; height: 9mm; }
+            .asign span { font-size: 8px; text-transform: uppercase; letter-spacing: .08em;
+                color: #5B6360; display: block; margin-top: 3px; }`;
+
+        // The same new-window path the estimate summary and DUPA use, so
+        // the letterhead, logo and footer are the ones set under Print
+        // template — not a second look-alike built here.
+        const w = window.open('', '_blank');
+        if (!w) { UI.toast('Popup blocked — please allow popups for this site.', 'error'); return; }
+        w.document.write(PrintDoc.documentHTML({
+            title: onlyDate ? `Attendance — ${onlyDate}` : `Attendance — ${month}`,
+            meta: [p.name, p.location].filter(Boolean).join(' · '),
+            // Landscape: ten columns including a signature will not fit
+            // portrait, and a signature column squeezed to fit is one
+            // nobody can sign.
+            landscape: true,
+            body: body,
+            css: css
+        }));
+        w.document.close();
+        setTimeout(() => { w.focus(); w.print(); }, 350);
+    },
+
+    /** _attRow - one person on one day. */
+    _attRow(m) {
+        const t = v => v ? esc(v) : '<span class="att-blank">—</span>';
+        const hrs = this._dayHours(m);
+        return `<tr>
+            <td><b>${esc(m.name || '—')}</b></td>
+            <td>${esc(m.role) || '—'}</td>
+            <td class="c">${t(m.amIn)}</td><td class="c">${t(m.amOut)}</td>
+            <td class="c">${t(m.pmIn)}</td><td class="c">${t(m.pmOut)}</td>
+            <td class="c">${t(m.otIn)}</td><td class="c">${t(m.otOut)}</td>
+            <td class="c"><b>${hrs ? hrs.toFixed(1) : '—'}</b></td>
+            <td class="sg">${m.signature
+                ? `<img class="att-sig" src="${driveImgSrc(m.signature)}" alt="" onerror="this.style.display='none'" />`
+                : ''}</td>
+        </tr>`;
+    },
+
+    /** _spanHours - hours between two HH:MM strings, or 0. */
+    _spanHours(a, b) {
+        if (!a || !b) return 0;
+        const p = v => {
+            const m = /^(\d{1,2}):(\d{2})/.exec(String(v).trim());
+            return m ? parseInt(m[1], 10) + parseInt(m[2], 10) / 60 : null;
+        };
+        const x = p(a), y = p(b);
+        if (x === null || y === null) return 0;
+        // A finish before a start is an overnight shift, not a negative
+        // day — the alternative is a payroll figure that reduces someone's
+        // hours for working late.
+        return y >= x ? y - x : (24 - x) + y;
+    },
+
+    _dayHours(m) {
+        return this._spanHours(m.amIn, m.amOut)
+             + this._spanHours(m.pmIn, m.pmOut)
+             + this._spanHours(m.otIn, m.otOut);
+    },
+
+    _otHours(m) { return this._spanHours(m.otIn, m.otOut); },
 
     /** exportAttendanceExcel (v9) - The visible month's matrix as .xlsx. */
     exportAttendanceExcel() {

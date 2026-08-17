@@ -975,3 +975,208 @@
     .dz-row { flex-direction: column; }
     .dz-row button { align-self: stretch; }
 }
+
+/* ================================================================
+   v21 — ATTENDANCE, BY DATE
+
+   This was a matrix of personnel × days with a check mark in each cell.
+   That answers "who came in this month" — a payroll question. The sheet
+   people actually need is the DAILY one: who was here on the 14th, what
+   time did they arrive, what time did they leave, and their signature
+   against it.
+
+   That is the document a client asks for in a claim and the one a
+   foreman prints and files. A month matrix cannot be either: it has no
+   times on it and nowhere to sign.
+   ================================================================ */
+
+.att-bar {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+.att-bar > div:first-child { flex: 1; min-width: 240px; }
+.att-bar h3 {
+    font-family: var(--font-display);
+    font-size: 16px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    margin: 0 0 2px;
+}
+.att-bar p { margin: 0; font-size: 12px; color: var(--ink-soft); line-height: 1.45; }
+.att-bar select {
+    padding: 6px 10px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    font-size: 12px;
+    background: var(--surface);
+    color: var(--ink);
+    font-family: var(--font-body);
+}
+
+.att-day {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 12px;
+}
+.att-day-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 13px;
+    background: var(--blueprint-tint);
+    border-bottom: 1px solid var(--line);
+    flex-wrap: wrap;
+}
+.att-day-head b { font-size: 13px; }
+.att-day-head span { font-size: 11.5px; color: var(--ink-soft); }
+.att-day-head .att-w { margin-right: auto; }
+
+.att-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.att-table th {
+    font-family: var(--font-num);
+    font-size: 8.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    text-align: left;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+}
+.att-table td { padding: 7px 10px; border-bottom: 1px solid var(--line); }
+.att-table tr:last-child td { border-bottom: none; }
+.att-table .c { text-align: center; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.att-table th.c { text-align: center; }
+/* Wide enough for a real signature. A narrow column is a tick box, and
+   a tick box is not a signature. */
+.att-table .sg { width: 150px; }
+.att-sig { max-height: 26px; max-width: 140px; display: block; }
+.att-blank { color: var(--line); }
+.att-none { padding: 14px 13px; font-size: 12px; color: var(--ink-soft); margin: 0; }
+
+@media (max-width: 720px) {
+    .att-table { font-size: 11.5px; }
+    .att-table .sg { width: 90px; }
+}
+
+/* ================================================================
+   v21 — QA/QC
+
+   The Punchlist tab became QA/QC with the punchlist inside it. A
+   punchlist is one quality record among several; naming the whole
+   discipline after one of its outputs is why inspections, NCRs and test
+   results had nowhere to live.
+   ================================================================ */
+
+.qa-head { margin-bottom: 12px; }
+.qa-head h3 {
+    font-family: var(--font-display);
+    font-size: 16px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    margin: 0 0 2px;
+}
+.qa-head p {
+    margin: 0;
+    font-size: 12px;
+    color: var(--ink-soft);
+    line-height: 1.5;
+    max-width: 660px;
+}
+
+.qa-tabs {
+    display: flex;
+    gap: 3px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 14px;
+    overflow-x: auto;
+}
+.qa-tabs button {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 8px 13px;
+    font-family: var(--font-body);
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    cursor: pointer;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.qa-tabs button:hover { color: var(--ink); }
+.qa-tabs button.is-on { color: var(--ink); font-weight: 600; border-bottom-color: var(--steel); }
+/* The badge counts only what is still OPEN. A badge counting history is
+   a badge people stop reading. */
+.qa-tabs button span {
+    background: var(--red);
+    color: #fff;
+    font-family: var(--font-num);
+    font-size: 9px;
+    border-radius: 99px;
+    padding: 1px 6px;
+}
+
+.qa-bar {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+.qa-bar p {
+    flex: 1;
+    min-width: 260px;
+    margin: 0;
+    font-size: 12px;
+    color: var(--ink-soft);
+    line-height: 1.5;
+}
+
+.qa-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.qa-table th {
+    font-family: var(--font-num);
+    font-size: 8.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+}
+.qa-table td { padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.qa-table tr:last-child td { border-bottom: none; }
+.qa-table .mono { font-family: var(--font-num); font-size: 11.5px; }
+.qa-table .num { text-align: right; font-family: var(--font-num); }
+.qa-table .muted { font-size: 10.5px; color: var(--ink-soft); margin-top: 2px; }
+/* A failed test is tinted across the whole row. Colour on the outcome
+   cell alone is easy to miss on a wide table. */
+.qa-table tr.is-fail { background: rgba(192, 54, 44, .06); }
+
+.qa-pill {
+    font-family: var(--font-num);
+    font-size: 9.5px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    white-space: nowrap;
+}
+.qa-pill.g { background: rgba(14, 124, 74, .12); color: var(--green); }
+.qa-pill.a { background: rgba(217, 138, 0, .14); color: var(--safety-ink); }
+.qa-pill.d { background: rgba(192, 54, 44, .12); color: var(--red); }
+.qa-pill.n { background: var(--bg); color: var(--ink-soft); }
+
+.qa-empty {
+    background: var(--surface);
+    border: 1px dashed var(--line);
+    border-radius: var(--radius);
+    padding: 26px 20px;
+    text-align: center;
+}
+.qa-empty p { margin: 0; font-size: 12.5px; color: var(--ink-soft); }

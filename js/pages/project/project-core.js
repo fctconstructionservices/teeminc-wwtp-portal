@@ -197,7 +197,11 @@ const ProjectPage = {
                 <button data-tab="equipment" onclick="ProjectPage.switchTab('equipment')">Equipment</button>
                 <button data-tab="billings" onclick="ProjectPage.switchTab('billings')">Billings</button>
                 <button data-tab="variations" onclick="ProjectPage.switchTab('variations')">Variations</button>
-                <button data-tab="punchlist" onclick="ProjectPage.switchTab('punchlist')">${Icon.punchlist({size:13})} Punchlist</button>
+                <!-- v21: Punchlist became QA/QC. A punchlist is one QA/QC
+                     record among several — inspections, NCRs, tests — and
+                     giving the whole discipline a tab named after one of
+                     its outputs is why the others had nowhere to live. -->
+                <button data-tab="qaqc" onclick="ProjectPage.switchTab('qaqc')">${Icon.punchlist({size:13})} QA/QC</button>
                 <button data-tab="safety" onclick="ProjectPage.switchTab('safety')">${Icon.safety({size:13})} Safety</button>
                 <button data-tab="drawings" onclick="ProjectPage.switchTab('drawings')">${Icon.drawing({size:13})} Drawings</button>
                 <!-- v20: everything received about the project that is not a
@@ -216,7 +220,7 @@ const ProjectPage = {
             <div id="proj-tab-equipment" class="project-tab-content"></div>
             <div id="proj-tab-billings" class="project-tab-content"></div>
             <div id="proj-tab-variations" class="project-tab-content"></div>
-            <div id="proj-tab-punchlist" class="project-tab-content"></div>
+            <div id="proj-tab-qaqc" class="project-tab-content"></div>
             <div id="proj-tab-safety" class="project-tab-content"></div>
             <div id="proj-tab-drawings" class="project-tab-content"></div>
             <div id="proj-tab-documents" class="project-tab-content"></div>
@@ -336,6 +340,7 @@ const ProjectPage = {
         // project, and loading a register of files on every project open
         // would slow down the tabs people actually use.
         if (tab === 'documents' && this._data) this.renderDocuments(this._data);
+        if (tab === 'qaqc' && this._data) this.renderQaqc(this._data);
     },
 
     // ─── SHOW ADD PROJECT MODAL ──────────────────────────────

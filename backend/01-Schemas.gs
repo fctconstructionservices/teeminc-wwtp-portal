@@ -214,6 +214,16 @@ const SCHEMAS = {
   PRLines: ['id', 'prId', 'materialId', 'itemName', 'unit', 'qty', 'rate', 'amount',
     'qtyOrdered', 'qtyReceived', 'notes', 'sortOrder'],
 
+  // ── v21: QA/QC ──
+  // Inspection requests, non-conformances and test results share a
+  // shape — reference, scope, date, status, attachment — so they share
+  // a table. Three sheets would mean three read paths, three report
+  // sections and three chances to forget one.
+  QaqcRecords: ['id', 'projectId', 'kind', 'sowId', 'description',
+    'date', 'requiredDate', 'closedDate', 'disposition', 'rootCause',
+    'testType', 'sampleRef', 'value', 'unit', 'requiredValue', 'result',
+    'status', 'fileUrl', 'fileName', 'createdBy', 'createdAt'],
+
   // ── v20: PROJECT DOCUMENTS ──
   // Everything that ARRIVES about a project and has nowhere else to
   // live: the signed contract, the notice to proceed, a permit, a

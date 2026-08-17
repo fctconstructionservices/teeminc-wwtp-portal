@@ -1124,6 +1124,12 @@ function getProjectData(projectId) {
     safetyRecords: getSafetyRecords(projectId),
     drawings: getDrawings(projectId),
     personnel: getAllPersonnel().filter(function (pp) { return pp.status === 'active'; }),
+    // v21: the QA/QC records travel with the project, like punchlist and
+    // safety already do — one fetch, not a second round trip per tab.
+    qaqc: (function () {
+      try { return getQaqcRecords(projectId); }
+      catch (e) { return { inspections: [], ncrs: [], tests: [] }; }
+    })(),
 
     equipmentOnSite: equipmentOnSite,
     equipmentSummary: equipmentSummary,
@@ -1182,8 +1188,20 @@ function addSOWItem(projectId, data) {
   const tz = Session.getScriptTimeZone();
   const today = new Date();
   const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
-  const startDate = data.startDate || Utilities.formatDate(today, tz, 'yyyy-MM-dd');
-  const endDate = data.endDate || Utilities.formatDate(tomorrow, tz, 'yyyy-MM-dd');
+  // ── v21 FIX: ONE DEFAULT, BOTH PATHS ──
+  // This defaulted to start=today, end=TOMORROW — a two-day task —
+  // while Import BOQ defaulted to a one-day one. Two different shapes
+  // for "a scope nobody has scheduled yet", which is why the Timeline
+  // behaved differently depending on how the item was created.
+  //
+  // The visible symptom: with a two-day span, moving the start inwards
+  // has room to shorten the job, so the duration changes on screen.
+  // With a one-day span the start immediately passes the finish, so the
+  // finish moves with it and the duration never appears to react.
+  //
+  // Both now use the same helper and the same default.
+  const startDate = data.startDate || defaultSowStart_(projectId);
+  const endDate = data.endDate || defaultSowEnd_(startDate);
   const status = 'On Track';
 
   const existing = readAll_('SOWItems').find(function (s) { return s.id === id && s.projectId === projectId; });
