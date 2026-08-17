@@ -81,6 +81,16 @@ Object.assign(ProjectPage, {
 
             { id: 'punchlist', label: 'Punchlist', sub: 'Open and closed defects with rectification status', group: 'Quality & Safety', def: false,
               render: p => self._rsPunchlist(p) },
+            // v21: the three QA/QC records that had no report section,
+            // because until now they had nowhere to be recorded either.
+            // A quality report that shows only the punchlist implies the
+            // punchlist is all the quality control there was.
+            { id: 'inspections', label: 'Inspection requests', sub: 'What was offered for inspection, and the response', group: 'Quality & Safety', def: false,
+              render: p => self._rsInspections(p) },
+            { id: 'ncrs', label: 'Non-conformances', sub: 'Formal NCRs with disposition and closure', group: 'Quality & Safety', def: false,
+              render: p => self._rsNcrs(p) },
+            { id: 'tests', label: 'Test results', sub: 'Cylinders, compaction and weld tests against requirement', group: 'Quality & Safety', def: false,
+              render: p => self._rsTests(p) },
             { id: 'safety', label: 'Safety records (summary)', sub: 'Toolbox talks, inspections, incidents and near misses', group: 'Quality & Safety', def: false,
               render: p => self._rsSafety(p) },
             { id: 'safetyFull', label: 'Safety records (full detail)', sub: 'Every record with its persons, action taken and photographs', group: 'Quality & Safety', def: false,
@@ -643,6 +653,72 @@ Object.assign(ProjectPage, {
             [{h:'Material'},{h:'Unit'},{h:'Delivered',amt:true},{h:'Received on PO',amt:true},
              {h:'Transferred in',amt:true},{h:'Used',amt:true},{h:'Transferred out',amt:true},
              {h:'On site',amt:true}], rows);
+    },
+
+    /** _rsInspections (v21) - what was offered, and what came back. */
+    _rsInspections(p) {
+        const e = this._rEsc.bind(this);
+        const rows = ((p.qaqc || {}).inspections) || [];
+        if (!rows.length) return '';
+        // Outstanding first: an inspection nobody attended is the one
+        // that matters in a claim, and burying it in date order is how
+        // it stops being noticed.
+        const sorted = rows.slice().sort((a, b) =>
+            (a.status === 'Requested' ? 0 : 1) - (b.status === 'Requested' ? 0 : 1));
+        return `<section class="rp-sec"><h2>Inspection Requests</h2>
+            <table><thead><tr><th>Ref</th><th>Scope</th><th>What</th>
+                <th>Requested</th><th>Required by</th><th>Inspected</th><th>Result</th></tr></thead>
+            <tbody>${sorted.map(r => `<tr>
+                <td>${e(r.id)}</td><td>${e(r.sowId) || '—'}</td>
+                <td>${e(r.description)}</td>
+                <td>${e(r.requestedDate)}</td><td>${e(r.requiredDate) || '—'}</td>
+                <td>${e(r.inspectedDate) || '—'}</td>
+                <td>${e(r.status)}</td></tr>`).join('')}</tbody></table>
+            <p class="rp-note">${sorted.filter(r => r.status === 'Requested').length}
+                still awaiting a response.</p>
+        </section>`;
+    },
+
+    /** _rsNcrs (v21) - formal non-conformances. */
+    _rsNcrs(p) {
+        const e = this._rEsc.bind(this);
+        const rows = ((p.qaqc || {}).ncrs) || [];
+        if (!rows.length) return '';
+        const open = rows.filter(r => r.status === 'Open').length;
+        return `<section class="rp-sec"><h2>Non-Conformance Reports</h2>
+            <table><thead><tr><th>Ref</th><th>Scope</th><th>What is wrong</th>
+                <th>Root cause</th><th>Raised</th><th>Disposition</th><th>Closed</th></tr></thead>
+            <tbody>${rows.map(r => `<tr>
+                <td>${e(r.id)}</td><td>${e(r.sowId) || '—'}</td>
+                <td>${e(r.description)}</td><td>${e(r.rootCause) || '—'}</td>
+                <td>${e(r.raisedDate)}</td>
+                <td>${e(r.disposition) || '—'}</td>
+                <td>${e(r.closedDate) || '—'}</td></tr>`).join('')}</tbody></table>
+            <p class="rp-note">${open} open, ${rows.length - open} closed.</p>
+        </section>`;
+    },
+
+    /** _rsTests (v21) - test results against requirement. */
+    _rsTests(p) {
+        const e = this._rEsc.bind(this);
+        const rows = ((p.qaqc || {}).tests) || [];
+        if (!rows.length) return '';
+        const failed = rows.filter(r => r.result === 'Fail');
+        return `<section class="rp-sec"><h2>Test Results</h2>
+            <table><thead><tr><th>Ref</th><th>Type</th><th>Scope</th><th>Sample</th>
+                <th>Tested</th><th class="amt">Result</th><th class="amt">Required</th>
+                <th>Outcome</th></tr></thead>
+            <tbody>${rows.map(r => `<tr>
+                <td>${e(r.id)}</td><td>${e(r.testType)}</td>
+                <td>${e(r.sowId) || '—'}</td><td>${e(r.sampleRef) || '—'}</td>
+                <td>${e(r.testDate)}</td>
+                <td class="amt">${e(r.value)} ${e(r.unit)}</td>
+                <td class="amt">${e(r.requiredValue) || '—'}</td>
+                <td>${e(r.result)}</td></tr>`).join('')}</tbody></table>
+            ${failed.length ? `<p class="rp-note"><b>${failed.length} test(s) failed.</b>
+                A failed result printed alongside the passes is the point of including this
+                section — a report showing only passes is not a quality record.</p>` : ''}
+        </section>`;
     },
 
     _rsPunchlist(p) {

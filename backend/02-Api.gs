@@ -196,6 +196,11 @@ const API_ACTIONS = {
 
   // ── v18: TASKS ──
   // ── v20: PROJECT DOCUMENTS ──
+  // ── v21: QA/QC ──
+  getQaqcRecords: getQaqcRecords,
+  saveQaqcRecord: saveQaqcRecord,
+  closeQaqcRecord: closeQaqcRecord,
+
   getProjectDocuments: getProjectDocuments,
   addProjectDocument: addProjectDocument,
   updateProjectDocument: updateProjectDocument,
