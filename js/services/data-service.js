@@ -817,7 +817,6 @@ const DataService = {
     async deleteProjectDocument(id) { return await gasCall('deleteProjectDocument', id); },
 
     async getMyTaskSummary() { return await gasCall('getMyTaskSummary'); },
-    async getAssignableUsers() { return await gasCall('getAssignableUsers'); },
     async createTask(data) { return await gasCall('createTask', data); },
     async completeTask(id, proof) { return await gasCall('completeTask', id, proof || {}); },
     async reopenTask(id, reason) { return await gasCall('reopenTask', id, reason || ''); },
