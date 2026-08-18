@@ -836,6 +836,9 @@ const DataService = {
     async repairSowSchedules(projectId) {
         return await gasCall('repairSowSchedules', projectId);
     },
+    async repairSowIds(projectId) {
+        return await gasCall('repairSowIds', projectId);
+    },
 
     // ── v16: PROJECT DELETE / ARCHIVE ──
     async previewProjectDelete(projectId) {

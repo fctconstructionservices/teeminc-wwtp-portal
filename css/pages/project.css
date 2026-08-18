@@ -1180,3 +1180,24 @@
     text-align: center;
 }
 .qa-empty p { margin: 0; font-size: 12.5px; color: var(--ink-soft); }
+
+/* v22 — the SOW id repair prompt.
+   Shown only when there is something to repair. A permanent button for a
+   one-off data problem is a button people press out of curiosity. */
+.sow-repair {
+    background: rgba(217, 138, 0, .08);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--amber);
+    border-radius: var(--radius);
+    padding: 11px 14px;
+    margin-bottom: 12px;
+}
+.sow-repair b { font-size: 13px; display: flex; align-items: center; gap: 7px; }
+.sow-repair p {
+    margin: 5px 0 0;
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    line-height: 1.5;
+    max-width: 720px;
+}
+.sow-repair button { margin-top: 9px; }

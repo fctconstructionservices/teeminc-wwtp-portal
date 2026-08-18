@@ -11,13 +11,32 @@ const path = require('path');
 
 module.exports = function (t) {
 
+    // v22: ids are stored as text with Sheets' apostrophe marker, so the
+    // assertions compare on the normalised value rather than the raw
+    // cell — the same thing the service does.
+    const _key = v => (typeof v === 'number' ? String(v)
+        : String(v == null ? '' : v).trim().replace(/^'/, ''));
+
     const SHEETS = { SOWItems: [], EstimateGroups: [], Projects: [] };
     const harness = `
         function readAll_(n){ return (SHEETS[n]||[]).map(r=>Object.assign({},r)); }
         function appendRow_(n,row){ (SHEETS[n]=SHEETS[n]||[]).push(Object.assign({},row)); }
-        function updateRowWhere_(n,m,p){ (SHEETS[n]||[]).forEach(r=>{ if(Object.keys(m).every(k=>String(r[k])===String(m[k]))) Object.assign(r,p); }); }
+        // Mirrors the real one: v22 normalises BOTH sides through
+        // _cellKey_, because an id may be text-with-marker or a number.
+        function updateRowWhere_(n,m,p){ (SHEETS[n]||[]).forEach(r=>{
+          if(Object.keys(m).every(k=>_cellKey_(r[k])===_cellKey_(m[k]))) Object.assign(r,p); }); }
         var _s=0; function nextId_(p){return p+'-'+(++_s);}
         function requireLogin_(){} function assertProjectEditor_(){} function logActivity_(){}
+        // v22: ids are written as text with Sheets' apostrophe marker,
+        // and old rows may have been coerced to numbers. Every lookup
+        // goes through this.
+        function _cellKey_(v){
+          if (v === null || v === undefined) return '';
+          if (typeof v === 'number') return String(v);
+          return String(v).trim().replace(/^'/, '');
+        }
+        function ss_(){ return { getSheetByName: () => null }; }
+        function headers_(){ return []; }
         // v19: imported items are now given a real one-day schedule, so
         // the service needs the date helpers.
         function buildSowTree_(r){ return (r||[]).map(x=>Object.assign({isHeading:false},x)); }
@@ -114,10 +133,10 @@ module.exports = function (t) {
         });
 
         t.it('replacing updates the description but NEVER the budget', () => {
-            SHEETS.SOWItems.find(s => s.id === '1.1').budget = 180000;
+            SHEETS.SOWItems.find(s => _key(s.id) === '1.1').budget = 180000;
             api.addSOWItemsBulk('P1', 'General Requirements\n  Revised | 2 | lot',
                 { replaceExisting: true });
-            const row = SHEETS.SOWItems.find(s => s.id === '1.1');
+            const row = SHEETS.SOWItems.find(s => _key(s.id) === '1.1');
             t.eq(row.description, 'Revised');
             t.eq(row.budget, 180000,
                 'an import that wiped a hand-set budget would be a very expensive convenience');

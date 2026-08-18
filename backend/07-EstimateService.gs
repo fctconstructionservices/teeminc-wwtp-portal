@@ -28,7 +28,12 @@ function saveEstimates(projectId, groups) {
   const allGroups = readAll_('EstimateGroups');
   const bySow = {};
   allGroups.forEach(function (row) {
-    if (row.projectId === projectId) bySow[row.sowId] = row;
+    // ── v22.2 FIX: KEYED ON THE NORMALISED ID ──
+    // This keyed on the raw value. A sowId stored as the number 1.1 and
+    // one stored as the text "1.1" are two different keys, so an
+    // existing group was not found and a SECOND one was created beside
+    // it — the duplicate you see on the Estimates tab after an import.
+    if (row.projectId === projectId) bySow[_cellKey_(row.sowId)] = row;
   });
 
   // ── v11 BATCH I1: HEADINGS ARE REFUSED HERE ──
@@ -40,15 +45,15 @@ function saveEstimates(projectId, groups) {
   const headingIds = {};
   buildSowTree_(readAll_('SOWItems').filter(function (x) {
     return x.projectId === projectId;
-  })).forEach(function (x) { if (x.isHeading) headingIds[String(x.id).trim()] = true; });
+  })).forEach(function (x) { if (x.isHeading) headingIds[_cellKey_(x.id)] = true; });
 
   const gHeads = headers_('EstimateGroups');
   const targets = [];
   const newGroupRows = [];
   const refused = [];
   (groups || []).forEach(function (g) {
-    if (headingIds[String(g.sowId).trim()]) { refused.push(g.sowId); return; }
-    const row = bySow[g.sowId];
+    if (headingIds[_cellKey_(g.sowId)]) { refused.push(g.sowId); return; }
+    const row = bySow[_cellKey_(g.sowId)];
     if (row && (row.status === 'approved' || row.status === 'pending')) return;   // locked
     let groupId;
     if (row) {
@@ -59,8 +64,13 @@ function saveEstimates(projectId, groups) {
     } else {
       groupId = nextId_('EG');
       const obj = { id: groupId, projectId: projectId, sowId: g.sowId, sowDescription: g.sowDescription, status: 'draft' };
+      // v22.2: this writes rows in bulk rather than through appendRow_,
+      // so the identifier guard has to be applied here too. Without it
+      // the sowId is stored as a number, stops matching its SOW item,
+      // and the next save creates ANOTHER group beside this one.
       newGroupRows.push(gHeads.map(function (h) {
-        return (obj[h] !== undefined && obj[h] !== null) ? obj[h] : '';
+        var v = (obj[h] !== undefined && obj[h] !== null) ? obj[h] : '';
+        return _textIfIdentifier_(h, v);
       }));
     }
     targets.push({ groupId: groupId, g: g });
@@ -71,7 +81,7 @@ function saveEstimates(projectId, groups) {
   // to move — deleting money to tidy a display is not a trade worth
   // making, and the SOW tab's "Check titles" reports those.
   Object.keys(headingIds).forEach(function (sid) {
-    var row = bySow[sid];
+    var row = bySow[_cellKey_(sid)];
     if (!row) return;
     var lines = 0;
     ['EstimateMaterials', 'EstimateLabor', 'EstimateEquipment'].forEach(function (sheet) {

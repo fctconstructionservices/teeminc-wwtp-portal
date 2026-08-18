@@ -151,6 +151,107 @@ Object.assign(ProjectPage, {
      * person typing them by hand can silently put an item under the
      * wrong heading.
      */
+    /**
+     * _needsIdRepair (v22) - true when any id came back as a NUMBER.
+     *
+     * That is the whole detection: JSON preserves the type, so an id
+     * that Sheets converted arrives here as `1` rather than `"1"`. No
+     * guessing, and no server round trip to find out.
+     */
+    _needsIdRepair() {
+        return this._canEdit !== false && this._badIdCount() > 0;
+    },
+
+    _badIdCount() {
+        return (this._sowItems || []).filter(s => typeof s.id === 'number').length;
+    },
+
+    /**
+     * repairIds - rewrites the affected ids as text.
+     *
+     * The result is reported in full, including any pair that had
+     * already merged. Those cannot be separated — the original text is
+     * gone — and telling somebody exactly which ones need renaming by
+     * hand is the only honest thing to do about it.
+     */
+    async repairIds(btn) {
+        await Busy.run(btn, 'Repairing', async () => {
+            try {
+                const res = await DataService.repairSowIds(this._currentProjectId);
+                if ((res.collisions && res.collisions.length) ||
+                    (res.duplicatesKept && res.duplicatesKept.length)) {
+                    // Confirm takes plain text, so the list is shown in a
+                    // modal of its own — a merged pair needs to be read
+                    // and acted on, not glanced at in a toast that
+                    // disappears.
+                    this._showCollisions(res);
+                } else {
+                    UI.toast(`${res.fixed} item number(s) and ${res.refsFixed || 0} ` +
+                        `reference(s) repaired` +
+                        (res.duplicatesRemoved
+                            ? `, ${res.duplicatesRemoved} duplicate estimate(s) removed` : '') +
+                        '.', 'success');
+                }
+                await this.open(this._currentProjectId, true);
+                this.switchTab('sow');
+            } catch (err) { UI.toast('' + err.message, 'error'); }
+        });
+    },
+
+    /** _showCollisions - the pairs that cannot be separated. */
+    _showCollisions(res) {
+        document.getElementById('collModal')?.remove();
+        const m = document.createElement('div');
+        m.className = 'print-modal-overlay open';
+        m.id = 'collModal';
+        m.innerHTML = `
+            <div class="print-modal-content" style="max-width:540px;">
+                <button class="close-modal" onclick="document.getElementById('collModal').remove()">${Icon.close({ size: 18 })}</button>
+                <div class="print-header"><h2>Repaired — some need you</h2>
+                    <div class="print-meta">${res.fixed} item number(s) and ${res.refsFixed || 0}
+                        reference(s) rewritten${res.duplicatesRemoved
+                            ? ` · ${res.duplicatesRemoved} empty duplicate estimate(s) removed` : ''}</div></div>
+
+                ${res.duplicatesKept && res.duplicatesKept.length ? `
+                <div class="pr-budget-box near">
+                    <b>${res.duplicatesKept.length} duplicate estimate(s) were NOT removed</b>
+                    <p>Each of these is a draft sitting beside an approved estimate for the same
+                    scope — but it has priced lines in it. Somebody may have started working in it
+                    before noticing the duplicate, and <b>deleting it would throw that away</b>.</p>
+                    <p>Open the Estimates tab, check whether the draft holds anything you want, then
+                    delete it yourself:</p>
+                    <p class="mono">${res.duplicatesKept.map(d =>
+                        `${esc(d.sowId)} — ${d.lines} line(s)`).join('<br>')}</p>
+                </div>` : ''}
+
+                ${res.collisions && res.collisions.length ? `
+                <div class="pr-budget-box over">
+                    <b>${res.collisions.length} pair(s) had already merged</b>
+                    <p>Google Sheets stored both as the same number, so the original text is
+                    gone and there is no way to tell which row was which.
+                    <b>Guessing would move one item's budget onto another scope</b>, so nothing
+                    was changed for these.</p>
+                </div>
+
+                <div class="print-section"><div class="ps-title">Rename these by hand</div>
+                    <table class="mini-table"><thead><tr>
+                        <th>Now reads as</th><th>These two descriptions</th></tr></thead>
+                        <tbody>${res.collisions.map(c => `<tr>
+                            <td class="mono">${esc(c.id)}</td>
+                            <td>${esc(c.a)}<br><span class="muted">${esc(c.b)}</span></td>
+                        </tr>`).join('')}</tbody></table></div>
+
+                <p style="font-size:12px;color:var(--ink-soft);line-height:1.5;">
+                    Open each on the SOW Budget tab and give one of them its correct number —
+                    the description will tell you which is which.</p>` : ''}
+
+                <div class="print-actions">
+                    <button class="btn-primary" onclick="document.getElementById('collModal').remove()">Understood</button>
+                </div>
+            </div>`;
+        document.body.appendChild(m);
+    },
+
     showBulkSOWModal() {
         const sample =
 `General Requirements
@@ -458,6 +559,23 @@ Lagoon Lining Works
                     <button class="btn-sm" onclick="ProjectPage.showAddSOWModal()">+ Add one</button>` : ''}
                 <span class="badge">Click any SOW to see detailed breakdown</span>
             </div>
+
+            ${this._needsIdRepair() ? `
+                <!-- v22: shown ONLY when there is something to repair.
+                     A permanent button for a one-off data problem is a
+                     button people press out of curiosity. -->
+                <div class="sow-repair">
+                    <b>${Icon.warning({ size: 13 })} Some item numbers were stored as numbers</b>
+                    <p>Google Sheets converts anything that looks numeric, so
+                    <b>${this._badIdCount()}</b> item number(s) on this project were saved as
+                    numbers rather than text. Those rows refuse a budget with
+                    <b>“SOW item not found”</b>, and an id like <b>1.10</b> can collapse onto
+                    <b>1.1</b>.</p>
+                    <p>This rewrites them as text. The value does not change — only how the
+                    sheet stores it — so nothing that refers to an item needs touching.</p>
+                    <button class="btn-sm primary" onclick="ProjectPage.repairIds(this)">
+                        Repair the item numbers</button>
+                </div>` : ''}
             
             <div class="sow-status-legend">
                 <span class="legend-label">Estimate Status:</span>
