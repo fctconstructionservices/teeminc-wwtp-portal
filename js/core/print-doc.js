@@ -116,11 +116,24 @@ const PrintDoc = {
         const docMeta = opts.meta
             ? `<div class="pd-docmeta">${e(opts.meta)}</div>` : '';
 
+        // ── v23: THE DOCUMENT TITLE MOVED OUT OF THE HEADER ──
+        //
+        // It sat in a right-hand block beside the company details, in a
+        // fixed share of the width. A short title looked fine; a long
+        // one — "Attendance — BF2/NF2 Lagoon Liner — 2026-08" — wrapped
+        // to three lines, pushed the block taller than the logo, and
+        // broke the alignment of the whole letterhead.
+        //
+        // A header should identify the COMPANY. What the document is
+        // belongs above the content, on a full-width line where the
+        // length of the words cannot damage anything.
+        const docBlock = (docTitle || docMeta)
+            ? `<div class="pd-docblock">${docTitle}${docMeta}</div>` : '';
+
         if (t.headerLayout === 'minimal') {
             return `<header class="pd-head pd-minimal">
                 <div class="pd-name">${e(t.companyName)}</div>
-                <div class="pd-right">${docTitle}${docMeta}</div>
-            </header>${t.showDivider ? '<div class="pd-rule"></div>' : ''}`;
+            </header>${t.showDivider ? '<div class="pd-rule"></div>' : ''}${docBlock}`;
         }
 
         if (t.headerLayout === 'logo-center') {
@@ -128,14 +141,12 @@ const PrintDoc = {
                 ${logo}
                 ${name}
                 <div class="pd-contact">${contact}</div>
-                ${docTitle}${docMeta}
-            </header>${t.showDivider ? '<div class="pd-rule"></div>' : ''}`;
+            </header>${t.showDivider ? '<div class="pd-rule"></div>' : ''}${docBlock}`;
         }
 
         return `<header class="pd-head pd-left">
             <div class="pd-id">${logo}<div>${name}<div class="pd-contact">${contact}</div></div></div>
-            <div class="pd-right">${docTitle}${docMeta}</div>
-        </header>${t.showDivider ? '<div class="pd-rule"></div>' : ''}`;
+        </header>${t.showDivider ? '<div class="pd-rule"></div>' : ''}${docBlock}`;
     },
 
     /**
@@ -308,7 +319,20 @@ ${this.footerHTML()}
 .pd-tagline { font-size:10.5px; color:#5B6360; font-style:italic; margin-top:1px; }
 .pd-contact { margin-top:4px; font-size:10px; color:#5B6360; line-height:1.5; }
 .pd-contact .pd-line { white-space:nowrap; }
+/* v23: kept for any older markup that still emits it, but nothing does. */
 .pd-right { text-align:right; }
+
+/* The document title, full width, under the rule. Long titles now have
+   the whole page to use and cannot distort the header above them. */
+.pd-docblock { margin:3mm 0 4mm; }
+.pd-docblock .pd-doctitle {
+    text-align:left;
+    font-size:14px;
+    line-height:1.25;
+    /* Wrapping is fine here; there is nothing beside it to disturb. */
+    word-break:break-word;
+}
+.pd-docblock .pd-docmeta { text-align:left; margin-top:1mm; }
 .pd-doctitle { font-family:'Oswald',sans-serif; font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:#1C2321; }
 .pd-docmeta { font-family:'IBM Plex Mono',monospace; font-size:10px; color:#5B6360; margin-top:2px; }
 .pd-rule { border-bottom:2.5px solid var(--pd-accent); margin:9px 0 16px; }

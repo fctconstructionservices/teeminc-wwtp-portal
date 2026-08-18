@@ -96,7 +96,11 @@ Object.assign(ProjectPage, {
             { id: 'safetyFull', label: 'Safety records (full detail)', sub: 'Every record with its persons, action taken and photographs', group: 'Quality & Safety', def: false,
               render: p => self._rsSafetyDetailed(p) },
             { id: 'drawings', label: 'Drawings register', sub: 'Drawing numbers with current revision', group: 'Quality & Safety', def: false,
-              render: p => self._rsDrawings(p) }
+              render: p => self._rsDrawings(p) },
+            // v23: the drawings themselves, one to a page. The register
+            // above is an index; this is the set you hand to somebody.
+            { id: 'drawingSheets', label: 'Drawing sheets (one per page)', sub: 'Each current drawing printed full page, ready to issue', group: 'Quality & Safety', def: false,
+              render: p => self._rsDrawingSheets(p) }
         ];
     },
 
@@ -794,6 +798,53 @@ Object.assign(ProjectPage, {
             [{h:'Drawing no.'},{h:'Title'},{h:'Rev'},{h:'Discipline'},{h:'Issued'}], rows);
     },
 
+    /**
+     * _rsDrawingSheets (v23) - every current drawing, one to a page.
+     *
+     * The register is an index: numbers, titles, revisions. Useful for
+     * checking what exists, useless for taking to the working face.
+     *
+     * This is the set you actually issue — each drawing filling its own
+     * sheet with a title block, so a page can be torn off and handed to
+     * somebody on its own and still say what it is and which revision.
+     *
+     * SUPERSEDED DRAWINGS ARE EXCLUDED, deliberately. A printed set that
+     * contains an old revision is worse than no printed set: somebody
+     * builds from it, and the paper looks exactly as official as the
+     * current one.
+     */
+    _rsDrawingSheets(p) {
+        const e = this._rEsc.bind(this);
+        const current = (p.drawings || []).filter(d => d.status === 'Current' && d.fileUrl);
+        if (!current.length) return '';
+
+        return current.map(d => {
+            const pdf = /\.pdf(\?|$)/i.test(String(d.fileName || d.fileUrl || ''));
+            return `<section class="rp-sec dwg-sheet">
+                <div class="ds-block">
+                    <div class="ds-no">${e(d.drawingNo || d.id)}</div>
+                    <div class="ds-t">
+                        <b>${e(d.title) || 'Untitled'}</b>
+                        <span>${e(p.name)}${p.location ? ' · ' + e(p.location) : ''}</span>
+                    </div>
+                    <div class="ds-m">
+                        <div><em>Rev</em>${e(d.revision || '0')}</div>
+                        <div><em>Discipline</em>${e(d.discipline) || '—'}</div>
+                        <div><em>Date</em>${e(d.drawingDate || this._rDate(d.dateIssued))}</div>
+                    </div>
+                </div>
+                <div class="ds-img">
+                    ${pdf
+                        ? `<div class="ds-pdf">This drawing is a PDF and cannot be embedded.
+                             Print it from the file itself:<br><span>${e(d.fileName || d.fileUrl)}</span></div>`
+                        : `<img src="${driveImgSrc(d.fileUrl)}" alt="${e(d.title)}"
+                             onerror="this.parentNode.innerHTML='&lt;div class=&quot;ds-pdf&quot;&gt;Preview unavailable&lt;/div&gt;'" />`}
+                </div>
+                ${d.remarks ? `<div class="ds-note">${e(d.remarks)}</div>` : ''}
+            </section>`;
+        }).join('');
+    },
+
     // ─── the tab ────────────────────────────────────────────────
 
     renderReports(p) {
@@ -1000,6 +1051,29 @@ Object.assign(ProjectPage, {
                     font-size:7.5px; letter-spacing:.12em; text-transform:uppercase; color:#5B6360; }
                 /* Bounded so a wide signature cannot stretch the row. */
                 .rp-sig { max-height:11mm; max-width:38mm; display:block; margin:0 auto; }
+
+                /* v23 — a drawing on its own sheet, ready to issue. */
+                .dwg-sheet { page-break-before:always; page-break-inside:avoid; }
+                .ds-block { display:flex; align-items:flex-start; gap:12px;
+                    border:1.5px solid #1C2321; padding:7px 10px; margin-bottom:5mm; }
+                .ds-no { font-family:'IBM Plex Mono',monospace; font-size:15px; font-weight:700;
+                    border-right:1px solid #D6D2C4; padding-right:12px; white-space:nowrap; }
+                .ds-t { flex:1; }
+                .ds-t b { font-family:'Oswald',sans-serif; font-size:13px; display:block; }
+                .ds-t span { font-size:10px; color:#5B6360; }
+                .ds-m { display:flex; gap:16px; }
+                .ds-m em { display:block; font-style:normal; font-family:'IBM Plex Mono',monospace;
+                    font-size:7px; letter-spacing:.12em; text-transform:uppercase; color:#5B6360; }
+                .ds-m div { font-size:11px; }
+                /* The drawing fills what is left of the page. A drawing
+                   printed small enough to fit alongside other content is a
+                   drawing nobody can read a dimension from. */
+                .ds-img { text-align:center; }
+                .ds-img img { max-width:100%; max-height:215mm; object-fit:contain; }
+                .ds-pdf { border:1px dashed #D6D2C4; padding:22mm 10mm; font-size:11px;
+                    color:#5B6360; }
+                .ds-pdf span { font-family:'IBM Plex Mono',monospace; font-size:10px; }
+                .ds-note { margin-top:4mm; font-size:10.5px; color:#5B6360; }
                 .rp-sign { display:flex; gap:24px; margin-top:14mm; page-break-inside:avoid; }
                 .rp-sign > div { flex:1; text-align:center; }
                 .rp-sign .ln { border-bottom:1px solid #1C2321; height:9mm; }

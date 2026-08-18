@@ -449,20 +449,47 @@ ${AttachmentGallery.render([
         if (!list.length) {
             html += `<div class="empty"><p>${this._dwgFilter === 'Current' ? 'No drawings yet. Upload the plans as PDF or image so the site always has the latest revision.' : 'No superseded drawings.'}</p></div>`;
         } else {
-            html += `<div class="panel"><table><thead><tr><th>Drawing No.</th><th>Title</th><th>Discipline</th><th>Rev</th><th>Date</th><th>File</th><th>Uploaded By</th>${isSuper ? '<th></th>' : ''}</tr></thead><tbody>`;
+            // ── v23: THE DRAWING, NOT A ROW ABOUT THE DRAWING ──
+            //
+            // This was a table. To find the right plan you read seven
+            // columns, opened a file, decided it was the wrong one, went
+            // back and opened another. On a phone at the working face
+            // that is slow enough that people stop doing it and work
+            // from the printed copy in the site office — which is the
+            // one that is out of date.
+            //
+            // A drawing is a visual thing. Showing it is the point.
+            html += `<div class="dwg-grid">`;
             list.forEach(d => {
-                html += `<tr>
-                    <td><span class="req-id">${esc(d.drawingNo)}</span></td>
-                    <td><b>${d.title || '—'}</b>${d.remarks ? `<div style="font-size:10.5px;color:var(--ink-soft);">${esc(d.remarks)}</div>` : ''}</td>
-                    <td style="font-size:11.5px;">${d.discipline || '—'}</td>
-                    <td class="mono" style="font-size:11px;">${d.revision || '0'}</td>
-                    <td class="mono" style="font-size:11px;white-space:nowrap;">${d.drawingDate || '—'}</td>
-                    <td>${d.fileUrl ? `<a href="${d.fileUrl}" target="_blank" class="btn-sm">${Icon.fileText({size:12})} Open${d.fileName ? '' : ''}</a>` : '—'}</td>
-                    <td style="font-size:11px;">${d.uploadedBy || '—'}</td>
-                    ${isSuper ? `<td><button class="btn-sm danger" onclick="ProjectPage.deleteDrawingItem('${d.id}')">${Icon.trash({size:12})}</button></td>` : ''}
-                </tr>`;
+                const pdf = /\.pdf(\?|$)/i.test(String(d.fileName || d.fileUrl || ''));
+                html += `<figure class="dwg-card${d.status !== 'Current' ? ' is-old' : ''}">
+                    <a class="dwg-thumb${pdf ? ' no-preview' : ''}" href="${escUrl(d.fileUrl)}"
+                       target="_blank" rel="noopener" title="Open ${esc(d.drawingNo)}">
+                        ${d.fileUrl && !pdf
+                            ? `<img src="${driveImgSrc(d.fileUrl)}" alt="${esc(d.title)}" loading="lazy"
+                                 onerror="this.parentNode.classList.add('no-preview')" />`
+                            : ''}
+                        <!-- Drive gives no inline preview for a PDF, so it gets an
+                             honest placeholder rather than a broken image. -->
+                        <span class="dwg-fallback">${Icon.fileText({ size: 26 })}
+                            <em>${pdf ? 'PDF' : 'No preview'}</em></span>
+                        <span class="dwg-rev">Rev ${esc(d.revision || '0')}</span>
+                        ${d.status !== 'Current' ? `<span class="dwg-old">Superseded</span>` : ''}
+                    </a>
+                    <figcaption>
+                        <b>${esc(d.drawingNo)}</b>
+                        <span class="dwg-title">${esc(d.title) || '—'}</span>
+                        <span class="dwg-meta">${esc(d.discipline) || '—'}${d.drawingDate ? ' · ' + esc(d.drawingDate) : ''}</span>
+                        ${d.remarks ? `<span class="dwg-note">${esc(d.remarks)}</span>` : ''}
+                        <span class="dwg-actions">
+                            <a class="btn-sm" href="${escUrl(d.fileUrl)}" target="_blank" rel="noopener">Open</a>
+                            ${isSuper ? `<button class="btn-sm danger"
+                                onclick="ProjectPage.deleteDrawingItem('${esc(d.id)}')">${Icon.trash({ size: 12 })}</button>` : ''}
+                        </span>
+                    </figcaption>
+                </figure>`;
             });
-            html += `</tbody></table></div>`;
+            html += `</div>`;
         }
         html += `<div class="data-source-note">Revision control: uploading the same drawing number automatically marks the older revision <b>Superseded</b>. Only the "Current" tab is authoritative for the site. Files are stored in the shared Drive folder.</div>`;
         container.innerHTML = html;
