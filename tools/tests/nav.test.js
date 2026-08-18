@@ -38,16 +38,16 @@ module.exports = function (t) {
         (document, Icon, App, PrintDoc, KnowledgeBasePage, setInterval, DataService);
 
     t.describe('navigation groups', () => {
-        t.it('the six groups are Projects, Finance, Procurement, Commercial, Knowledge, Approvals', () => {
+        t.it('the seven groups are Projects, Finance, Procurement, Commercial, Knowledge, Approvals, Settings', () => {
             t.eq(N.GROUPS.map(g => g.label).join(' · '),
-                'Projects · Finance · Procurement · Commercial · Knowledge · Approvals');
+                'Projects · Finance · Procurement · Commercial · Knowledge · Approvals · Settings');
         });
 
         const lands = [['finance', 'finance'], ['request', 'finance'], ['payables', 'finance'],
             ['liquidate', 'finance'], ['record-cash', 'finance'], ['release-cash', 'finance'],
             ['purchase-requests', 'procurement'], ['quotations', 'commercial'],
             ['approvals', 'approvals'], ['home', 'projects'], ['portfolio', 'projects'],
-            ['search', 'knowledge'], ['print-template', 'approvals']];
+            ['search', 'knowledge'], ['print-template', 'settings']];
         lands.forEach(([page, group]) => {
             t.it(`${page} belongs to ${group}`, () => t.eq(N.groupOf(page), group));
         });

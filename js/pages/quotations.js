@@ -163,6 +163,16 @@ const QuotationsPage = {
 
                     <div class="field"><label>Name for the copy *</label>
                         <input type="text" id="dup-name" value="${e(title)} (copy)" /></div>
+
+                    <!-- v22: both ids are shown and editable. They were
+                         generated silently before, so when the copy did not
+                         appear there was no number to search for. -->
+                    <div class="db-form-grid">
+                        <div class="field"><label>Quotation number</label>
+                            <input type="text" id="dup-qno" placeholder="Leave blank to number it automatically" /></div>
+                        <div class="field"><label>Project id</label>
+                            <input type="text" id="dup-pid" placeholder="Defaults to the quotation number" /></div>
+                    </div>
                     <div class="db-form-grid">
                         <div class="field"><label>Client</label>
                             <input type="text" id="dup-client" placeholder="Leave blank to keep the same" /></div>
@@ -201,10 +211,15 @@ const QuotationsPage = {
         const btn = document.querySelector('#dupModal .btn-primary');
         if (btn) { btn.textContent = 'Copying...'; btn.disabled = true; }
         try {
-            const res = await DataService.duplicateProject(projectId, {
+            // Read BEFORE the modal is removed — a detached element
+            // returns nothing, which is what produced the calendar's
+            // "Invalid Date".
+            const payload = {
                 name: v('dup-name'), clientName: v('dup-client') || undefined,
-                startDate: v('dup-start'), asQuotation: true
-            });
+                startDate: v('dup-start'), asQuotation: true,
+                quoteNo: v('dup-qno'), projectId: v('dup-pid')
+            };
+            const res = await DataService.duplicateProject(projectId, payload);
             document.getElementById('dupModal')?.remove();
             UI.toast(`${res.id} created — ${res.sowItems} SOW items and ${res.estimateLines} priced lines copied as draft.`, 'success');
             await this.load();
@@ -223,14 +238,14 @@ const QuotationsPage = {
             <table class="qt-table">
                 <thead><tr>
                     <th>Quote No.</th><th>Title</th><th>Client</th>
-                    <th class="amt">Quoted</th><th class="amt">Est. cost</th><th class="amt">Margin</th>
+                    <th class="amt">Quoted</th><th class="amt">Margin</th>
                     <th class="amt">SOW</th><th>Valid to</th><th>Status</th><th></th>
                 </tr></thead>
                 <tbody>${list.map(q => this._row(q)).join('')}</tbody>
                 <tfoot><tr>
                     <td colspan="3">${list.length} quotation${list.length === 1 ? '' : 's'}</td>
                     <td class="amt">₱${fmtMoney(pipeline)}</td>
-                    <td colspan="6"></td>
+                    <td colspan="5"></td>
                 </tr></tfoot>
             </table></div></div>`;
     },
@@ -260,7 +275,12 @@ const QuotationsPage = {
                         onclick="QuotationsPage.setStatus('${e(q.id)}','${st}')">${st === 'Under Negotiation' ? 'Negotiating' : st}</button>`).join('')}</div>` : ''}</td>
             <td>${e(q.clientName) || '—'}</td>
             <td class="amt"><b>₱${fmtMoney(price)}</b></td>
-            <td class="amt">${cost > 0 ? '₱' + fmtMoney(cost) : '—'}</td>
+            <!-- v22: estimated cost removed. It is an input to the margin,
+                 not a figure anyone compares bids on, and it made the row
+                 wide enough to hide the columns that matter.
+                 Margin is quoted price less the estimate total — the same
+                 lines the Estimates tab adds up, so the two screens
+                 cannot disagree. -->
             <td class="amt ${cost > 0 ? (margin < 0 ? 'neg' : 'pos') : ''}">${cost > 0
                 ? `₱${fmtMoney(margin)}<div class="muted">${q.marginPct}%</div>`
                 : '<span class="muted">no estimate</span>'}</td>

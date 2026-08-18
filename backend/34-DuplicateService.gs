@@ -50,7 +50,30 @@ function duplicateProject(sourceId, opts) {
     throw new Error('A project or quotation named "' + newName + '" already exists.');
   }
 
-  var newId = nextId_(asQuotation ? 'QTN' : 'PRJ');
+  // ── v22 FIX: A COPY MUST BE A REAL QUOTATION ──
+  // This wrote a Projects row with status 'Quotation' and nothing else.
+  // The Quotations register reads the QUOTATIONS sheet, so the copy was
+  // created correctly, stored correctly, and never appeared anywhere —
+  // which reads as "the button does nothing".
+  //
+  // The quote number now comes from the same generator the New
+  // Quotation form uses, or from what the person typed, so the two
+  // routes cannot produce different numbering schemes.
+  var newId;
+  if (asQuotation) {
+    newId = String(opts.quoteNo || '').trim() || nextQuoteNumber_();
+    if (readAll_('Quotations').some(function (q) { return q.id === newId; })) {
+      throw new Error('Quotation number "' + newId + '" already exists.');
+    }
+  } else {
+    newId = String(opts.projectId || '').trim() || nextId_('PRJ');
+  }
+  // The project id may be given separately; it defaults to the quote
+  // number, exactly as createQuotation does.
+  var newProjectId = String(opts.projectId || '').trim() || newId;
+  if (readAll_('Projects').some(function (p) { return p.id === newProjectId; })) {
+    throw new Error('Project id "' + newProjectId + '" is already in use.');
+  }
   var today = new Date();
 
   // ── the schedule offset ──
@@ -71,7 +94,7 @@ function duplicateProject(sourceId, opts) {
   };
 
   appendRow_('Projects', {
-    id: newId,
+    id: newProjectId,
     name: newName,
     clientName: String(opts.clientName !== undefined ? opts.clientName : (src.clientName || '')),
     location: String(opts.location !== undefined ? opts.location : (src.location || '')),
@@ -95,7 +118,7 @@ function duplicateProject(sourceId, opts) {
   var sows = readAll_('SOWItems').filter(function (s) { return s.projectId === sourceId; });
   sows.forEach(function (s) {
     appendRow_('SOWItems', {
-      id: s.id, projectId: newId,
+      id: "'" + s.id, projectId: newProjectId,
       description: s.description, budget: s.budget, actual: 0,
       startDate: shift_(s.startDate), endDate: shift_(s.endDate),
       status: '', qty: s.qty, unit: s.unit,
@@ -119,7 +142,7 @@ function duplicateProject(sourceId, opts) {
   groups.forEach(function (g) {
     var gid = nextId_('EG');
     appendRow_('EstimateGroups', {
-      id: gid, projectId: newId, sowId: g.sowId, sowDescription: g.sowDescription,
+      id: gid, projectId: newProjectId, sowId: g.sowId, sowDescription: g.sowDescription,
       // ALWAYS draft. The prices are a starting point to review, not a
       // decision already taken, and reviewing them is the step that
       // makes a copy safe to quote from.
@@ -148,6 +171,29 @@ function duplicateProject(sourceId, opts) {
     });
   });
 
+  // The register row. Without this the copy exists but is invisible.
+  if (asQuotation) {
+    ensureSheet_('Quotations');
+    appendRow_('Quotations', {
+      id: newId,
+      projectId: newProjectId,
+      clientId: '',
+      clientName: String(opts.clientName !== undefined ? opts.clientName : (src.clientName || '')),
+      title: newName,
+      status: 'Draft',
+      revision: 'A',
+      // NOT copied. A quoted value carried over from another job is a
+      // price nobody has decided, sitting in the register looking like
+      // one somebody did.
+      quotedValue: 0,
+      validUntil: '',
+      scopeNotes: '', exclusions: '',
+      preparedBy: currentUserEmail_().toLowerCase(),
+      sentDate: '', decisionDate: '', decisionNote: '',
+      createdAt: today, updatedAt: today
+    });
+  }
+
   logActivity_((asQuotation ? 'Quotation ' : 'Project ') + newId + ' "' + newName +
     '" copied from ' + sourceId + ' — ' + sows.length + ' SOW item(s), ' +
     groups.length + ' estimate group(s), ' + lines + ' priced line(s). ' +
@@ -155,7 +201,7 @@ function duplicateProject(sourceId, opts) {
     'blue', newId);
 
   return {
-    success: true, id: newId, name: newName,
+    success: true, id: newId, projectId: newProjectId, name: newName,
     sowItems: sows.length, estimateGroups: groups.length, estimateLines: lines,
     shiftedDays: shiftDays, asQuotation: asQuotation
   };

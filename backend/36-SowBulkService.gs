@@ -142,7 +142,9 @@ function previewSowOutline(projectId, text) {
 
   var existing = {};
   readAll_('SOWItems').forEach(function (s) {
-    if (s.projectId === projectId) existing[String(s.id).trim()] = s.description || '';
+    // v22: normalised — an id may carry Sheets' text marker, or have
+    // been coerced to a number before the fix.
+    if (s.projectId === projectId) existing[_cellKey_(s.id)] = s.description || '';
   });
 
   parsed.rows.forEach(function (r) {
@@ -198,7 +200,7 @@ function addSOWItemsBulk(projectId, text, opts) {
 
   var existing = {};
   readAll_('SOWItems').forEach(function (s) {
-    if (s.projectId === projectId) existing[String(s.id).trim()] = true;
+    if (s.projectId === projectId) existing[_cellKey_(s.id)] = true;
   });
 
   var clashes = parsed.rows.filter(function (r) { return existing[r.id]; });
@@ -213,6 +215,18 @@ function addSOWItemsBulk(projectId, text, opts) {
 
   parsed.rows.forEach(function (r, i) {
     var row = {
+      // ── v22 FIX: THE ID IS WRITTEN AS TEXT ──
+      // An id like "1" or "1.10" LOOKS numeric, so Sheets converts the
+      // cell to a number. It then reads back as "1" → 1 and "1.10" →
+      // 1.1 — which does two things, both bad:
+      //
+      //   · the lookup by id fails, which is the "SOW item not found"
+      //     toast when setting a budget;
+      //   · "1.10" and "1.1" become THE SAME ROW, so a section with ten
+      //     or more items silently collides.
+      //
+      // The leading apostrophe is Sheets' text marker. sowKey_ strips it
+      // on read, so both old and new rows resolve.
       id: r.id, projectId: projectId,
       description: r.description,
       budget: 0, actual: 0,
@@ -320,7 +334,7 @@ function repairSowSchedules(projectId) {
 
   var fixed = 0;
   sows.forEach(function (s) {
-    if (heading[String(s.id).trim()]) return;          // titles span their children
+    if (heading[_cellKey_(s.id)]) return;              // titles span their children
     if (String(s.startDate || '').trim()) return;      // already has a start
     if (String(s.endDate || '').trim()) return;        // or a finish
     updateRowWhere_('SOWItems', { id: s.id, projectId: projectId },
@@ -372,4 +386,203 @@ function defaultSowEnd_(startDate) {
     if (d.getDay() !== 0 && d.getDay() !== 6) left--;
   }
   return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+
+
+/**
+ * repairSowIds (v22) - rewrites SOW ids that Sheets turned into numbers.
+ *
+ * WHY THIS IS NEEDED SEPARATELY. Fixing the write only helps new rows.
+ * Every SOW item already in the sheet was written as a bare string, so
+ * anything numeric-looking is sitting there as a number — and those are
+ * exactly the rows that refuse a budget with "SOW item not found".
+ *
+ * ── THE ONE CASE THIS CANNOT REPAIR ─────────────────────────
+ *
+ * "1.10" and "1.1" both became the number 1.1. Once that has happened
+ * the original text is GONE — there is no way to tell which row was
+ * which. Those are reported rather than guessed at, because guessing
+ * would silently reassign somebody's budget to the wrong scope.
+ *
+ * In practice the collision only bites a section with ten or more
+ * items, and the description makes it obvious which is which by hand.
+ */
+/**
+ * SOW_REFERENCES (v22.1) - every sheet that stores a SOW id.
+ *
+ * The first version of repairSowIds rewrote SOWItems.id and NOTHING
+ * ELSE. Every one of these sheets still held the number, so the moment
+ * the ids became text the relationships broke — an estimate group whose
+ * sowId is 1.1 no longer matched a SOW item whose id is "1.1", the
+ * system concluded there was no estimate, and created a fresh draft
+ * beside the approved one.
+ *
+ * Repairing one side of a relationship is worse than repairing neither.
+ * Neither is consistent; one side is silently wrong.
+ */
+var SOW_REFERENCES = [
+  { sheet: 'EstimateGroups', col: 'sowId' },
+  { sheet: 'Punchlist', col: 'sowId' },
+  { sheet: 'PurchaseRequests', col: 'sowId' },
+  { sheet: 'QaqcRecords', col: 'sowId' },
+  { sheet: 'PurchaseOrders', col: 'sowId' },
+  { sheet: 'Receipts', col: 'sowId' },
+  { sheet: 'SupplierInvoices', col: 'sowId' },
+  { sheet: 'VariationOrders', col: 'sowId' },
+  { sheet: 'CashAdvanceRequests', col: 'sowId' },
+  { sheet: 'CashRelease', col: 'sowId' },
+  // Predecessors are a comma-separated LIST of SOW ids, so it is
+  // rewritten whole rather than cell-by-cell.
+  { sheet: 'SOWItems', col: 'predecessors', list: true }
+];
+
+function repairSowIds(projectId) {
+  assertProjectEditor_(projectId);
+  var sows = readAll_('SOWItems').filter(function (s) { return s.projectId === projectId; });
+
+  var seen = {}, collisions = [], fixed = 0;
+
+  sows.forEach(function (s) {
+    var key = _cellKey_(s.id);
+    if (seen[key]) {
+      collisions.push({ id: key, a: seen[key], b: s.description || '' });
+      return;
+    }
+    seen[key] = s.description || '';
+  });
+
+  // Rewriting the id in place: the value is unchanged, only its TYPE.
+  // Nothing that references it needs touching, which is why this is
+  // safe to run on live data.
+  var sh = ss_().getSheetByName('SOWItems');
+  if (sh) {
+    var heads = headers_('SOWItems');
+    var idCol = heads.indexOf('id') + 1;
+    var pidCol = heads.indexOf('projectId') + 1;
+    var lastRow = sh.getLastRow();
+    if (lastRow > 1 && idCol > 0) {
+      var vals = sh.getRange(2, 1, lastRow - 1, heads.length).getValues();
+      for (var r = 0; r < vals.length; r++) {
+        if (String(vals[r][pidCol - 1]) !== String(projectId)) continue;
+        var raw = vals[r][idCol - 1];
+        if (typeof raw !== 'number') continue;     // already text
+        sh.getRange(r + 2, idCol).setValue("'" + _cellKey_(raw));
+        fixed++;
+      }
+    }
+  }
+
+  // ── EVERY REFERENCE, NOT JUST THE ITEM ──
+  var refsFixed = 0;
+  SOW_REFERENCES.forEach(function (ref) {
+    if (!ss_().getSheetByName(ref.sheet)) return;
+    var sh = ss_().getSheetByName(ref.sheet);
+    var heads = headers_(ref.sheet);
+    var col = heads.indexOf(ref.col) + 1;
+    var pidCol = heads.indexOf('projectId') + 1;
+    if (col <= 0) return;
+    var last = sh.getLastRow();
+    if (last < 2) return;
+
+    var vals = sh.getRange(2, 1, last - 1, heads.length).getValues();
+    for (var r = 0; r < vals.length; r++) {
+      if (pidCol > 0 && String(vals[r][pidCol - 1]) !== String(projectId)) continue;
+      var raw = vals[r][col - 1];
+      if (raw === '' || raw === null || raw === undefined) continue;
+      if (ref.list) {
+        // A predecessor list is text already; it only needs rewriting if
+        // Sheets flattened a single-entry list into a number.
+        if (typeof raw !== 'number') continue;
+        sh.getRange(r + 2, col).setValue("'" + _cellKey_(raw));
+      } else {
+        if (typeof raw !== 'number') continue;
+        sh.getRange(r + 2, col).setValue("'" + _cellKey_(raw));
+      }
+      refsFixed++;
+    }
+  });
+
+  // ── AND CLEAN UP WHAT THE BROKEN REPAIR CREATED ──
+  var dupes = mergeDuplicateEstimateGroups_(projectId);
+
+  logActivity_('SOW ids repaired on ' + projectId + ' — ' + fixed +
+    ' item id(s) and ' + refsFixed + ' reference(s) converted back to text' +
+    (dupes.removed ? '; ' + dupes.removed + ' empty duplicate estimate group(s) removed' : '') +
+    (collisions.length ? '; ' + collisions.length + ' unresolvable collision(s)' : ''),
+    collisions.length ? 'a' : 'g', projectId);
+
+  return {
+    success: true, fixed: fixed, refsFixed: refsFixed,
+    duplicatesRemoved: dupes.removed, duplicatesKept: dupes.kept,
+    collisions: collisions,
+    message: collisions.length
+      ? fixed + ' id(s) repaired. ' + collisions.length + ' pair(s) had already merged and ' +
+        'cannot be told apart — rename them by hand.'
+      : fixed + ' id(s) repaired.'
+  };
+}
+
+
+/**
+ * mergeDuplicateEstimateGroups_ (v22.1) - undoes the damage the
+ * half-repair caused.
+ *
+ * When the SOW ids became text and the estimate groups did not, the
+ * system saw every SOW item as having no estimate and created a fresh
+ * DRAFT group beside the APPROVED one. The Estimates tab then showed
+ * each scope twice with the same name.
+ *
+ * ── WHAT IS SAFE TO DELETE, AND WHAT IS NOT ─────────────────
+ *
+ * An EMPTY draft is safe: it holds nothing, and it exists only because
+ * of the bug.
+ *
+ * A draft WITH LINES is not. Somebody may have started pricing into it
+ * before noticing the duplicate, and deleting it throws that away. Those
+ * are kept and reported, so a person decides.
+ *
+ * The approved group is never touched under any circumstances.
+ */
+function mergeDuplicateEstimateGroups_(projectId) {
+  var groups = readAll_('EstimateGroups').filter(function (g) { return g.projectId === projectId; });
+
+  var lineCount = {};
+  ['EstimateMaterials', 'EstimateLabor', 'EstimateEquipment', 'EstimateIndirect']
+    .forEach(function (sheet) {
+      if (!ss_().getSheetByName(sheet)) return;
+      readAll_(sheet).forEach(function (r) {
+        var k = String(r.groupId);
+        lineCount[k] = (lineCount[k] || 0) + 1;
+      });
+    });
+
+  var bySow = {};
+  groups.forEach(function (g) {
+    var k = _cellKey_(g.sowId);
+    (bySow[k] = bySow[k] || []).push(g);
+  });
+
+  var removed = 0, kept = [];
+  Object.keys(bySow).forEach(function (k) {
+    var set = bySow[k];
+    if (set.length < 2) return;
+
+    var approved = set.filter(function (g) { return low_(g.status) === 'approved'; });
+    // No approved twin means this is not the bug — two drafts for one
+    // scope is something a person did, and it is not this function's
+    // business to tidy that.
+    if (!approved.length) return;
+
+    set.forEach(function (g) {
+      if (low_(g.status) === 'approved') return;
+      if ((lineCount[String(g.id)] || 0) > 0) {
+        kept.push({ sowId: k, groupId: g.id, lines: lineCount[String(g.id)] });
+        return;
+      }
+      deleteRow_('EstimateGroups', 'id', g.id);
+      removed++;
+    });
+  });
+
+  return { removed: removed, kept: kept };
 }

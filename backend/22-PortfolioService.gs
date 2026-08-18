@@ -71,9 +71,17 @@ function getPortfolioData() {
 
     // ── contract basis per SOW (approved estimates + approved VOs) ──
     var voBySow = {};
-    vos.forEach(function (v) { voBySow[v.sowId] = (voBySow[v.sowId] || 0) + (parseFloat(v.amount) || 0); });
+    // v22.2: normalised. An unmatched variation drops out of the
+    // contract basis, so the project reads as under-contracted and its
+    // margin looks better than it is.
+    vos.forEach(function (v) {
+      var k = _cellKey_(v.sowId);
+      voBySow[k] = (voBySow[k] || 0) + (parseFloat(v.amount) || 0);
+    });
     var groupBySow = {};
-    groups.forEach(function (g) { if (g.projectId === p.id) groupBySow[g.sowId] = g; });
+    // v22.2: normalised — otherwise the item reads as unestimated and
+    // raises a Needs Attention alert that cannot be cleared.
+    groups.forEach(function (g) { if (g.projectId === p.id) groupBySow[_cellKey_(g.sowId)] = g; });
 
     var basisSum = 0, earned = 0, plannedSum = 0, plannedToDate = 0;
     var unapproved = [], zeroBudget = [];
@@ -92,13 +100,13 @@ function getPortfolioData() {
     sows.forEach(function (s) {
       if (String(s.isMilestone) === 'true') return;
       if (isHeading[String(s.id).trim()]) return;
-      var g = groupBySow[s.id];
+      var g = groupBySow[_cellKey_(s.id)];
       var est = (g && g.status === 'approved') ? groupTotal_(g.id) : 0;
       if (est <= 0) unapproved.push(s.id);
       var budget = parseFloat(s.budget) || 0;
       if (!(budget > 0)) zeroBudget.push(s.id);
 
-      var basis = est + (voBySow[s.id] || 0);
+      var basis = est + (voBySow[_cellKey_(s.id)] || 0);
       basisSum += basis;
       var prog = computeSOWProgress_(s.id, daily.map(function (d) {
         return { status: d.status, date: fmtDate_(d.date), workAccomplished: safeParse_(d.workAccomplishedJSON, []) };

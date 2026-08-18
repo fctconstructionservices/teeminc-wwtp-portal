@@ -198,7 +198,10 @@ function _readAllUncached_(name) {
 function appendRow_(name, obj) {
   const sh = sheet_(name);
   const heads = headers_(name);
-  const row = heads.map(function (h) { return (obj[h] !== undefined && obj[h] !== null) ? obj[h] : ''; });
+  const row = heads.map(function (h) {
+    var v = (obj[h] !== undefined && obj[h] !== null) ? obj[h] : '';
+    return _textIfIdentifier_(h, v);
+  });
   sh.appendRow(row);
   _invalidateRead_(name);   // v6.5: later reads in this request must see the new row
   return obj;
@@ -224,7 +227,8 @@ function updateRow_(name, idField, idValue, patch) {
   const heads = headers_(name);
   Object.keys(patch).forEach(function (key) {
     const col = heads.indexOf(key);
-    if (col > -1) sh.getRange(rowNum, col + 1).setValue(patch[key]);
+    // v22.2: an identifier is written as text — see _textIfIdentifier_.
+    if (col > -1) sh.getRange(rowNum, col + 1).setValue(_textIfIdentifier_(key, patch[key]));
   });
   _invalidateRead_(name);   // v6.5
   return true;
@@ -274,7 +278,11 @@ function findRowNumsWhere_(name, match) {
   for (var r = 0; r < values.length; r++) {
     var hit = true;
     for (var c = 0; c < cols.length; c++) {
-      if (String(values[r][cols[c].i]) !== cols[c].v) { hit = false; break; }
+      // v22: both sides normalised. An id written as text still carries
+      // Sheets' apostrophe marker on some reads, and one that was
+      // converted to a number reads back as "1" rather than "1.10" —
+      // so a bare String() comparison misses rows that are really there.
+      if (_cellKey_(values[r][cols[c].i]) !== _cellKey_(cols[c].v)) { hit = false; break; }
     }
     if (hit) out.push(r + 2);
   }
@@ -290,7 +298,8 @@ function updateRowWhere_(name, match, patch) {
   const heads = headers_(name);
   Object.keys(patch).forEach(function (key) {
     const col = heads.indexOf(key);
-    if (col > -1) sh.getRange(rowNum, col + 1).setValue(patch[key]);
+    // v22.2: an identifier is written as text — see _textIfIdentifier_.
+    if (col > -1) sh.getRange(rowNum, col + 1).setValue(_textIfIdentifier_(key, patch[key]));
   });
   _invalidateRead_(name);
   return true;
@@ -523,4 +532,75 @@ function _colLetter_(n) {
     n = Math.floor((n - m) / 26);
   }
   return s || 'A';
+}
+
+
+/**
+ * _cellKey_ (v22) - normalises a cell value for comparison.
+ *
+ * Google Sheets converts anything that looks numeric. An id of "1"
+ * comes back as the number 1, and "1.10" comes back as 1.1 — so a
+ * lookup for "1.10" finds nothing, and worse, "1.1" and "1.10" resolve
+ * to the same row.
+ *
+ * New rows are written with a leading apostrophe so Sheets leaves them
+ * alone. This handles both: it strips the marker, and it renders a
+ * number without the trailing zeros Sheets never stored anyway.
+ */
+function _cellKey_(v) {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'number') {
+    // 1 → "1", 1.1 → "1.1". Never "1.0".
+    return String(v);
+  }
+  return String(v).trim().replace(/^'/, '');
+}
+
+
+/**
+ * ID_COLUMNS (v22.2) - columns whose value is an IDENTIFIER, never a
+ * quantity.
+ *
+ * ── WHY THIS LIVES IN THE WRITE LAYER ───────────────────────
+ *
+ * Google Sheets converts anything that looks numeric. An id of "1"
+ * becomes the number 1, and "1.10" becomes 1.1 — so a lookup fails, and
+ * two different scopes can collapse onto one row.
+ *
+ * I fixed this twice at the CALL SITE and got it wrong both times:
+ * first by rewriting SOWItems.id and leaving ten referencing sheets
+ * numeric, then by writing the item id as text in the BOQ import while
+ * the estimate group's sowId beside it stayed a bare string. Each fix
+ * repaired one side of a relationship, which is worse than repairing
+ * neither — the result looks like a feature bug rather than a data one.
+ *
+ * There are more than a dozen places that write a sowId. Guarding each
+ * of them is a list somebody will add to and forget. Guarding the ONE
+ * function every write goes through is not.
+ *
+ * A quantity, a rate and an amount are deliberately absent: those ARE
+ * numbers and must stay numbers, or every sum in the system breaks.
+ */
+var ID_COLUMNS = {
+  id: 1, sowId: 1, projectId: 1, prId: 1, poId: 1, groupId: 1,
+  quotationId: 1, cashAdvanceId: 1, originalRequestId: 1, requestId: 1,
+  recordId: 1, supersedes: 1, predecessors: 1, refId: 1, billingNo: 1,
+  docNo: 1, invoiceNo: 1, drawingNo: 1, sampleRef: 1, deliveryRef: 1
+};
+
+/**
+ * _textIfIdentifier_ - forces an identifier to be stored as text.
+ *
+ * The leading apostrophe is Sheets' own text marker. _cellKey_ strips
+ * it on every read, so nothing downstream needs to know this happened.
+ */
+function _textIfIdentifier_(column, value) {
+  if (!ID_COLUMNS[column]) return value;
+  if (value === '' || value === null || value === undefined) return '';
+  var s = String(value);
+  if (s.charAt(0) === "'") return s;          // already marked
+  // Only values that Sheets would misread need the marker. Leaving
+  // everything else alone keeps the sheet readable by hand.
+  if (!/^[0-9]+(\.[0-9]+)?$/.test(s.trim())) return value;
+  return "'" + s;
 }

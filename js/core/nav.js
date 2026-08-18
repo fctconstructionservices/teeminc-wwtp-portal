@@ -87,6 +87,12 @@ const Nav = {
                 { id: 'knowledge', label: 'Materials', tab: 'materials' },
                 { id: 'knowledge', label: 'Tools & equipment', tab: 'equipment' },
                 { id: 'knowledge', label: 'Manpower', tab: 'manpower' },
+                // v22: Suppliers belongs here too. It was only under
+                // Procurement, so the Knowledge bar showed four of the
+                // five reference lists and the fifth appeared to be
+                // missing.
+                { id: 'knowledge', label: 'Suppliers', tab: 'suppliers',
+                  roles: ['superadmin', 'admin', 'approver'] },
                 { id: 'knowledge', label: 'Lessons learned', tab: 'lessons' },
                 { id: 'search', label: 'Search records' }
             ]
@@ -94,8 +100,18 @@ const Nav = {
         {
             id: 'approvals', label: 'Approvals',
             pages: [
-                { id: 'approvals', label: 'Waiting on you' },
-                { id: 'print-template', label: 'Print template', roles: ['superadmin'] }
+                { id: 'approvals', label: 'Waiting on you' }
+            ]
+        },
+        {
+            // v22: its own group. The print template was under Approvals,
+            // where it had nothing to do with approving anything — it was
+            // there because there was nowhere else to put it, and that is
+            // how a Settings group ends up never existing.
+            id: 'settings', label: 'Settings',
+            roles: ['superadmin'],
+            pages: [
+                { id: 'print-template', label: 'Print template' }
             ]
         }
     ],
@@ -196,7 +212,10 @@ const Nav = {
                 <div class="bell-panel" id="bellPanel" hidden></div>
                 <button class="nav-icon" onclick="App.toggleTheme()" title="Light or dark">${Icon.themeToggle({ size: 15 })}</button>
                 <span class="nav-who">${e(user.name || user.email)}<em>${e(this._roleLabel(role))}</em></span>
-                <button class="nav-icon" onclick="App.logout()" title="Sign out">${Icon.logout ? Icon.logout({ size: 15 }) : Icon.close({ size: 15 })}</button>
+                <!-- v22: a door, not an X. An X means "close this", and
+                     people pressed it expecting to dismiss something and
+                     were signed out instead. It now asks first. -->
+                <button class="nav-icon" onclick="Nav.confirmLogout()" title="Sign out">${Icon.logout({ size: 15 })}</button>
                 <button class="nav-burger" onclick="Nav.toggleMobile()" aria-label="Menu">${Icon.menu({ size: 17 })}</button>
             </div>
             ${group ? `
@@ -346,6 +365,20 @@ const Nav = {
         setTimeout(() => {
             if (typeof RequestDetailModal !== 'undefined') RequestDetailModal.open(id, type);
         }, 120);
+    },
+
+    /**
+     * confirmLogout (v22) - asks before ending the session.
+     *
+     * Signing out is cheap to undo — you log back in — but it throws
+     * away whatever half-filled form was on screen, and on Apps Script
+     * logging back in is one of the slowest things the system does. One
+     * dialog is worth it.
+     */
+    async confirmLogout() {
+        const ok = await Confirm.open('Sign out?',
+            'Anything you have typed and not saved will be lost.');
+        if (ok) App.logout();
     },
 
     toggleMobile() {

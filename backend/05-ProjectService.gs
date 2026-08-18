@@ -339,7 +339,10 @@ function getProjectData(projectId) {
 
   // ─── v3: per-SOW effective budget, actual, and progress ───────
   const groupsById = {};
-  groups.forEach(function (g) { groupsById[g.sowId] = g; });
+  // v22.2: normalised — see _textIfIdentifier_ in 03-SheetUtils.gs.
+  // An unmatched group makes a priced scope read as unestimated on the
+  // SOW tab, the Estimates tab and the contract basis all at once.
+  groups.forEach(function (g) { groupsById[_cellKey_(g.sowId)] = g; });
 
   // v6: Client-Approved variation orders raise (or cut, if deductive)
   // the affected SOW's budget — computed here, never written back, so
@@ -348,7 +351,7 @@ function getProjectData(projectId) {
   const voAdjustBySow = {};
   projectVOs.forEach(function (v) {
     if (v.status !== 'Client-Approved') return;
-    voAdjustBySow[v.sowId] = (voAdjustBySow[v.sowId] || 0) + (parseFloat(v.amount) || 0);
+    voAdjustBySow[_cellKey_(v.sowId)] = (voAdjustBySow[_cellKey_(v.sowId)] || 0) + (parseFloat(v.amount) || 0);
   });
 
   sowItems.forEach(function (s) {
@@ -356,7 +359,7 @@ function getProjectData(projectId) {
     //   'auto'     -> materials + labor + equipment from the estimate group
     //   'indirect' -> indirect costs only
     //   'manual'   -> the stored budget value (edited by hand)
-    const g = groupsById[s.id];
+    const g = groupsById[_cellKey_(s.id)];
     if (g && s.budgetMode !== 'manual') {
       // v5 PERF: compute from the estimate rows already loaded above,
       // instead of re-reading the four estimate sheets per SOW item
@@ -393,9 +396,9 @@ function getProjectData(projectId) {
     s.progress = computeSOWProgress_(s.id, dailyRecords);
 
     // v6: apply approved variation orders to the working budget
-    if (voAdjustBySow[s.id]) {
-      s.voAdjustment = voAdjustBySow[s.id];
-      s.budget = (s.budget || 0) + voAdjustBySow[s.id];
+    if (voAdjustBySow[_cellKey_(s.id)]) {
+      s.voAdjustment = voAdjustBySow[_cellKey_(s.id)];
+      s.budget = (s.budget || 0) + voAdjustBySow[_cellKey_(s.id)];
     }
 
     // v6.2: the CONTRACT-BASIS estimate total of this SOW — materials +
@@ -1208,6 +1211,8 @@ function addSOWItem(projectId, data) {
   if (existing) throw new Error('SOW ID already exists for this project.');
 
   appendRow_('SOWItems', {
+    // v22: as text — see the note in 36-SowBulkService.gs. An id of "1"
+    // or "1.10" is converted to a number by Sheets and stops matching.
     id: id, projectId: projectId, description: description,
     budget: budget, actual: actual, startDate: startDate, endDate: endDate,
     status: status, qty: qty, unit: unit,

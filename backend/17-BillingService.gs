@@ -33,7 +33,10 @@ function contractReadiness_(projectId) {
   });
   var groups = readAll_('EstimateGroups').filter(function (g) { return g.projectId === projectId; });
   var bySow = {};
-  groups.forEach(function (g) { bySow[g.sowId] = g; });
+  // v22.2: normalised. An unmatched group here means the SOW item
+  // reads as having no approved estimate, which blocks billing on a
+  // scope that is fully priced.
+  groups.forEach(function (g) { bySow[_cellKey_(g.sowId)] = g; });
   var allMat = readAll_('EstimateMaterials');
   var allLabor = readAll_('EstimateLabor');
   var allEq = readAll_('EstimateEquipment');
@@ -48,7 +51,7 @@ function contractReadiness_(projectId) {
   };
   var unapproved = [], zeroBudget = [];
   sows.forEach(function (s) {
-    var g = bySow[s.id];
+    var g = bySow[_cellKey_(s.id)];
     if (!g || g.status !== 'approved' || groupTotal_(g.id) <= 0) unapproved.push(s.id);
     if (!(parseFloat(s.budget) > 0)) zeroBudget.push(s.id);
   });
