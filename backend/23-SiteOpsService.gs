@@ -345,6 +345,34 @@ function addDrawing(data) {
     fileName = data.fileName;
   }
 
+  // ── v24: RENDERED PAGES FROM A PDF ──
+  // The browser rasterises a PDF before uploading, because Drive gives
+  // no inline preview for one and Apps Script cannot render it. These
+  // are stored alongside the original — the PDF stays the authoritative
+  // file, and these make the drawing visible and printable.
+  //
+  // Stored as a JSON array of URLs rather than one column per page: a
+  // set can be one sheet or twelve, and a fixed number of columns would
+  // be wrong for both.
+  var previewUrls = [];
+  var previews = data.previewBase64;
+  if (previews && previews.length) {
+    for (var i = 0; i < previews.length && i < 12; i++) {
+      try {
+        var pv = uploadImage(previews[i],
+          String(data.drawingNo).replace(/[^\w.-]/g, '_') + '-p' + (i + 1) + '.jpg',
+          'image/jpeg');
+        if (pv && pv.url) previewUrls.push(pv.url);
+      } catch (err) {
+        // A preview that fails to upload is not worth losing the
+        // drawing over. The rest still go, and the card falls back to
+        // the PDF placeholder for a page that is missing.
+        logActivity_('Preview page ' + (i + 1) + ' of ' + data.drawingNo +
+          ' failed to upload: ' + err.message, 'a', data.projectId);
+      }
+    }
+  }
+
   // Revision control: same drawingNo on the same project supersedes.
   readAll_('Drawings').forEach(function (d) {
     if (d.projectId === data.projectId &&
@@ -357,6 +385,7 @@ function addDrawing(data) {
   var id = nextId_('DWG');
   appendRow_('Drawings', {
     id: id,
+    previewUrls: previewUrls.length ? JSON.stringify(previewUrls) : '',
     projectId: data.projectId,
     drawingNo: String(data.drawingNo),
     title: String(data.title),
@@ -387,6 +416,11 @@ function deleteDrawing(id) {
 function getDrawings(projectId) {
   return sanitizeDatesDeep_(
     readAll_('Drawings').filter(function (d) { return d.projectId === projectId; })
-      .map(function (d) { d.drawingDate = fmtDate_(d.drawingDate); return d; })
+      .map(function (d) {
+        d.drawingDate = fmtDate_(d.drawingDate);
+        // v24: parsed here so no page has to know it was stored as JSON.
+        d.previews = safeParse_(d.previewUrls, []);
+        return d;
+      })
   );
 }

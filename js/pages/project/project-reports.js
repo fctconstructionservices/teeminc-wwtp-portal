@@ -817,8 +817,29 @@ Object.assign(ProjectPage, {
         const e = this._rEsc.bind(this);
         const current = (p.drawings || []).filter(d => d.status === 'Current' && d.fileUrl);
         if (!current.length) return '';
+        void 0;
 
-        return current.map(d => {
+        // v24: a PDF now arrives with rendered pages, so a multi-sheet
+        // set prints as several pages rather than one placeholder. Each
+        // sheet is expanded into its own entry here so the page-break
+        // rule below needs no special case.
+        const sheets = [];
+        current.forEach(d => {
+            const shots = Array.isArray(d.previews) ? d.previews : [];
+            if (shots.length) {
+                shots.forEach((url, i) => sheets.push({
+                    d: d, img: url,
+                    // Only labelled when there is more than one, so a
+                    // single-sheet drawing is not titled "sheet 1 of 1".
+                    label: shots.length > 1 ? `Sheet ${i + 1} of ${shots.length}` : ''
+                }));
+            } else {
+                sheets.push({ d: d, img: '', label: '' });
+            }
+        });
+
+        return sheets.map(sh => {
+            const d = sh.d;
             const pdf = /\.pdf(\?|$)/i.test(String(d.fileName || d.fileUrl || ''));
             return `<section class="rp-sec dwg-sheet">
                 <div class="ds-block">
@@ -831,14 +852,19 @@ Object.assign(ProjectPage, {
                         <div><em>Rev</em>${e(d.revision || '0')}</div>
                         <div><em>Discipline</em>${e(d.discipline) || '—'}</div>
                         <div><em>Date</em>${e(d.drawingDate || this._rDate(d.dateIssued))}</div>
+                        ${sh.label ? `<div><em>Sheet</em>${e(sh.label.replace('Sheet ', ''))}</div>` : ''}
                     </div>
                 </div>
                 <div class="ds-img">
-                    ${pdf
-                        ? `<div class="ds-pdf">This drawing is a PDF and cannot be embedded.
-                             Print it from the file itself:<br><span>${e(d.fileName || d.fileUrl)}</span></div>`
-                        : `<img src="${driveImgSrc(d.fileUrl)}" alt="${e(d.title)}"
-                             onerror="this.parentNode.innerHTML='&lt;div class=&quot;ds-pdf&quot;&gt;Preview unavailable&lt;/div&gt;'" />`}
+                    ${sh.img
+                        ? `<img src="${driveImgSrc(sh.img)}" alt="${e(d.title)}"
+                             onerror="this.parentNode.innerHTML='&lt;div class=&quot;ds-pdf&quot;&gt;Preview unavailable&lt;/div&gt;'" />`
+                        : (pdf
+                            ? `<div class="ds-pdf">This PDF was uploaded before rendering existed.
+                                 Re-upload it as a new revision to include it here, or print it from
+                                 the file:<br><span>${e(d.fileName || d.fileUrl)}</span></div>`
+                            : `<img src="${driveImgSrc(d.fileUrl)}" alt="${e(d.title)}"
+                                 onerror="this.parentNode.innerHTML='&lt;div class=&quot;ds-pdf&quot;&gt;Preview unavailable&lt;/div&gt;'" />`)}
                 </div>
                 ${d.remarks ? `<div class="ds-note">${e(d.remarks)}</div>` : ''}
             </section>`;

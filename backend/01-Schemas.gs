@@ -320,7 +320,10 @@ const SCHEMAS = {
   // to Drive with revision control per project.
   Drawings: ['id', 'projectId', 'drawingNo', 'title', 'discipline', 'revision',
     'drawingDate', 'fileUrl', 'fileName', 'remarks', 'status',
-    'uploadedBy', 'createdAt', 'updatedAt'],
+    'uploadedBy', 'createdAt', 'updatedAt',
+    // v24: JSON array of rendered page images from a PDF. A set can be
+    // one sheet or twelve, so one column per page would be wrong for both.
+    'previewUrls'],
 
   // v6 NEW: progress billings. gross = (currentPct − prevPct) × revised
   // contract; retention withheld; Paid creates an Approved IncomingCash.
