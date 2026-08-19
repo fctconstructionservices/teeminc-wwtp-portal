@@ -5218,6 +5218,21 @@ button.is-busy:disabled { opacity: .82; }
     .dwg-thumb { height: 120px; }
 }
 
+/* v24 — a multi-sheet PDF renders to several pages, so the card says so.
+   Without it, a six-sheet set and a single drawing look identical. */
+.dwg-pages {
+    position: absolute;
+    bottom: 7px;
+    right: 7px;
+    background: rgba(21, 24, 26, .78);
+    color: #fff;
+    font-family: var(--font-num);
+    font-size: 9px;
+    letter-spacing: .05em;
+    padding: 2px 7px;
+    border-radius: 3px;
+}
+
 
 /* ═══════ pages/project-sow.css ═══════ */
 /* ================================================================

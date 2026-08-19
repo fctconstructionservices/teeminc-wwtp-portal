@@ -25,7 +25,9 @@ module.exports = function (t) {
             t.ok(!/<th>Drawing No\.<\/th>/.test(so), 'the table markup is still there');
         });
         t.it('the drawing itself is rendered', () => {
-            t.ok(/driveImgSrc\(d\.fileUrl\)/.test(so));
+            // v24: the source is the rendered page when there is one,
+            // falling back to the file for an image upload.
+            t.ok(/driveImgSrc\(thumb\)/.test(so));
             t.ok(/loading="lazy"/.test(so), 'a project can hold fifty drawings');
         });
         t.it('links are escaped', () => t.ok(/escUrl\(d\.fileUrl\)/.test(so)));

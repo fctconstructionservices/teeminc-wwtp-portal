@@ -462,17 +462,24 @@ ${AttachmentGallery.render([
             html += `<div class="dwg-grid">`;
             list.forEach(d => {
                 const pdf = /\.pdf(\?|$)/i.test(String(d.fileName || d.fileUrl || ''));
+                // v24: a PDF now has rendered pages. The first is the
+                // thumbnail; the placeholder is only for a PDF uploaded
+                // before this existed, or one that failed to render.
+                const shots = Array.isArray(d.previews) ? d.previews : [];
+                const thumb = shots.length ? shots[0] : (pdf ? '' : d.fileUrl);
                 html += `<figure class="dwg-card${d.status !== 'Current' ? ' is-old' : ''}">
-                    <a class="dwg-thumb${pdf ? ' no-preview' : ''}" href="${escUrl(d.fileUrl)}"
+                    <a class="dwg-thumb${thumb ? '' : ' no-preview'}" href="${escUrl(d.fileUrl)}"
                        target="_blank" rel="noopener" title="Open ${esc(d.drawingNo)}">
-                        ${d.fileUrl && !pdf
-                            ? `<img src="${driveImgSrc(d.fileUrl)}" alt="${esc(d.title)}" loading="lazy"
+                        ${thumb
+                            ? `<img src="${driveImgSrc(thumb)}" alt="${esc(d.title)}" loading="lazy"
                                  onerror="this.parentNode.classList.add('no-preview')" />`
                             : ''}
+                        ${shots.length > 1
+                            ? `<span class="dwg-pages">${shots.length} sheets</span>` : ''}
                         <!-- Drive gives no inline preview for a PDF, so it gets an
                              honest placeholder rather than a broken image. -->
                         <span class="dwg-fallback">${Icon.fileText({ size: 26 })}
-                            <em>${pdf ? 'PDF' : 'No preview'}</em></span>
+                            <em>${pdf ? 'PDF — re-upload to preview' : 'No preview'}</em></span>
                         <span class="dwg-rev">Rev ${esc(d.revision || '0')}</span>
                         ${d.status !== 'Current' ? `<span class="dwg-old">Superseded</span>` : ''}
                     </a>
@@ -482,7 +489,11 @@ ${AttachmentGallery.render([
                         <span class="dwg-meta">${esc(d.discipline) || '—'}${d.drawingDate ? ' · ' + esc(d.drawingDate) : ''}</span>
                         ${d.remarks ? `<span class="dwg-note">${esc(d.remarks)}</span>` : ''}
                         <span class="dwg-actions">
-                            <a class="btn-sm" href="${escUrl(d.fileUrl)}" target="_blank" rel="noopener">Open</a>
+                            <!-- Always the ORIGINAL. A rendered page does not
+                                 survive being zoomed the way the vector does,
+                                 and reading a dimension needs the real file. -->
+                            <a class="btn-sm" href="${escUrl(d.fileUrl)}" target="_blank" rel="noopener">
+                                Open ${pdf ? 'PDF' : 'file'}</a>
                             ${isSuper ? `<button class="btn-sm danger"
                                 onclick="ProjectPage.deleteDrawingItem('${esc(d.id)}')">${Icon.trash({ size: 12 })}</button>` : ''}
                         </span>
@@ -539,19 +550,64 @@ ${AttachmentGallery.render([
         if (f.size > 8 * 1024 * 1024) { UI.toast('File too large. Keep drawings under 8 MB; compress the PDF first.', 'error'); return; }
         const btn = document.getElementById('dwgSubmitBtn');
         if (btn) { btn.disabled = true; btn.textContent = 'Uploading…'; }
+        // Read every field BEFORE any await — the modal stays open, but
+        // this is the habit that stopped the calendar reading from a
+        // detached element.
+        const meta = {
+            discipline: document.getElementById('dwg-disc')?.value || '',
+            revision: document.getElementById('dwg-rev')?.value || '0',
+            drawingDate: document.getElementById('dwg-date')?.value || '',
+            remarks: document.getElementById('dwg-remarks')?.value || ''
+        };
+
         try {
             const b64 = await fileToBase64_(f);
+
+            // ── v24: A PDF IS RENDERED TO IMAGES HERE, IN THE BROWSER ──
+            // Drive gives no inline preview for a PDF, and Apps Script
+            // cannot rasterise one. The browser can, and it already has
+            // the file in memory — so it happens before the upload
+            // rather than not at all.
+            //
+            // The ORIGINAL PDF is still uploaded and still linked. These
+            // images are a preview and a print copy, not a replacement:
+            // a rendered page does not survive being zoomed the way the
+            // vector original does.
+            let previews = [];
+            if (PdfRender.isPdf(f)) {
+                if (btn) btn.textContent = 'Reading the PDF…';
+                try {
+                    const out = await PdfRender.render(f, (done, total) => {
+                        if (btn) btn.textContent = `Rendering page ${done} of ${total}…`;
+                    });
+                    previews = out.pages.map(p => PdfRender.base64(p.dataUrl));
+                    if (out.truncated) {
+                        UI.toast(`This PDF has ${out.pageCount} pages; the first ` +
+                            `${PdfRender.MAX_PAGES} were rendered. Split the set to get them all.`,
+                            'warning');
+                    }
+                } catch (err) {
+                    // A failed render must not block the upload. The
+                    // drawing still goes up as a PDF and behaves exactly
+                    // as it did before this feature existed.
+                    UI.toast('The PDF could not be rendered for preview — ' +
+                        'it will still be uploaded. ' + err.message, 'warning');
+                }
+                if (btn) btn.textContent = 'Uploading…';
+            }
+
             const res = await DataService.addDrawing({
                 projectId: this._currentProjectId,
                 drawingNo: no,
                 title: title,
-                discipline: document.getElementById('dwg-disc')?.value || '',
-                revision: document.getElementById('dwg-rev')?.value || '0',
-                drawingDate: document.getElementById('dwg-date')?.value || '',
-                remarks: document.getElementById('dwg-remarks')?.value || '',
+                discipline: meta.discipline,
+                revision: meta.revision,
+                drawingDate: meta.drawingDate,
+                remarks: meta.remarks,
                 fileBase64: b64,
                 fileName: f.name,
-                fileMimeType: f.type
+                fileMimeType: f.type,
+                previewBase64: previews
             });
             UI.toast(`${no} uploaded (${res.id}).`, 'success');
             document.getElementById('drawingModal')?.remove();
