@@ -15,7 +15,7 @@ const CONFIG = {
      * apiUrl - the Apps Script Web App /exec URL for THIS company.
      * Each company has its own deployment reading its own spreadsheet.
      */
-    apiUrl: 'https://script.google.com/macros/s/AKfycbwoInhyBINQwtEw66Dh94xT1q6L9aC225NtN86FSygY1PiaUbfBTPhciShCor-puMuc/exec',
+    apiUrl: 'https://script.google.com/macros/s/AKfycbwiTaR64Z7IGpNbXYqFj5EiKS9627WbalGkEixfL5qQri8AV_WqrDGCfYOg1RDxRfXl/exec/exec',
 
     /** company - what the app calls itself. */
     company: {
