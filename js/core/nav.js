@@ -274,7 +274,12 @@ const Nav = {
             if (document.hidden) return;
             this.refreshBell();
         };
-        this.refreshBell();
+        // v25: the FIRST poll is delayed by 2.5 seconds. It used to fire
+        // during page load, adding one more request to the handful
+        // already competing for the backend — and an unread count is not
+        // urgent enough to justify making the page people are waiting
+        // for any slower.
+        setTimeout(tick, 2500);
         this._bellTimer = setInterval(tick, 90000);
         // Catch up the moment you come back rather than waiting out the
         // rest of the interval.

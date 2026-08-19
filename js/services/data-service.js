@@ -97,6 +97,31 @@ async function gasCall(action) {
     return _gasCallRaw(action, params);
 }
 
+/**
+ * READ_ONLY_RE (v25) - which actions are safe to send twice.
+ *
+ * ── THE DISTINCTION THIS FILE TURNS ON ──────────────────────
+ *
+ * Apps Script answers a POST with a redirect carrying a one-time token,
+ * and under concurrency that redirect sometimes 404s. The request may
+ * have been received and executed before the answer was lost.
+ *
+ * So retrying a READ costs a second query. Retrying a WRITE can BILL
+ * THE CLIENT TWICE, release the same cash advance twice, or approve
+ * something twice — and nothing in the log would show it as anything
+ * other than two deliberate actions.
+ *
+ * A read that fails is a message on screen. A duplicated write is money
+ * moved. Only reads are retried, and the pattern is deliberately the
+ * conservative one: anything that is not obviously a read is treated as
+ * a write.
+ */
+const READ_ONLY_RE = /^(get|list|search|preview|export|find|check|is|has|whoAmI|duplicatePreview|audit)/i;
+
+function isRetryable_(action) {
+    return READ_ONLY_RE.test(String(action || ''));
+}
+
 async function _gasCallRaw(action, params) {
     const payload = {
         action: action,
@@ -105,13 +130,31 @@ async function _gasCallRaw(action, params) {
         userEmail: getCurrentUserEmail() // display only; server ignores it
     };
 
+    // v25: queued, so a handful of parallel reads cannot stampede the
+    // backend into the redirect failure that produces "Network error:
+    // 404".
+    return RequestQueue.run(
+        () => _gasFetch_(payload),
+        { retry: isRetryable_(action) }
+    );
+}
+
+async function _gasFetch_(payload) {
     const response = await fetch(GAS_API_URL, {
         method: 'POST',
         body: JSON.stringify(payload)
     });
 
     if (!response.ok) {
-        throw new Error('Network error: ' + response.status);
+        const err = new Error(response.status === 404
+            // A plain "404" reads as a coding fault and sends people
+            // looking in the wrong place. This is almost always Apps
+            // Script's redirect failing under load.
+            ? 'The server did not answer (404). This is usually temporary — retrying.'
+            : 'Network error: ' + response.status);
+        // Carried so the queue can decide whether it is worth retrying.
+        err.httpStatus = response.status;
+        throw err;
     }
 
     const result = await response.json();
