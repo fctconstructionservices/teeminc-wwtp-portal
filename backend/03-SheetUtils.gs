@@ -335,7 +335,25 @@ function deleteRowsByValues_(name, col, values) {
   for (var r = 0; r < data.length; r++) {
     if (wanted[String(data[r][0])]) hits.push(r + 2);
   }
-  for (var i = hits.length - 1; i >= 0; i--) sh.deleteRow(hits[i]);
+  // ── v25: CONTIGUOUS ROWS ARE DELETED IN ONE CALL ──
+  // deleteRow() one at a time is a round trip each. Deleting a project
+  // with a few hundred daily records was hundreds of calls, taking long
+  // enough that it held the document lock for a minute or more — and
+  // every other request in the app queued behind it, which is what made
+  // the whole system feel broken during a delete.
+  //
+  // Rows that sit together are removed as a block. Bottom-up either
+  // way, so an earlier deletion never shifts a row still to be removed.
+  var run = [];
+  for (var i = hits.length - 1; i >= 0; i--) {
+    if (run.length && hits[i] === run[run.length - 1] - 1) {
+      run.push(hits[i]);
+      continue;
+    }
+    if (run.length) sh.deleteRows(run[run.length - 1], run.length);
+    run = [hits[i]];
+  }
+  if (run.length) sh.deleteRows(run[run.length - 1], run.length);
   if (hits.length) _invalidateRead_(name);
   return hits.length;
 }

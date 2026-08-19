@@ -116,15 +116,36 @@ const CalendarPanel = {
      *  two idle requests and makes the arrows feel like they have no
      *  latency at all. */
     _prefetch() {
+        // ── v25: ONE AT A TIME, AND ONLY WHEN IDLE ──
+        // This fired both neighbouring months at once, on top of the
+        // home payload, the current month, the notification bell and a
+        // background revalidation — five or six requests from one
+        // session to a backend that serialises per user. Apps Script
+        // answers a POST with a one-time redirect, and under that much
+        // parallelism some of them come back 404.
+        //
+        // A prefetch is a convenience. It must never compete with
+        // something the person is waiting for.
+        if (this._prefetching) return;
         const [y, m] = this._month.split('-').map(Number);
-        [-1, 1].forEach(n => {
+        const keys = [-1, 1].map(n => {
             const d = new Date(y, m - 1 + n, 1);
-            const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-            if (this._months[key]) return;
-            DataService.getTasksForMonth(key)
-                .then(r => { this._months[key] = r; })
-                .catch(() => {});
-        });
+            return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+        }).filter(k => !this._months[k]);
+        if (!keys.length) return;
+
+        this._prefetching = true;
+        // A second of quiet first: the dashboard's own reads have
+        // finished by then, so this lands in an empty queue.
+        setTimeout(async () => {
+            for (const key of keys) {
+                if (this._months[key]) continue;
+                try {
+                    this._months[key] = await DataService.getTasksForMonth(key);
+                } catch (err) { /* a prefetch that fails is not an error */ }
+            }
+            this._prefetching = false;
+        }, 1000);
     },
 
     async shift(n) {
