@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title data-cfg="company.appName">FCTC Operations Board</title>
+    <title data-cfg="company.appName">Operations Board</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <!-- v12: Barlow Condensed display, Public Sans body, Roboto Mono numbers.
          Oswald, Inter and IBM Plex Mono stay loaded as fallbacks so anything
@@ -121,8 +121,8 @@
     <!-- ════════════════════════════════════════════ -->
     <section id="page-login" class="page active" aria-label="Login">
         <div class="login-card">
-            <div class="login-mark" data-cfg="company.short">FCTC</div>
-            <h1 data-cfg="company.appName">FCTC Operations Board</h1>
+            <div class="login-mark" data-cfg="company.short"></div>
+            <h1 data-cfg="company.appName">Operations Board</h1>
             <p class="sub">Sign in to continue</p>
             <form id="loginForm" onsubmit="return handleLogin(event)">
                 <div class="field" id="login-email-field">
@@ -138,7 +138,7 @@
                 <button type="submit" class="login-btn" id="loginBtn">Log In</button>
             </form>
             <p class="login-note">
-                <span data-cfg="company.notice">For FCTC Construction Services internal use only.</span>
+                <span data-cfg="company.notice">Internal use only.</span>
                 <small><strong>Under Development: </strong>Under Development</small>
             </p>
         </div>
@@ -150,9 +150,9 @@
     <section id="page-home" class="page" aria-label="Home">
         <div class="wrap">
             <div class="topbar">
-                <div class="mark">F</div>
+                <div class="mark" data-cfg="company.short"></div>
                 <div class="brand">
-                    <div class="name" data-cfg="company.appName">FCTC Operations Board</div>
+                    <div class="name" data-cfg="company.appName">Operations Board</div>
                     <div class="sub" id="home-user-label">Managing Partner — D. Fabon</div>
                 </div>
                 <div class="spacer"></div>
@@ -220,7 +220,7 @@
     <section id="page-finance" class="page" aria-label="Finance Dashboard">
         <div class="wrap">
             <div class="topbar">
-                <div class="mark">FCTC</div>
+                <div class="mark" data-cfg="company.short"></div>
                 <div class="brand">
                     <div class="name">Finance Dashboard</div>
                     <div class="sub">Cost control · Cashflow · Forecasting</div>
@@ -246,7 +246,7 @@
     <section id="page-portfolio" class="page" aria-label="Portfolio Dashboard">
         <div class="wrap">
             <div class="topbar">
-                <div class="mark">F</div>
+                <div class="mark" data-cfg="company.short"></div>
                 <div class="brand">
                     <div class="name">Portfolio</div>
                     <div class="sub">Lahat ng proyekto sa isang tanaw</div>
@@ -272,7 +272,7 @@
     <section id="page-project" class="page" aria-label="Project Dashboard">
         <div class="wrap">
             <div class="topbar">
-                <div class="mark">F</div>
+                <div class="mark" data-cfg="company.short"></div>
                 <div class="brand">
                     <div class="name" id="proj-name">Project Name</div>
                     <div class="sub" id="proj-status">Ongoing</div>
@@ -307,7 +307,7 @@
     <section id="page-purchase-requests" class="page" aria-label="Purchase Requests">
         <div class="wrap">
             <div class="topbar">
-                <div class="mark">F</div>
+                <div class="mark" data-cfg="company.short"></div>
                 <div class="brand">
                     <div class="name">Purchase Requests</div>
                     <div class="sub">Checked against your estimate before approval</div>
@@ -338,7 +338,7 @@
     <section id="page-payables" class="page" aria-label="Payables">
         <div class="wrap">
             <div class="topbar">
-                <div class="mark">F</div>
+                <div class="mark" data-cfg="company.short"></div>
                 <div class="brand">
                     <div class="name">Payables</div>
                     <div class="sub">Supplier obligations · Due dates · Aging</div>
@@ -370,7 +370,7 @@
     <section id="page-quotations" class="page" aria-label="Quotations">
         <div class="wrap">
             <div class="topbar">
-                <div class="mark">F</div>
+                <div class="mark" data-cfg="company.short"></div>
                 <div class="brand">
                     <div class="name">Quotations</div>
                     <div class="sub">Bids in progress · Revisions · Award</div>
@@ -410,7 +410,7 @@
     <section id="page-knowledge" class="page" aria-label="Knowledge Base Center">
         <div class="wrap">
             <div class="topbar">
-                <div class="mark">F</div>
+                <div class="mark" data-cfg="company.short"></div>
                 <div class="brand">
                     <div class="name">Knowledge Base</div>
                     <div class="sub" id="kbSub">Master data · Lessons learned</div>
@@ -466,7 +466,7 @@
     <section id="page-approvals" class="page" aria-label="Approvals">
         <div class="wrap">
             <div class="topbar">
-                <div class="mark">F</div>
+                <div class="mark" data-cfg="company.short"></div>
                 <div class="brand">
                     <div class="name">Approvals</div>
                     <div class="sub">Pending requests · My submissions</div>
@@ -492,7 +492,7 @@
     <section id="page-print-template" class="page" aria-label="Print Template">
         <div class="wrap">
             <div class="topbar">
-                <div class="mark">F</div>
+                <div class="mark" data-cfg="company.short"></div>
                 <div class="brand">
                     <div class="name">Print Template</div>
                     <div class="sub">Company letterhead on every printed document</div>
@@ -518,7 +518,7 @@
     <section id="page-request" class="page" aria-label="Request Cash Advance">
         <div class="wrap">
             <div class="topbar">
-                <div class="mark">F</div>
+                <div class="mark" data-cfg="company.short"></div>
                 <div class="brand"><div class="name">Request Cash Advance</div><div class="sub">New requisition</div></div>
                 <div class="spacer"></div>
                 <button class="hamburger" onclick="toggleMenu()"></button>
@@ -545,8 +545,7 @@
                     <div class="field" id="req-project-field">
                         <label>Project</label>
                         <select id="req-project">
-                            <option value="ga-overhead">General and Administrative Expenses (G&amp;A)</option>
-                            <option value="fctc-cs">FCTC Construction Services</option>
+                            <option value="" disabled selected>— Loading projects —</option>
                         </select>
                         <div class="error-msg">Please select a project.</div>
                     </div>
@@ -602,7 +601,7 @@
     <section id="page-liquidate" class="page" aria-label="Liquidate Cash Advance">
         <div class="wrap">
             <div class="topbar">
-                <div class="mark">F</div>
+                <div class="mark" data-cfg="company.short"></div>
                 <div class="brand"><div class="name">Liquidate Cash Advance</div><div class="sub">Submit receipts & balance</div></div>
                 <div class="spacer"></div>
                 <button class="hamburger" onclick="toggleMenu()"></button>
@@ -681,7 +680,7 @@
     <section id="page-record-cash" class="page" aria-label="Record Incoming Cash">
         <div class="wrap">
             <div class="topbar">
-                <div class="mark">F</div>
+                <div class="mark" data-cfg="company.short"></div>
                 <div class="brand">
                     <div class="name">Record Incoming Cash</div>
                     <div class="sub">Capital / cash injections</div>
@@ -718,7 +717,7 @@
                     <!-- Description -->
                     <div class="field" id="rc-desc-field">
                         <label for="rc-desc">Description *</label>
-                        <textarea id="rc-desc" rows="3" placeholder="e.g. Initial Capital - FCTC Construction Services" required></textarea>
+                        <textarea id="rc-desc" rows="3" placeholder="e.g. Initial Capital" required></textarea>
                         <div class="error-msg">Description is required.</div>
                     </div>
                     
@@ -791,7 +790,7 @@
     <section id="page-release-cash" class="page" aria-label="Release Cash">
         <div class="wrap">
             <div class="topbar">
-                <div class="mark">F</div>
+                <div class="mark" data-cfg="company.short"></div>
                 <div class="brand"><div class="name">Release Cash</div><div class="sub">Release an approved advance</div></div>
                 <div class="spacer"></div>
                 <button class="hamburger" onclick="toggleMenu()"></button>
@@ -841,7 +840,7 @@
     <section id="page-search" class="page" aria-label="Search Records">
         <div class="wrap">
             <div class="topbar">
-                <div class="mark">F</div>
+                <div class="mark" data-cfg="company.short"></div>
                 <div class="brand"><div class="name">Search Records</div><div class="sub">Cash advances, releases & liquidations</div></div>
                 <div class="spacer"></div>
                 <button class="hamburger" onclick="toggleMenu()"></button>
@@ -887,7 +886,7 @@
          edit that when adding a script, then re-run the builder.
          The ?v= hash is rewritten by the builder so the bundle can be
          cached permanently without ever going stale. -->
-    <script src="js/bundle.js?v=7f464ffd4c33"></script>
+    <script src="js/bundle.js?v=739f6d066169"></script>
 
     <!-- ════════════════════════════════════════════════════════════════ -->
     <!--  DYNAMIC TOPBAR USER LABEL UPDATER                            -->

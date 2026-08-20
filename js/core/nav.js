@@ -241,6 +241,10 @@ const Nav = {
      * because a header with nothing in the corner looks broken.
      */
     paintBranding() {
+        // Whatever the company calls itself, not a letter written into
+        // the code — this same shell runs for more than one company.
+        const short = (typeof CONFIG !== 'undefined' && CONFIG.company && CONFIG.company.short) || '';
+
         const apply = (url) => {
             document.querySelectorAll('.topbar .mark').forEach((el) => {
                 if (!url) {
@@ -249,7 +253,7 @@ const Nav = {
                     if (el.dataset.logo) {
                         delete el.dataset.logo;
                         el.classList.remove('has-logo');
-                        el.textContent = 'F';
+                        el.textContent = short;
                     }
                     return;
                 }
@@ -262,7 +266,7 @@ const Nav = {
                 // A broken link must not leave an empty corner.
                 img.onerror = () => {
                     el.classList.remove('has-logo');
-                    el.textContent = 'F';
+                    el.textContent = short;
                     delete el.dataset.logo;
                 };
                 el.textContent = '';
