@@ -17,17 +17,21 @@
 }
 .cal-loading { padding: 26px 16px; font-size: 12.5px; color: var(--ink-soft); }
 
+/* ── v28: THE HEADER CARRIES THE MONTH ──
+   A tinted bar with the month set larger reads as the title of a thing
+   rather than a row of controls that happens to sit above a grid. */
 .cal-head {
     display: flex;
     align-items: center;
     gap: 9px;
-    padding: 10px 13px;
+    padding: 11px 13px;
     border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, var(--bg), var(--surface));
     flex-wrap: wrap;
 }
 .cal-head b {
     font-family: var(--font-display);
-    font-size: 16px;
+    font-size: 19px;
     letter-spacing: .05em;
     text-transform: uppercase;
     min-width: 150px;
@@ -111,11 +115,26 @@
 /* Past days recede rather than disappear — an overdue task last week is
    still the most important thing on the grid. */
 .cal-day.is-past .cal-n { opacity: .45; }
-.cal-day.is-today { box-shadow: inset 0 0 0 2px var(--amber); }
 .cal-day.is-sel { background: var(--blueprint-tint); box-shadow: inset 0 0 0 2px var(--blueprint); }
 
+/* ── v28: TODAY IS A MARK, NOT A BORDER ──
+   A thin inset ring competes with the grid lines around it and reads as
+   another cell edge. A filled disc on the date is the one thing the eye
+   lands on when the calendar appears, which is the job today has. */
+.cal-day.is-today { background: #FFFDF6; }
+.cal-day.is-today .cal-n {
+    background: var(--amber);
+    color: #15181A;
+    font-weight: 700;
+    border-radius: 50%;
+    width: 21px;
+    height: 21px;
+    display: grid;
+    place-items: center;
+    margin: -2px 0 0 -2px;
+}
+
 .cal-n { font-family: var(--font-num); font-size: 12px; }
-.cal-day.is-today .cal-n { font-weight: 700; color: var(--safety-ink); }
 .cal-marks { display: flex; gap: 3px; }
 .cal-pip { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--blueprint); }
 .cal-pip.d { background: var(--red); }
@@ -270,7 +289,20 @@
 
 /* v18.2 — the task titles inside a day cell. */
 .cal-top { display: flex; align-items: center; gap: 5px; margin-bottom: 2px; }
-.cal-day.has-overdue { background: rgba(192, 54, 44, .05); }
+
+/* ── v28: AN OVERDUE DAY DECLARES ITSELF ──
+   A 5%-opacity wash is invisible next to the weekend shading it sits
+   beside. A solid red edge down the cell is legible at a glance from
+   across the room, which is the point of putting the month on the
+   dashboard at all. */
+.cal-day.has-overdue {
+    background: rgba(192, 54, 44, .07);
+    box-shadow: inset 3px 0 0 var(--red);
+}
+.cal-day.has-overdue .cal-n { color: var(--red); font-weight: 700; }
+/* Today AND overdue: today's disc still wins the date, the red edge
+   still marks the cell. */
+.cal-day.is-today.has-overdue .cal-n { color: #15181A; }
 
 .cal-t {
     display: block;

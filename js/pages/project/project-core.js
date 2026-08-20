@@ -779,15 +779,27 @@ const ProjectPage = {
                 ? p.projectCashflowWeekly : p.projectCashflow;
             const cfCtx = document.getElementById('projCfChart');
             if (cfCtx && cf && cf.labels && cf.labels.length) {
+                // The running net is only real up to today. Past that it is a
+                // projection, so it is drawn as a separate dashed series
+                // rather than one line that quietly changes meaning halfway
+                // along. Older payloads without the split still work.
                 let run = 0;
-                const net = cf.inflow.map((v, i) => { run += v - (cf.outflow[i] || 0); return run; });
+                const netActual = cf.netActual
+                    || cf.inflow.map((v, i) => { run += v - (cf.outflow[i] || 0); return run; });
+                const netForecast = cf.netForecast || null;
+                const datasets = [
+                    { type: 'bar', label: 'Inflow', data: cf.inflow, backgroundColor: '#2F7A46', borderRadius: 4 },
+                    { type: 'bar', label: 'Outflow', data: cf.outflow, backgroundColor: '#B23A2E', borderRadius: 4 },
+                    { type: 'line', label: 'Projected outflow (Gantt)', data: cf.projectedOutflow, borderColor: '#C2860F', borderDash: [5, 4], pointRadius: this._cfView === 'weekly' ? 2 : 3, tension: .3, spanGaps: false },
+                    { type: 'line', label: 'Net cash (actual)', data: netActual, borderColor: '#24455A', tension: .3, pointRadius: this._cfView === 'weekly' ? 2 : 3, spanGaps: false }
+                ];
+                if (netForecast) {
+                    datasets.push({ type: 'line', label: 'Net cash (forecast)', data: netForecast,
+                        borderColor: '#24455A', borderDash: [6, 4], tension: .3,
+                        pointRadius: this._cfView === 'weekly' ? 1.5 : 2, spanGaps: false });
+                }
                 this._charts.projCf = new Chart(cfCtx, {
-                    data: { labels: cf.labels, datasets: [
-                        { type: 'bar', label: 'Inflow', data: cf.inflow, backgroundColor: '#2F7A46', borderRadius: 4 },
-                        { type: 'bar', label: 'Outflow', data: cf.outflow, backgroundColor: '#B23A2E', borderRadius: 4 },
-                        { type: 'line', label: 'Projected outflow (Gantt)', data: cf.projectedOutflow, borderColor: '#C2860F', borderDash: [5, 4], pointRadius: this._cfView === 'weekly' ? 2 : 3, tension: .3, spanGaps: false },
-                        { type: 'line', label: 'Net (running)', data: net, borderColor: '#24455A', tension: .3, pointRadius: this._cfView === 'weekly' ? 2 : 3 }
-                    ]},
+                    data: { labels: cf.labels, datasets: datasets },
                     options: { responsive: true, maintainAspectRatio: false,
                         plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, font: { size: 10.5 } } },
                             tooltip: { callbacks: { label: c => `${esc(c.dataset.label)}: ₱${fmtMoney(c.parsed.y ?? 0)}` } } },

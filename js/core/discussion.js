@@ -291,8 +291,11 @@ const Discussion = {
                 payload.attachmentMime = file.type;
             }
             const res = await DataService.postComment(payload);
+            // v28: nothing is emailed. A mention raises the mentioned
+            // person's bell, so the toast says what actually happened
+            // rather than promising a message that never leaves.
             if (res && res.mentioned) {
-                UI.toast(`${res.mentioned} person(s) mentioned — they have been emailed.`, 'success');
+                UI.toast(`${res.mentioned} person(s) mentioned — they have been notified.`, 'success');
             }
             fileEl.value = '';
             wrap.querySelector('.dsc-fname').textContent = '';

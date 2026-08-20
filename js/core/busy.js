@@ -101,6 +101,53 @@ const Busy = {
     },
 
     /**
+     * auto - the same thing, for a handler that was never given its
+     * button.
+     *
+     * Almost every button in this app is wired as
+     * `onclick="Page.doThing('id')"` — no `this`, so the handler has no
+     * way to reach the element that was pressed. Passing it would mean
+     * editing several hundred call sites twice: the markup and the
+     * signature.
+     *
+     * Instead the last pressed button is captured on the way down (a
+     * capture-phase listener runs before the inline handler), so a
+     * handler can simply say what it is doing:
+     *
+     *     await Busy.auto('Approving', async () => { ... });
+     *
+     * Falls back to running the work plainly if it cannot find a button,
+     * so a handler called from code rather than a click still works.
+     */
+    _last: null,
+
+    async auto(label, fn) {
+        if (typeof label === 'function') { fn = label; label = null; }
+        return await this.run(this._last, label, fn);
+    },
+
+    /**
+     * pressed - the button being clicked RIGHT NOW.
+     *
+     * Needed by any handler that opens a confirm dialog first: pressing
+     * "Confirm" is itself a click, so by the time the dialog resolves
+     * the captured button is the dialog's — which is then removed from
+     * the page. Grab the real one before awaiting anything.
+     */
+    pressed() { return this._last; },
+
+    /** Captured in the capture phase, which runs BEFORE the inline
+     *  onclick — so by the time the handler asks, this is already set. */
+    listen() {
+        if (this._listening) return;
+        this._listening = true;
+        document.addEventListener('click', (e) => {
+            const el = e.target && e.target.closest && e.target.closest('button');
+            this._last = el || null;
+        }, true);
+    },
+
+    /**
      * wire - retrofits every button that calls a known async action,
      * without editing each call site.
      *

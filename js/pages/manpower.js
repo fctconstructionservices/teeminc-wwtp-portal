@@ -359,18 +359,21 @@ const ManpowerPage = {
     },
 
     async approveRole(id) {
+        const btn = Busy.pressed();
         const confirmed = await Confirm.open('Approve Role?', 'Approve this manpower role for use in daily reports and estimates?');
         if (!confirmed) return;
-        try {
-            await DataService.approveManpower(id);
-            UI.toast('Manpower role approved.', 'success');
-            await this._refreshCache();
-            this.renderSubTabs();
-            this.renderList();
-            App.updateApprovalBadge();
-        } catch (err) {
-            UI.toast('' + err.message, 'error');
-        }
+        await Busy.run(btn, 'Approving', async () => {
+            try {
+                await DataService.approveManpower(id);
+                UI.toast('Manpower role approved.', 'success');
+                await this._refreshCache();
+                this.renderSubTabs();
+                this.renderList();
+                App.updateApprovalBadge();
+            } catch (err) {
+                UI.toast('' + err.message, 'error');
+            }
+        });
     },
 
     // ─── PERSONNEL ACTIONS ────────────────────────────────────

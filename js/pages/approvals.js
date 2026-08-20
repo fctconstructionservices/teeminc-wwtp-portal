@@ -868,80 +868,104 @@ const ApprovalsPage = {
     // what every other row does — open the self-contained modal.
     openMyRequestDetail(id) { RequestDetailModal.open(id, 'request'); },
 
+    // ── v28: THESE FOUR CARRY THE MOST RISK ──
+    // A decision button that looks identical after you press it invites
+    // a second press, and a second press here is a second approval. The
+    // busy state disables it for the whole round trip, which is the part
+    // that protects the data rather than merely reassuring the person.
+    //
+    // The button is captured BEFORE the confirm dialog: pressing
+    // "Confirm" is itself a click, so afterwards the captured button
+    // would be the dialog's — and that one is about to be removed.
     async approveItem(id, type, closeModal = false) {
+        const btn = Busy.pressed();
         const confirmed = await Confirm.open('Approve Item?', `Approve ${id}?`);
         if (!confirmed) return;
-        try {
-            const result = await DataService.approveItemGeneric(id, type);
-            // v5: multi-sig — your signature may not be the last one needed
-            if (result && result.awaiting) {
-                UI.toast(`${id}: your approval is recorded — awaiting the other admins.`, 'success');
-            } else {
-                UI.toast(`${id} approved.`, 'success');
+        await Busy.run(btn, 'Approving', async () => {
+            try {
+                const result = await DataService.approveItemGeneric(id, type);
+                // v5: multi-sig — your signature may not be the last one needed
+                if (result && result.awaiting) {
+                    UI.toast(`${id}: your approval is recorded — awaiting the other admins.`, 'success');
+                } else {
+                    UI.toast(`${id} approved.`, 'success');
+                }
+                if (closeModal) RequestDetailModal.close();
+                this.load();
+                if (typeof HomePage !== 'undefined' && HomePage.load) HomePage.load();
+            } catch (err) {
+                UI.toast('' + err.message, 'error');
             }
-            if (closeModal) RequestDetailModal.close();
-            this.load();
-            if (typeof HomePage !== 'undefined' && HomePage.load) HomePage.load();
-        } catch (err) {
-            UI.toast('' + err.message, 'error');
-        }
+        });
     },
 
     async rejectItem(id, type, closeModal = false) {
+        const btn = Busy.pressed();
         const confirmed = await Confirm.open('Reject Item?', `Reject ${id}?`);
         if (!confirmed) return;
-        try {
-            await DataService.rejectItemGeneric(id, type);
-            UI.toast(`${id} rejected.`, 'error');
-            if (closeModal) RequestDetailModal.close();
-            this.load();
-            if (typeof HomePage !== 'undefined' && HomePage.load) HomePage.load();
-        } catch (err) {
-            UI.toast('' + err.message, 'error');
-        }
+        await Busy.run(btn, 'Rejecting', async () => {
+            try {
+                await DataService.rejectItemGeneric(id, type);
+                UI.toast(`${id} rejected.`, 'error');
+                if (closeModal) RequestDetailModal.close();
+                this.load();
+                if (typeof HomePage !== 'undefined' && HomePage.load) HomePage.load();
+            } catch (err) {
+                UI.toast('' + err.message, 'error');
+            }
+        });
     },
 
     async forceApproveItem(id, type, closeModal = false) {
+        const btn = Busy.pressed();
         const confirmed = await Confirm.open('Force Approve?',
             `Force approve ${id}? This finalizes it immediately, without the other admins' signatures.`);
         if (!confirmed) return;
-        try {
-            await DataService.forceApprove(id, type);
-            UI.toast(`${id} force-approved.`, 'success');
-            if (closeModal) RequestDetailModal.close();
-            this.load();
-            if (typeof HomePage !== 'undefined' && HomePage.load) HomePage.load();
-        } catch (err) {
-            UI.toast('' + err.message, 'error');
-        }
+        await Busy.run(btn, 'Approving', async () => {
+            try {
+                await DataService.forceApprove(id, type);
+                UI.toast(`${id} force-approved.`, 'success');
+                if (closeModal) RequestDetailModal.close();
+                this.load();
+                if (typeof HomePage !== 'undefined' && HomePage.load) HomePage.load();
+            } catch (err) {
+                UI.toast('' + err.message, 'error');
+            }
+        });
     },
 
     async forceRejectItem(id, type, closeModal = false) {
+        const btn = Busy.pressed();
         const confirmed = await Confirm.open('Force Reject?', `Force reject ${id}?`);
         if (!confirmed) return;
-        try {
-            await DataService.forceReject(id, type);
-            UI.toast(`${id} force-rejected.`, 'error');
-            if (closeModal) RequestDetailModal.close();
-            this.load();
-            if (typeof HomePage !== 'undefined' && HomePage.load) HomePage.load();
-        } catch (err) {
-            UI.toast('' + err.message, 'error');
-        }
+        await Busy.run(btn, 'Rejecting', async () => {
+            try {
+                await DataService.forceReject(id, type);
+                UI.toast(`${id} force-rejected.`, 'error');
+                if (closeModal) RequestDetailModal.close();
+                this.load();
+                if (typeof HomePage !== 'undefined' && HomePage.load) HomePage.load();
+            } catch (err) {
+                UI.toast('' + err.message, 'error');
+            }
+        });
     },
 
     // ─── RELEASE CASH REVIEW ────────────────────────────────────
     async reviewRelease(id) {
+        const btn = Busy.pressed();
         const confirmed = await Confirm.open('Mark as Reviewed?', 'Confirm that you have reviewed this release request?');
         if (!confirmed) return;
-        try {
-            const user = App.currentUser;
-            await DataService.reviewRelease(id, user.email);
-            UI.toast('Release request reviewed.', 'success');
-            this.load();
-            if (typeof HomePage !== 'undefined' && HomePage.load) HomePage.load();
-        } catch (err) {
-            UI.toast('' + err.message, 'error');
-        }
+        await Busy.run(btn, 'Reviewing', async () => {
+            try {
+                const user = App.currentUser;
+                await DataService.reviewRelease(id, user.email);
+                UI.toast('Release request reviewed.', 'success');
+                this.load();
+                if (typeof HomePage !== 'undefined' && HomePage.load) HomePage.load();
+            } catch (err) {
+                UI.toast('' + err.message, 'error');
+            }
+        });
     }
 };

@@ -54,8 +54,6 @@ const KnowledgeBasePage = {
     },
 
     _paintTab() {
-        document.querySelectorAll('.kb-tabs button').forEach(b =>
-            b.classList.toggle('active', b.dataset.kb === this._tab));
         document.querySelectorAll('.kb-tab-content').forEach(el => el.classList.remove('active'));
         document.getElementById('kb-tab-' + this._tab)?.classList.add('active');
 

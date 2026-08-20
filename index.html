@@ -30,6 +30,11 @@
          ════════════════════════════════════════════════════ -->
     <header id="appNav" hidden></header>
 
+    <!-- The chat dock lives on the SHELL, not on a page, so open threads
+         and the poll survive navigating between Finance, a project and
+         Approvals. -->
+    <div class="dock" id="chatDock" hidden></div>
+
 
     <!-- ════════════════════════════════════════════ -->
     <!--  CONFIRM DIALOG                             -->
@@ -419,13 +424,13 @@
             </div>
             <div class="crumb"><button onclick="App.navigate('home')">Home</button> / Knowledge Base / <span id="kbCrumb">Materials</span></div>
 
-            <div class="kb-tabs">
-                <button class="active" data-kb="materials" onclick="KnowledgeBasePage.switchTab('materials')">Materials</button>
-                <button data-kb="equipment" onclick="KnowledgeBasePage.switchTab('equipment')">Tools &amp; Equipment</button>
-                <button data-kb="manpower" onclick="KnowledgeBasePage.switchTab('manpower')">Manpower</button>
-                <button data-kb="suppliers" onclick="KnowledgeBasePage.switchTab('suppliers')">Suppliers</button>
-                <button data-kb="lessons" onclick="KnowledgeBasePage.switchTab('lessons')">Lessons Learned</button>
-            </div>
+            <!-- v28: the page's own tab row is gone. The app's sub-nav
+                 already lists these five destinations and calls the same
+                 switchTab(), so the second bar was the same five buttons
+                 drawn again a few pixels lower — and it showed up under
+                 Procurement > Suppliers too, which lands on this page.
+                 The sub-nav scrolls horizontally rather than collapsing,
+                 so nothing is lost on a narrow screen. -->
 
             <div id="kb-tab-materials" class="kb-tab-content active">
                 <div id="materialsContent">
@@ -877,58 +882,12 @@
          5. init.js    — boots the app; must stay LAST
          ============================================================ -->
     <!-- v20: esc() must be defined before anything that renders. -->
-    <script src="js/core/esc.js"></script>
-    <script src="js/core/icons.js"></script>
-    <!-- v10: searchable pickers for the Estimates tab -->
-    <script src="js/components/search-select.js"></script>
-    <script src="js/core/app.js"></script>
-    <script src="js/core/auth.js"></script>
-    <script src="js/core/ui.js"></script>
-    <script src="js/core/modals.js"></script>
-    <script src="js/core/print-doc.js"></script>
-    <script src="js/core/typeahead.js"></script>
-    <script src="js/core/signature.js"></script>
-    <script src="js/core/discussion.js"></script>
-    <script src="js/core/nav.js"></script>
-    <script src="js/core/config.js"></script>
-    <script src="js/core/request-queue.js"></script>
-    <script src="js/core/fast-cache.js"></script>
-    <script src="js/core/busy.js"></script>
-    <script src="js/core/pdf-render.js"></script>
-    <script src="js/pages/calendar.js"></script>
-    <script src="js/services/data-service.js"></script>
-    <script src="js/pages/home.js"></script>
-    <script src="js/pages/project/project-core.js"></script>
-    <script src="js/pages/project/project-daily.js"></script>
-    <script src="js/pages/project/project-sow.js"></script>
-    <!-- project-gantt.js augments ProjectPage via Object.assign — must load AFTER project-sow.js -->
-    <script src="js/pages/project/project-gantt.js"></script>
-    <script src="js/pages/project/project-schedule.js"></script>
-    <script src="js/pages/project/project-reports.js"></script>
-    <script src="js/pages/project/project-estimates.js"></script>
-    <!-- v6 tabs — augment ProjectPage via Object.assign, load after project-core.js -->
-    <script src="js/pages/project/project-materials.js"></script>
-    <script src="js/pages/project/project-equipment.js"></script>
-    <script src="js/pages/project/project-billings.js"></script>
-    <script src="js/pages/project/project-variations.js"></script>
-    <script src="js/pages/project/project-siteops.js"></script>
-    <script src="js/pages/project/project-qaqc.js"></script>
-    <script src="js/pages/project/project-documents.js"></script>
-    <script src="js/pages/approvals.js"></script>
-    <!-- v11 BATCH E: PrintDoc must load BEFORE any page that prints -->
-    <script src="js/pages/print-template.js"></script>
-    <script src="js/pages/knowledge-base.js"></script>
-    <script src="js/pages/quotations.js"></script>
-    <script src="js/pages/purchase-requests.js"></script>
-    <script src="js/pages/payables.js"></script>
-    <script src="js/pages/finance.js"></script>
-    <script src="js/pages/portfolio.js"></script>
-    <script src="js/pages/materials.js"></script>
-    <script src="js/pages/equipment.js"></script>
-    <script src="js/pages/manpower.js"></script>
-    <script src="js/features/search.js"></script>
-    <script src="js/features/form-submissions.js"></script>
-    <script src="js/init.js"></script>
+    <!-- v26 PERF: these 48 files are bundled by tools/build-js.js into
+         js/bundle.js. Their load ORDER lives in tools/js-manifest.json —
+         edit that when adding a script, then re-run the builder.
+         The ?v= hash is rewritten by the builder so the bundle can be
+         cached permanently without ever going stale. -->
+    <script src="js/bundle.js?v=e8789e40e2a5"></script>
 
     <!-- ════════════════════════════════════════════════════════════════ -->
     <!--  DYNAMIC TOPBAR USER LABEL UPDATER                            -->

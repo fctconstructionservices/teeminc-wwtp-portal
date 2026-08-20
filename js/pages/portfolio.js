@@ -78,8 +78,16 @@ const PortfolioPage = {
             html += `<div class="attention-list">`;
             d.attention.forEach(a => {
                 const sev = a.severity === 1 ? 'urgent' : a.severity === 2 ? 'warn' : 'info';
+                // v28: an icon NAME from the server, drawn with the same
+                // line-art set as the rest of the app. It used to send an
+                // emoji, which rendered in whatever the OS supplies — a
+                // different weight, colour and era of design from every
+                // other glyph on the page.
+                const ico = (typeof Icon !== 'undefined' && Icon[a.icon])
+                    ? Icon[a.icon]({ size: 14 })
+                    : (Icon.warning ? Icon.warning({ size: 14 }) : '');
                 html += `<div class="attention-row ${sev}">
-                    <span class="attn-ico">${a.icon}</span>
+                    <span class="attn-ico">${ico}</span>
                     <span class="attn-text"><b>${a.projectName}</b> — ${a.text}</span>
                     <button class="btn-sm" onclick="PortfolioPage.goToProject('${a.projectId}','${a.tab}')">View</button>
                 </div>`;

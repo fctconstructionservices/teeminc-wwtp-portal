@@ -24,12 +24,25 @@
    ================================================================ */
 
 :root {
-    /* v21: 486px. The Days column gained 16px — a three-digit duration
-       in a 54px cell was clipped, and a duration you cannot read is the
-       one number on this row people are checking. */
-    --gt-lw: 486px;
+    /* ── v28: THE PANE WIDTH MUST EQUAL ITS COLUMNS ──
+       --gt-lw was 560px while the five columns summed to 586px, so the
+       task table was 26px wider than the track the grid reserved for it
+       and the overflow sat on top of the timeline. Every width below is
+       now derived from the columns rather than guessed alongside them:
+       change a column and --gt-lw follows.
+
+       The name column is 250px, not 152px: at 152 a scope like
+       "Rehabilitation of NYK-TDG Gymnasium Comfort Room" was two
+       cramped lines of fragments. */
+    --gt-c-name: 250px;
+    --gt-c-pred: 116px;
+    --gt-c-start: 124px;
+    --gt-c-days: 70px;
+    --gt-c-finish: 124px;
+    --gt-lw: calc(var(--gt-c-name) + var(--gt-c-pred) + var(--gt-c-start)
+                + var(--gt-c-days) + var(--gt-c-finish));
     --gt-week-w: 63px;
-    --gt-row-h: 36px;
+    --gt-row-h: 44px;
     --gt-head-h: 44px;
 }
 
@@ -91,46 +104,46 @@
     display: grid;
     /* SOW name · predecessor · start · DAYS · finish
        Days is 70px, not 54: at 54 a three-digit figure was cut off. */
-    grid-template-columns: 152px 116px 124px 70px 124px;
+    grid-template-columns:
+        var(--gt-c-name) var(--gt-c-pred) var(--gt-c-start)
+        var(--gt-c-days) var(--gt-c-finish);
 }
-/* ── v19: ONLY THE SOW NAME IS FROZEN ──
-   The whole left pane used to be sticky — nearly 540px of it — so
-   scrolling right left very little room for the bars, and the pane sat
-   over the chart the moment you moved the slider.
-   Now the pane scrolls away and the NAME alone stays. Predecessor,
-   start, days and finish slide out of view, which is fine: they are
-   reference detail, whereas a bar with no name attached to it is not
-   readable at all. */
+/* ── v28: THE WHOLE PANE IS FROZEN, LIKE EXCEL ──
+   v19 froze only the SOW name and let predecessor/start/days/finish
+   scroll away, on the reasoning that they are reference detail. In
+   practice the bars slid across those four columns and the two read as
+   one another — the timeline and the columns "coinciding", with parts
+   of bars showing through.
+
+   All five columns are now pinned together and the timeline passes
+   cleanly beneath them, which is the behaviour the toolbar's own
+   "frozen pane" wording has always promised.
+
+   COVERING PROPERLY IS A STACKING PROBLEM, not an opacity one: the pane
+   needs an opaque background AND a z-index above everything drawn in
+   the track. See .gt-cell-track, which is given its own stacking
+   context so a bar can never climb out of it. */
 .gt-cell-left {
-    position: relative;
-    z-index: 2;
+    position: sticky;
+    left: 0;
+    z-index: 20;
     background: var(--surface);
     border-right: 2px solid var(--line);
     border-bottom: 1px solid var(--line);
     align-items: center;
     height: var(--gt-row-h);
     font-size: 11.5px;
+    /* A shadow rather than a border: it only reads once the pane is
+       actually overlapping the chart, so a timeline scrolled fully left
+       has no stray line down it. */
+    box-shadow: 6px 0 6px -6px rgba(21, 24, 26, .22);
 }
 .gt-cell-left .gt-task {
-    position: sticky;
-    left: 0;
-    z-index: 3;
-    /* v21: a FIXED width, not minmax(120px, 1fr).
-       With 1fr the name column stretched to fill the pane, so when the
-       four detail columns scrolled away it kept its full stretched
-       width and covered them — the collapse Darwin was seeing. A fixed
-       152px means the name occupies exactly its own column and the rest
-       slide cleanly underneath it. */
-    width: 152px;
-    flex-shrink: 0;
     background: var(--surface);
     height: 100%;
     display: flex;
     align-items: center;
-    /* A shadow rather than a border: it only appears once the column is
-       actually overlapping something, so a chart scrolled to the left
-       has no stray line down it. */
-    box-shadow: 6px 0 6px -6px rgba(21, 24, 26, .22);
+    min-width: 0;
 }
 .gt-cell-left.is-heading .gt-task { background: var(--blueprint-tint); }
 .gt-cell-left > * {
@@ -139,27 +152,19 @@
     overflow: hidden;
     white-space: nowrap;
 }
-/* The header's first cell tracks the rows below it, so "SOW item" stays
-   above the names it labels. */
-.gt-head-left > div:first-child {
-    position: sticky;
-    left: 0;
-    z-index: 5;
-    background: var(--surface);
-    height: 100%;
-    display: flex;
-    align-items: center;
-    box-shadow: 6px 0 6px -6px rgba(21, 24, 26, .22);
-}
+/* The corner: frozen on BOTH axes, so it stays over the header strip as
+   well as over the rows. Highest layer on the chart. */
 .gt-head-left {
     position: sticky;
     top: 0;
-    z-index: 4;
+    left: 0;
+    z-index: 40;
     background: var(--surface);
     border-right: 2px solid var(--line);
     border-bottom: 2px solid var(--line);
     align-items: end;
     height: var(--gt-head-h);
+    box-shadow: 6px 0 6px -6px rgba(21, 24, 26, .22);
 }
 .gt-head-left > * {
     padding: 0 7px 7px;
@@ -196,11 +201,21 @@
     flex-shrink: 0;
 }
 .gt-task.is-critical .id { color: var(--red); }
+/* ── v27: THE SOW NAME IS THE POINT OF THE ROW ──
+   It was clipped to one ellipsised line, so scope items that differ only
+   in their tail ("… — Full Wall Tile" vs "… — Painting") were
+   indistinguishable in the very column you scan to find them. It now
+   wraps to at most two lines and the row grows to fit, which costs a
+   little vertical space and returns the ability to read the plan. */
 .gt-task .nm {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     font-weight: 500;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 .gt-task .ms-tag {
     font-family: var(--font-num);
@@ -246,6 +261,15 @@
 /* ─── timeline cells ──────────────────────────────────────── */
 .gt-cell-track {
     position: relative;
+    /* ── v28: A STACKING CONTEXT, NOT JUST A POSITIONED BOX ──
+       Without a z-index of its own this element created no stacking
+       context, so the z-indexes INSIDE it (bars at 1, drag handles and
+       milestones at 3) competed directly with the frozen pane. A handle
+       at 3 tied with the pane and, being later in the DOM, won — which
+       is the bleed-through: pieces of the chart drawn over the columns.
+       Giving the track z-index 0 seals its children inside it, so no
+       bar can ever paint above the pane however it is layered within. */
+    z-index: 0;
     height: var(--gt-row-h);
     border-bottom: 1px solid var(--line);
     /* one faint rule per WEEK, not per day — a rule per day turns into
@@ -439,7 +463,10 @@
     top: 0;
     bottom: 0;
     width: 9px;
-    z-index: 6;
+    /* Above the frozen pane (20). The pane and this handle share the
+       frame's stacking context — .gt-scroll and .gt-grid create none —
+       so at 6 the pane would have swallowed the grab area. */
+    z-index: 30;
     left: calc(var(--gt-lw) - 4px);
     cursor: col-resize;
     background: transparent;

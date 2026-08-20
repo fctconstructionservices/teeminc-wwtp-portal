@@ -12,4 +12,10 @@ function populateStaticIcons() {
     document.querySelectorAll('.btn-arrow').forEach(el => el.innerHTML = Icon.arrowRight({ size: 15 }));
 }
 
-document.addEventListener('DOMContentLoaded', () => { populateStaticIcons(); App.init(); });
+document.addEventListener('DOMContentLoaded', () => {
+    populateStaticIcons();
+    // Records which button was pressed, so an async handler can show a
+    // busy state without every call site having to pass itself in.
+    if (typeof Busy !== 'undefined') Busy.listen();
+    App.init();
+});

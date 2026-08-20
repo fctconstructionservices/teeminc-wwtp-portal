@@ -126,13 +126,13 @@ const PrintTemplatePage = {
                             </div>
                         </div>
                         <div class="field"><label>Paper size</label>
-                            <select id="pt-paperSize">
+                            <select id="pt-paperSize" onchange="PrintTemplatePage.preview()">
                                 <option value="A4" ${sel(t.paperSize, 'A4')}>A4</option>
                                 <option value="Letter" ${sel(t.paperSize, 'Letter')}>Letter</option>
                             </select>
                         </div>
                         <div class="field"><label>Page margin (mm)</label>
-                            <input type="number" min="5" max="30" id="pt-marginMm" value="${parseInt(t.marginMm, 10) || 12}" /></div>
+                            <input type="number" min="5" max="30" id="pt-marginMm" value="${parseInt(t.marginMm, 10) || 12}" oninput="PrintTemplatePage.preview()" /></div>
                     </div>
                     <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:6px;">
                         <label style="display:flex;gap:6px;align-items:center;font-size:12px;">
@@ -180,10 +180,18 @@ const PrintTemplatePage = {
 
             <div class="pt-preview-col">
                 <div class="ps-title" style="margin-bottom:8px;">Live preview</div>
-                <div class="pt-paper" id="pt-preview"></div>
+                <!-- v28: the sheet is rendered at its REAL width and then
+                     scaled down to fit. It used to be drawn at whatever
+                     width the column happened to be, with overflow
+                     hidden — so a long address wrapped at a different
+                     point than it does on paper, and anything past the
+                     bottom was simply clipped away. -->
+                <div class="pt-paper-stage" id="pt-stage">
+                    <div class="pt-paper" id="pt-preview"></div>
+                </div>
                 <p style="font-size:11px;color:var(--ink-soft);margin-top:8px;">
-                    Rendered by the same code that prints, so this is what a client receives.
-                    Use <b>Test print</b> to check it on real paper.
+                    Shown at true page size, scaled to fit — text wraps here exactly where it
+                    wraps on paper. Use <b>Test print</b> to check it on real paper.
                 </p>
             </div>
         </div>`;
@@ -250,6 +258,40 @@ const PrintTemplatePage = {
      * temporarily pointed at the form's current values, so the preview
      * cannot drift from the real output — there is only one renderer.
      */
+    /**
+     * PAPER_MM - the printable widths the template offers.
+     * A4 is 210mm across, US Letter 215.9mm (8.5in).
+     */
+    PAPER_MM: { A4: 210, Letter: 215.9 },
+
+    /**
+     * _fitPreview - scale the true-size sheet down to the column.
+     *
+     * The sheet is laid out at its real millimetre width so wrapping and
+     * page depth match the printer. It is then scaled as a whole, which
+     * is the only way a preview can be trusted: shrinking the container
+     * instead re-wraps the text, and a preview that wraps differently
+     * from the page is worse than none because it is believed.
+     */
+    _fitPreview() {
+        const stage = document.getElementById('pt-stage');
+        const paper = document.getElementById('pt-preview');
+        if (!stage || !paper) return;
+
+        const available = stage.clientWidth;
+        const paperPx = paper.offsetWidth;
+        if (!available || !paperPx) return;
+
+        // Never scale UP — a small window shrinks the sheet, a wide one
+        // leaves it at 100% rather than blowing it up past its real size.
+        const scale = Math.min(1, available / paperPx);
+        paper.style.transform = `scale(${scale})`;
+        // The stage must claim the SCALED height; a transform does not
+        // affect layout, so without this the note below it would sit
+        // under the sheet.
+        stage.style.height = (paper.offsetHeight * scale) + 'px';
+    },
+
     preview() {
         const box = document.getElementById('pt-preview');
         if (!box) return;
@@ -258,6 +300,11 @@ const PrintTemplatePage = {
         PrintDoc._tpl = draft;
         try {
             box.style.setProperty('--pd-accent', draft.accentColor);
+            // True page geometry, so what wraps here wraps on paper.
+            const mm = this.PAPER_MM[draft.paperSize] || this.PAPER_MM.A4;
+            const margin = Math.max(0, parseFloat(draft.marginMm) || 0);
+            box.style.width = mm + 'mm';
+            box.style.padding = margin + 'mm';
             box.innerHTML =
                 PrintDoc.watermarkHTML() +
                 PrintDoc.letterheadHTML({
@@ -275,6 +322,12 @@ const PrintTemplatePage = {
                 PrintDoc.footerHTML();
         } finally {
             PrintDoc._tpl = saved;
+        }
+        this._fitPreview();
+        // One listener for the life of the page, not one per keystroke.
+        if (!this._fitBound) {
+            this._fitBound = () => this._fitPreview();
+            window.addEventListener('resize', this._fitBound);
         }
     },
 
@@ -318,6 +371,16 @@ const PrintTemplatePage = {
             this._t = Object.assign({}, PrintDoc.DEFAULTS, (res && res.template) || data);
             UI.toast('Print template saved — it applies to every document from the next print.', 'success');
             this.preview();
+            // The logo is the app's mark as well as the letterhead's, so
+            // the page headers repaint now rather than after a reload.
+            // (The nav bar's own copy refreshes on the next navigation —
+            // re-rendering it here would need the current page id, which
+            // Nav owns and does not expose.)
+            if (typeof Nav !== 'undefined' && Nav.paintBranding) {
+                PrintDoc.load(true)
+                    .then(() => Nav.paintBranding())
+                    .catch(() => {});
+            }
         } catch (err) {
             UI.toast('' + err.message, 'error');
         } finally {

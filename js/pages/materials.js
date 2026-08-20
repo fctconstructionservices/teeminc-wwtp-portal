@@ -305,13 +305,16 @@ const MaterialsPage = {
         return false;
     },
     async approveMaterial(id) {
+        const btn = Busy.pressed();
         const confirmed = await Confirm.open('Approve Material?', '');
         if (!confirmed) return;
-        try { await DataService.approveMaterial(id);
-            UI.toast('Material approved!', 'success');
-            await this._refreshCache();
-            this.renderTabs();
-            this.renderList(); } catch (err) { UI.toast('' + err.message, 'error'); }
+        await Busy.run(btn, 'Approving', async () => {
+            try { await DataService.approveMaterial(id);
+                UI.toast('Material approved!', 'success');
+                await this._refreshCache();
+                this.renderTabs();
+                this.renderList(); } catch (err) { UI.toast('' + err.message, 'error'); }
+        });
     },
     /**
      * viewMaterial (v8) - INSTANT: opens from the cache (no refetch)

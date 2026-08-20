@@ -1,13 +1,27 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "teeminc-wwtp-erp",
+  "main": "src/index.js",
   "compatibility_date": "2025-01-01",
   "assets": {
     "directory": "./",
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    "binding": "ASSETS",
+    // The RPC endpoint is a POST to "/", and the SPA fallback matches
+    // every path — so without this the shell would answer the API.
+    "run_worker_first": true
     // NOTE: "exclude" used to sit here. It is not a valid key under
     // assets, so wrangler ignored it silently and shipped the whole
     // repository — .git included — as public static files. Exclusions
     // live in .assetsignore instead.
-  }
+  },
+  // Used as the print template default before anyone edits it.
+  "vars": { "COMPANY_NAME": "Technical Experts on Environmental Management Inc." },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "teem-db",
+      "database_id": "10e28f0e-ebf2-4843-9c2b-1dbb133d91f7"
+    }
+  ]
 }

@@ -1,0 +1,136 @@
+/* ================================================================
+   base/mobile.css — phones and tablets
+
+   IMPORTED LAST, deliberately. Every page already carries its own
+   breakpoints; this layer fixes the things that are wrong on a touch
+   device REGARDLESS of which page you are on, and it has to win over
+   the per-page rules to do it.
+
+   It is organised by the problem being solved rather than by screen
+   width, because most of these are about the INPUT DEVICE — a finger,
+   a browser that hides its address bar, a notch — and not about how
+   many pixels are available.
+   ================================================================ */
+
+/* ─── 1. iOS ZOOMS INTO ANY INPUT UNDER 16px ──────────────────
+   Safari on iPhone silently zooms the whole page when you focus a
+   control whose text is smaller than 16px, and does not zoom back out.
+   Twenty-one rules in this stylesheet set 11–13px, which is right on a
+   desktop and unusable on a phone: every tap on a field threw the
+   layout sideways.
+
+   Fixed on TOUCH devices only, so the desktop keeps its denser type. */
+@media (pointer: coarse) {
+    input, select, textarea,
+    .field input, .field select, .field textarea,
+    .gt-in, .dsc-input, .dk-crow textarea, .dk-seek input {
+        font-size: 16px !important;
+    }
+    /* The label above it stays small — only the control itself has to
+       clear 16px, and scaling the labels too would cost real space. */
+    .field label { font-size: 11px; }
+}
+
+/* ─── 2. THE VIEWPORT IS NOT 100vh ON A PHONE ─────────────────
+   Mobile browsers count the address bar inside 100vh, so a 100vh box is
+   taller than what you can actually see and the bottom is cut off until
+   the bar hides. `dvh` is the height that is really visible; the plain
+   vh line stays first as the fallback for older browsers. */
+html, body { min-height: 100vh; }
+@supports (height: 100dvh) {
+    html, body { min-height: 100dvh; }
+    .gt-scroll { max-height: min(72dvh, 640px); }
+    .print-modal-content { max-height: 90dvh; }
+}
+
+/* ─── 3. THE NOTCH AND THE HOME BAR ───────────────────────────
+   Anything pinned to an edge has to clear the rounded corners and the
+   home indicator, or a button ends up half under the system UI and
+   cannot be pressed. */
+@supports (padding: env(safe-area-inset-bottom)) {
+    .dock { padding-bottom: env(safe-area-inset-bottom); }
+    .toast { margin-bottom: env(safe-area-inset-bottom); }
+    .nav-bar { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+    .wrap { padding-left: max(20px, env(safe-area-inset-left)); padding-right: max(20px, env(safe-area-inset-right)); }
+}
+
+/* ─── 4. A WIDE TABLE MUST SCROLL, NOT DISAPPEAR ──────────────
+   .panel clips its overflow to keep its rounded corners, so an
+   eight-column table on a phone was not merely awkward — the right-hand
+   columns were CUT OFF with no way to reach them. Turning the table
+   into its own scrolling block gives it a horizontal scrollbar inside
+   the panel; nowrap keeps each cell on one line so the columns stay
+   readable rather than collapsing into word-per-line towers. */
+@media (max-width: 820px) {
+    .panel table,
+    .page table:not(.mini-table):not(.ps-table) {
+        display: block;
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .panel table thead,
+    .page table:not(.mini-table):not(.ps-table) thead { display: table-header-group; }
+    .panel table tbody,
+    .page table:not(.mini-table):not(.ps-table) tbody { display: table-row-group; }
+    .panel table th, .panel table td,
+    .page table:not(.mini-table):not(.ps-table) th,
+    .page table:not(.mini-table):not(.ps-table) td { white-space: nowrap; }
+}
+
+/* ─── 5. A FINGER IS NOT A CURSOR ─────────────────────────────
+   Roughly 40px is the smallest target most people hit reliably. The
+   compact buttons are 24–28px, which is fine for a mouse and a game of
+   chance on a phone. Height only — the labels keep their size, so
+   nothing reflows. */
+@media (pointer: coarse) {
+    .btn-sm, .btn-ghost, .btn-primary, .link-btn,
+    button.nav-icon, .status-tabs button, .dk-btn, .dk-mini {
+        min-height: 40px;
+    }
+    .dk-btn { min-width: 40px; }
+    .status-tabs button { padding-left: 14px; padding-right: 14px; }
+    /* The grey flash Android paints over every tap reads as a bug on
+       controls that already have their own pressed state. */
+    a, button { -webkit-tap-highlight-color: transparent; }
+}
+
+/* ─── 6. PHONES ───────────────────────────────────────────────
+   Tighter gutters, and dialogs that use the width they are given —
+   35px of side padding on a 390px screen spends a fifth of the screen
+   on nothing. */
+@media (max-width: 620px) {
+    .wrap { padding: 14px 12px 80px; }
+    .print-modal-content { padding: 20px 16px; border-radius: 0; }
+    .print-modal-overlay { padding: 0; }
+    .section-head h2 { font-size: 17px; }
+    .pagehead h1, .topbar .brand .name { font-size: 19px; }
+    /* Anything laid out in columns becomes one column. Two 150px cards
+       side by side on a phone are two cards you cannot read. */
+    .cards, .kpis, .db-form-grid, .projects-grid { grid-template-columns: 1fr !important; }
+    /* Toolbars wrap instead of scrolling off the edge. */
+    .gt-toolbar, .section-head, .panel-head { flex-wrap: wrap; }
+}
+
+/* ─── 7. TABLETS ──────────────────────────────────────────────
+   An iPad in portrait is 768px and in landscape 1024px. The existing
+   breakpoints jump 720 -> 900, so portrait fell into the phone rules
+   and wasted half the screen. Two columns is the right answer at this
+   width: enough room to compare, not enough for three. */
+@media (min-width: 621px) and (max-width: 1024px) {
+    .wrap { padding: 18px 18px 70px; }
+    .cards, .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .projects-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+    .print-modal-content { padding: 24px 22px; }
+}
+
+/* ─── 8. NOTHING SCROLLS THE PAGE SIDEWAYS ────────────────────
+   A backstop, not a cure: the rules above are what actually keep
+   content inside its box. This stops one missed case from making the
+   whole page slide, which is the difference between a rough corner and
+   an app that feels broken. */
+img, video, canvas, svg { max-width: 100%; height: auto; }
+@media (max-width: 1024px) {
+    body { overflow-x: hidden; }
+    pre, code { overflow-x: auto; max-width: 100%; }
+}

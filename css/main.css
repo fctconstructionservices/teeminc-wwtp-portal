@@ -45,6 +45,11 @@
 @import url('pages/gantt.css');
 @import url('pages/materials-equipment.css');
 @import url('pages/approvals.css');
+@import url('components/chat-dock.css');   /* v28 chat */
 @import url('pages/knowledge-base.css');   /* v11 BATCH F1 */
 @import url('pages/quotations.css');       /* v11 BATCH F2 */
 @import url('pages/purchase-requests.css');   /* v11 BATCH G1 */
+
+/* v28 — phones and tablets. LAST on purpose: it has to win over the
+   per-page breakpoints to fix what is wrong on a touch device. */
+@import url('base/mobile.css');

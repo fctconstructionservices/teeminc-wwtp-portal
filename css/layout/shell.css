@@ -34,6 +34,25 @@
     font-size: 14px;
     flex-shrink: 0;
 }
+/* ── v28: an uploaded logo sits in the header on its own ──
+   The lettered box is a placeholder. Once there is a real mark, the
+   border and the fixed square go with it — a company logo framed in a
+   drawn box reads as a logo someone forgot to finish styling. It is
+   free to be wider than tall, which most logos are. */
+.topbar .mark.has-logo {
+    border: none;
+    border-radius: 0;
+    width: auto;
+    height: 30px;
+    max-width: 132px;
+}
+.topbar .mark.has-logo img {
+    height: 100%;
+    width: auto;
+    max-width: 132px;
+    object-fit: contain;
+    display: block;
+}
 .topbar .brand {
     flex: 1;
     min-width: 120px;
