@@ -42,16 +42,32 @@ export function nextId(prefix) {
  * yyyy-MM-dd. Both must compare as the same day, which is the bug the
  * old backend hit when Sheets silently turned '2026-08-20' into a Date.
  */
+/**
+ * THE BUSINESS RUNS ON MANILA TIME; THE DATES ARE STORED IN UTC.
+ *
+ * Apps Script wrote a date-only value at local midnight, which lands in
+ * the sheet as the previous day at 16:00 UTC — someone typing
+ * "2026-08-14" produced "2026-08-13T16:00:00.000Z". Taking the first ten
+ * characters of that reports the day BEFORE the one they typed, for
+ * every dated record in the system.
+ *
+ * A fixed +8 is correct rather than lazy: the Philippines has observed
+ * no daylight saving since 1978, so there is no shift to track.
+ */
+const MANILA_OFFSET_MS = 8 * 60 * 60 * 1000;
+
 export function dayOf(v) {
   if (!v) return '';
   const s = String(v);
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  // A bare date carries no timezone — it is already the day intended.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
   const d = new Date(s);
-  return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+  if (Number.isNaN(d.getTime())) return '';
+  return new Date(d.getTime() + MANILA_OFFSET_MS).toISOString().slice(0, 10);
 }
 
 export function today() {
-  return new Date().toISOString().slice(0, 10);
+  return new Date(Date.now() + MANILA_OFFSET_MS).toISOString().slice(0, 10);
 }
 
 export async function logActivity(env, actor, text, type) {
