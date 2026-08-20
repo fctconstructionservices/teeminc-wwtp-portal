@@ -55,7 +55,30 @@
     flex-shrink: 0;
 }
 /* An uploaded logo fills the mark; the letter is only the fallback. */
-.nav-mark i img { width: 100%; height: 100%; object-fit: contain; display: block; }
+/* ── v28: A REAL LOGO IS NOT A LETTER IN A BOX ──
+   The lettered form above is an amber 27px square, which is right for a
+   single initial and wrong for a logo: it crops a wide mark into a
+   stamp and paints a coloured tile behind a PNG that was made to sit on
+   its own. With a logo the tile goes entirely — the image keeps its
+   aspect ratio, takes the bar's height, and blends into the header the
+   way it was drawn to. */
+.nav-mark i.has-logo {
+    background: none;
+    border-radius: 0;
+    width: auto;
+    height: 30px;
+    /* A very wide logo would otherwise push the whole nav off-screen. */
+    max-width: 150px;
+}
+.nav-mark i.has-logo img {
+    height: 100%;
+    width: auto;
+    max-width: 150px;
+    object-fit: contain;
+    display: block;
+}
+/* The lettered fallback still fills its square. */
+.nav-mark i:not(.has-logo) img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .nav-mark span {
     font-family: var(--font-display);
     font-size: 17px;

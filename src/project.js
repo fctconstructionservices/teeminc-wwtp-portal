@@ -255,9 +255,34 @@ export async function getProjectDataCached(env, identity, projectId) {
     for (const i of d.issues) if (i.image) photos.push(i.image);
   }
 
-  const contractReady = contractValue > 0
-    && workItems.length > 0
-    && workItems.every((s) => s.budget > 0);
+  /**
+   * contractReadiness - can this project be billed yet, and if not, WHICH
+   * scope items are holding it up.
+   *
+   * It has to name them. Billing, the Timeline and Variation Orders all
+   * print the blocking list, so a bare true/false leaves someone staring
+   * at a disabled button with nothing to act on — and the three screens
+   * read `.unapproved.length` directly, so a boolean here is not merely
+   * unhelpful, it throws.
+   *
+   * Headings and milestones are excluded: a heading carries no estimate
+   * and no budget by design, so counting it would block billing on every
+   * project that uses a structured bill of quantities.
+   */
+  const billable = sowItems.filter((s) => !s.isHeading && !s.isMilestone);
+  const unapproved = [];
+  const zeroBudget = [];
+  for (const s of billable) {
+    const g = estimateGroups.find((x) => String(x.sowId).trim() === String(s.id).trim());
+    if (!g || low(g.status) !== 'approved' || num(g.total) <= 0) unapproved.push(s.id);
+    if (!(s.budget > 0)) zeroBudget.push(s.id);
+  }
+  const contractReady = {
+    ready: billable.length > 0 && unapproved.length === 0 && zeroBudget.length === 0,
+    hasItems: billable.length > 0,
+    unapproved,
+    zeroBudget,
+  };
 
   return {
     name: proj.name,
