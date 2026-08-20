@@ -937,6 +937,21 @@ const DataService = {
     async addPersonnel(data) {
         return await gasCall('addPersonnel', data);
     },
+    // ─── CHAT ──────────────────────────────────────────────────
+    // chatSync carries the heartbeat, the presence list and any new
+    // messages in ONE request, so an open thread costs one round trip
+    // every 5 seconds rather than three.
+    async chatBootstrap() { return await gasCall('chatBootstrap'); },
+    async chatSync(conversationIds, since) { return await gasCall('chatSync', conversationIds || [], since || null); },
+    async chatHistory(conversationId, before) { return await gasCall('chatHistory', conversationId, before || null); },
+    async chatSend(conversationId, body, attachments) { return await gasCall('chatSend', conversationId, body, attachments || []); },
+    async chatMarkRead(conversationId) { return await gasCall('chatMarkRead', conversationId); },
+    async chatStartDm(email) { return await gasCall('chatStartDm', email); },
+    async chatCreateGroup(name, members) { return await gasCall('chatCreateGroup', name, members || []); },
+    async chatAddMember(conversationId, email) { return await gasCall('chatAddMember', conversationId, email); },
+    async chatRemoveMember(conversationId, email) { return await gasCall('chatRemoveMember', conversationId, email); },
+    async chatUpload(conversationId, base64, fileName, mimeType) { return await gasCall('chatUpload', conversationId, base64, fileName, mimeType); },
+    async chatDeleteMessage(messageId) { return await gasCall('chatDeleteMessage', messageId); },
     async updatePersonnel(id, data) {
         return await gasCall('updatePersonnel', id, data);
     }

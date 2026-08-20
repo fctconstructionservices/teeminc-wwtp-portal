@@ -639,11 +639,13 @@ Lagoon Lining Works
                 // A heading is a different KIND of row, not an indented
                 // one: nothing to estimate, nothing to drag, and its
                 // money is a roll-up of what sits beneath it.
-                const rb = parseFloat(item.rollupBudget) || 0;
-                const ra = parseFloat(item.rollupActual) || 0;
-                const rv = rb - ra;
-                const rp = item.rollupProgress;
-                const own = parseFloat(item.budget) || 0;
+                // ── v27: A HEADING CARRIES NO FIGURES ──
+                // It used to show rolled-up Estimate / Budget / Actual /
+                // Variance / Progress. Those numbers already appear on the
+                // items indented beneath it, so the heading repeated them
+                // one line above — and a total sitting beside a section
+                // title reads as a charge for the section itself. The
+                // heading is now purely a label with a count.
                 html += `
                 <div class="sow-heading lvl-${item.level || 1}" style="padding-left:${((item.level || 1) - 1) * 18}px;">
                     <button class="sow-twist" title="${collapsed[item.id] ? 'Expand' : 'Collapse'}"
@@ -653,18 +655,6 @@ Lagoon Lining Works
                     <span class="sh-id">${item.id}</span>
                     <span class="sh-desc">${item.description || ''}</span>
                     <span class="sh-count">${item.childCount} item${item.childCount === 1 ? '' : 's'}</span>
-                    <span class="sh-nums">
-                        <!-- v11 BATCH I1: the estimate was missing. Budget is
-                             what was allowed; the estimate is what was priced.
-                             A heading showing one without the other tells half
-                             the story, and it is the half that matters least. -->
-                        <span><em>Estimate</em><b>₱${fmtMoney(parseFloat(item.rollupEstimate) || 0)}</b></span>
-                        <span><em>Budget</em><b>₱${fmtMoney(rb)}</b></span>
-                        <span><em>Actual</em><b>₱${fmtMoney(ra)}</b></span>
-                        <span class="${rv < 0 ? 'neg' : 'pos'}"><em>Variance</em><b>${rv < 0 ? '-' : '+'}₱${fmtMoney(Math.abs(rv))}</b></span>
-                        <span><em>Progress</em><b>${rp == null ? '—' : rp.toFixed(0) + '%'}</b></span>
-                    </span>
-                    <span class="sh-rollup">roll-up${own > 0 ? ' · incl. ₱' + fmtMoney(own) + ' on this heading' : ''}</span>
                 </div>`;
                 return;
             }
@@ -714,7 +704,7 @@ Lagoon Lining Works
             const mode = item.budgetMode || 'auto';
             const budgetSourceLabel =
                 mode === 'manual'   ? Icon.pencil({size:11}) + ' <span class="budget-source">manual</span>' :
-                mode === 'indirect' ? '<span class="budget-source">${Icon.receipt({size:12})} indirect costs only</span>' :
+                mode === 'indirect' ? Icon.receipt({size:11}) + ' <span class="budget-source">indirect costs only</span>' :
                 '<span class="budget-source">Σ mat + labor + equipment</span>';
 
             const variance = budget - actual;

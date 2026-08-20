@@ -109,6 +109,15 @@ const App = {
         // so the highlighted group can never drift from where you are.
         if (typeof Nav !== 'undefined') Nav.render(page);
 
+        // v28: the chat dock is part of the shell, so it is started once
+        // and simply keeps running — its open threads, scroll position
+        // and poll all survive moving between pages. The login screen is
+        // the one place it must not appear.
+        if (typeof ChatDock !== 'undefined') {
+            if (page === 'login' || !this.currentUser) ChatDock.stop();
+            else ChatDock.start();
+        }
+
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
         const target = document.getElementById('page-' + page);
         if (target) {
@@ -235,6 +244,9 @@ const App = {
         // v7.0: revoke the session server-side, not just locally — a
         // token left valid on the server would still work if copied.
         try { DataService.logout(); } catch (e) {}
+        // Stop the heartbeat before the token goes, or the poll keeps
+        // firing against a revoked session and reports you as online.
+        if (typeof ChatDock !== 'undefined') ChatDock.stop();
         setSessionToken('');
         localStorage.removeItem('fctc_user');
         this.currentUser = null;

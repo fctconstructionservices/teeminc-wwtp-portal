@@ -297,13 +297,16 @@ const EquipmentPage = {
         return false;
     },
     async approveEquipment(id) {
+        const btn = Busy.pressed();
         const confirmed = await Confirm.open('Approve Equipment?', '');
         if (!confirmed) return;
-        try { await DataService.approveEquipment(id);
-            UI.toast('Equipment approved!', 'success');
-            await this._refreshCache();
-            this.renderTabs();
-            this.renderList(); } catch (err) { UI.toast('' + err.message, 'error'); }
+        await Busy.run(btn, 'Approving', async () => {
+            try { await DataService.approveEquipment(id);
+                UI.toast('Equipment approved!', 'success');
+                await this._refreshCache();
+                this.renderTabs();
+                this.renderList(); } catch (err) { UI.toast('' + err.message, 'error'); }
+        });
     },
     viewEquipment(id, cardEl) {
         if (cardEl) {

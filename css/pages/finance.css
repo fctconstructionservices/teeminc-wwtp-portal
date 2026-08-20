@@ -97,18 +97,32 @@
 
 /* A white sheet regardless of theme, because paper is white — a dark
    preview would misrepresent what comes out of the printer. */
+/* ── v28: A SHEET AT TRUE SIZE, SCALED TO FIT ──
+   The stage clips nothing and adds no width of its own; the sheet
+   inside it is laid out at real millimetres and scaled as a whole by
+   _fitPreview(). Scaling the sheet rather than narrowing it is the
+   point: narrowing re-wraps the text, so the preview would disagree
+   with the printer exactly where it matters — a long address. */
+.pt-paper-stage {
+    overflow: hidden;
+    /* The sheet is scaled from its top-left, so the stage's own box
+       stays anchored there too. */
+    display: block;
+}
 .pt-paper {
     background: #FFFFFF;
     color: #1C2321;
     border: 1px solid var(--line);
     border-radius: 4px;
     box-shadow: var(--shadow);
-    padding: 22px 24px;
     font-family: var(--font-body);
     font-size: 12px;
     position: relative;
-    overflow: hidden;
-    min-height: 420px;
+    /* Width and padding are set from the chosen paper size and margin;
+       height grows with the content so nothing is cut off. */
+    min-height: 297mm;
+    transform-origin: top left;
+    box-sizing: border-box;
 }
 .pt-paper .pd-watermark { position: absolute; font-size: 54px; }
 .pt-paper .pd-foot { position: static; }

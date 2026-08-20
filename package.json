@@ -1,0 +1,17 @@
+{
+  "name": "fctc-portal",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "build:css": "node tools/build-css.js",
+    "build:js": "node tools/build-js.js"
+  },
+  "devDependencies": {
+    "wrangler": "^4.124.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "workerd@1.20260820.1": true
+  }
+}

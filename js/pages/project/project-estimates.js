@@ -705,11 +705,13 @@ Object.assign(ProjectPage, {
     async saveAllEstimates() {
         const est = this._estimatesData;
         if (!est) { UI.toast('No data to save.', 'error'); return; }
-        try {
-            await DataService.saveEstimates(this._currentProjectId, est.groups);
-            UI.toast('All estimates saved!', 'success');
-            this.renderSOWBudget(this._data);
-        } catch (err) { UI.toast('' + err.message, 'error'); }
+        await Busy.auto('Saving', async () => {
+            try {
+                await DataService.saveEstimates(this._currentProjectId, est.groups);
+                UI.toast('All estimates saved!', 'success');
+                this.renderSOWBudget(this._data);
+            } catch (err) { UI.toast('' + err.message, 'error'); }
+        });
     },
 });
 // ════════ v8: DUPA + SUMMARY EXPORTS (item 6.9) ════════
@@ -870,8 +872,9 @@ Object.assign(ProjectPage, {
         const p = this._data || {};
         const groups = (this._estimatesData && this._estimatesData.groups) || [];
         let grand = 0;
-        let body = `<h1>DUPA — Detailed Unit Price Analysis</h1>
-            <div class="meta"><b>${p.name || this._currentProjectId}</b> · ${p.client || ''} · Generated ${new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</div>`;
+        // v27: no meta line under the heading — the letterhead already
+        // carries the company and the project is the document title.
+        let body = `<h1>DUPA — Detailed Unit Price Analysis</h1>`;
         // v11 BATCH I2b: the DUPA walks the SOW ORDER so its sections come
         // out under their headings, in the same sequence as the estimate
         // summary and the SOW tab. Iterating the groups gave whatever
@@ -940,7 +943,6 @@ Object.assign(ProjectPage, {
         // children, so adding both would double the project figure.
         const grand = rows.filter(r => !r.isHeading).reduce((s, r) => s + r.total, 0);
         let body = `<h1>Cost Estimate Summary</h1>
-            <div class="meta"><b>${p.name || this._currentProjectId}</b> · ${p.client || ''} · Generated ${new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
             <table><thead><tr>
                 <th>Item No</th><th>Description</th><th class="amt">Qty</th><th>Unit</th>
                 <th class="amt">Unit Cost</th><th class="amt">Material Cost</th><th class="amt">Labor Cost</th><th class="amt">Total</th>
@@ -948,13 +950,17 @@ Object.assign(ProjectPage, {
         rows.forEach(r => {
             const pad = ((r.level || 1) - 1) * 14;
             if (r.isHeading) {
+                // ── v27: A TITLE IS A LABEL, NOT A PRICED ROW ──
+                // It carries no quantity, unit, unit cost or money of its
+                // own — those belong to the items indented beneath it, and
+                // printing a rolled-up figure here reads as a second charge
+                // for the same work. The row is highlighted and bold so the
+                // section it opens is obvious at a glance.
                 body += `<tr class="head">
                     <td><b>${r.itemNo}</b></td>
                     <td style="padding-left:${pad}px"><b>${esc(r.description)}</b></td>
                     <td class="amt"></td><td></td><td class="amt"></td>
-                    <td class="amt"><b>₱${fmtMoney(r.matCost)}</b></td>
-                    <td class="amt"><b>₱${fmtMoney(r.labCost)}</b></td>
-                    <td class="amt"><b>₱${fmtMoney(r.total)}</b></td>
+                    <td class="amt"></td><td class="amt"></td><td class="amt"></td>
                 </tr>`;
                 return;
             }

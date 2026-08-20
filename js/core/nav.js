@@ -167,6 +167,7 @@ const Nav = {
         if (!user.email || pageId === 'login') { host.innerHTML = ''; host.hidden = true; return; }
         host.hidden = false;
         setTimeout(() => this.startBell(), 400);   // v14
+        this.paintBranding();
 
         const groups = this.GROUPS
             .filter(g => this._allowed(g, role))
@@ -226,6 +227,57 @@ const Nav = {
             </div>` : ''}`;
     },
 
+    /**
+     * paintBranding - put the uploaded logo in every page's topbar mark.
+     *
+     * Each page's header carried a hard-coded letter "F" — fourteen of
+     * them — so uploading a logo in the print template changed the
+     * letterhead and the nav bar but left every page header showing a
+     * letter that belonged to nobody.
+     *
+     * The logo replaces the boxed letter rather than sitting inside it:
+     * a bordered square around someone's mark reads as a placeholder
+     * that was never finished. Without a logo the lettered box stays,
+     * because a header with nothing in the corner looks broken.
+     */
+    paintBranding() {
+        const apply = (url) => {
+            document.querySelectorAll('.topbar .mark').forEach((el) => {
+                if (!url) {
+                    // Logo cleared: put the lettered box back, or the
+                    // corner is left empty.
+                    if (el.dataset.logo) {
+                        delete el.dataset.logo;
+                        el.classList.remove('has-logo');
+                        el.textContent = 'F';
+                    }
+                    return;
+                }
+                if (el.dataset.logo === url) return;   // already painted
+                el.dataset.logo = url;
+                el.classList.add('has-logo');
+                const img = new Image();
+                img.src = url;
+                img.alt = '';
+                // A broken link must not leave an empty corner.
+                img.onerror = () => {
+                    el.classList.remove('has-logo');
+                    el.textContent = 'F';
+                    delete el.dataset.logo;
+                };
+                el.textContent = '';
+                el.appendChild(img);
+            });
+        };
+
+        const cached = (typeof PrintDoc !== 'undefined' && PrintDoc._tpl && PrintDoc._tpl.logoUrl) || '';
+        if (cached) { apply(cached); return; }
+        if (typeof PrintDoc === 'undefined' || !PrintDoc.load) return;
+        PrintDoc.load()
+            .then((t) => apply((t && t.logoUrl) || ''))
+            .catch(() => {});
+    },
+
     _roleLabel(r) {
         return { superadmin: 'Super Admin', admin: 'Admin', approver: 'Approver',
                  'request-only': 'Requester' }[r] || r;
@@ -254,13 +306,22 @@ const Nav = {
         }
     },
 
-    // ── v14: NOTIFICATIONS ──────────────────────────────────
+    // ── NOTIFICATIONS ───────────────────────────────────────
     //
-    // The badge polls a SINGLE NUMBER every 90 seconds, never the
-    // comments themselves. Polling threads would burn the Apps Script
-    // quota the whole system runs on, and the badge only has to answer
-    // "is there anything?" — the thread is read when you open the
-    // record.
+    // You are notified about three things: a comment that names you, a
+    // comment on a request you submitted, and a task assigned to you.
+    // Everything else on a thread is somebody else's conversation.
+    //
+    // Nothing is emailed. The bell is the only channel, which is why it
+    // has to be prompt.
+    //
+    // HOW FRESH IT ACTUALLY IS: this polls. On D1 a poll is cheap enough
+    // to run every 30 seconds — the old 90 was sized for the Apps Script
+    // quota that no longer applies. It also refreshes the moment you
+    // return to the tab and immediately after you post a comment, so in
+    // normal use it is current; between those, it can be up to 30
+    // seconds behind. Calling that "real time" would be a promise the
+    // transport does not keep.
     //
     // Polling stops when the tab is hidden. A laptop left open on a
     // desk overnight would otherwise spend the night asking.
@@ -280,7 +341,7 @@ const Nav = {
         // urgent enough to justify making the page people are waiting
         // for any slower.
         setTimeout(tick, 2500);
-        this._bellTimer = setInterval(tick, 90000);
+        this._bellTimer = setInterval(tick, 30000);
         // Catch up the moment you come back rather than waiting out the
         // rest of the interval.
         document.addEventListener('visibilitychange', () => {
@@ -333,10 +394,9 @@ const Nav = {
                     </span>
                     <span class="bi-body">${e(i.excerpt)}</span>
                 </button>`).join('')
-            : '<div class="bell-empty">Nothing in the last 30 days. Comments you are mentioned in show up here.</div>'}
+            : '<div class="bell-empty">Nothing in the last 30 days. Mentions, replies on your own requests, and tasks assigned to you show up here.</div>'}
             <div class="bell-foot">
-                ${u.total ? `${u.total} unread of ${u.shown || u.items.length} shown. ` : ''}Last 30 days ·
-                checked every 90 seconds · mentions are emailed to you as well.</div>`;
+                ${u.total ? `${u.total} unread of ${u.shown || u.items.length} shown. ` : ''}Last 30 days.</div>`;
     },
 
     async clearBell() {
@@ -353,6 +413,16 @@ const Nav = {
      */
     openNotification(type, id, projectId) {
         document.getElementById('bellPanel').hidden = true;
+        // Reading it is the acknowledgement, so the badge drops as soon
+        // as you open the thing rather than waiting for "mark all read".
+        if (typeof DataService !== 'undefined' && DataService.markThreadRead) {
+            DataService.markThreadRead(type, id)
+                .then(() => this.refreshBell())
+                .catch(() => {});
+        }
+        // A task opens the dashboard, where the calendar it lives on is
+        // mounted; there is no approvals record behind it to look up.
+        if (type === 'Task') { App.navigate('home'); return; }
         const route = {
             PurchaseRequest: 'purchase-requests', PurchaseOrder: 'purchase-requests',
             Quotation: 'quotations', Billing: 'billings'

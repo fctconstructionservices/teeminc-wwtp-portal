@@ -397,7 +397,7 @@ const CalendarPanel = {
             <div class="print-modal-content" style="max-width:520px;">
                 <button class="close-modal" onclick="document.getElementById('taskModal').remove()">${Icon.close({ size: 18 })}</button>
                 <div class="print-header"><h2>Assign a task</h2>
-                    <div class="print-meta">The person is emailed straight away</div></div>
+                    <div class="print-meta">The person is notified straight away</div></div>
 
                 <div class="field"><label>What needs doing *</label>
                     <input type="text" id="tk-title" maxlength="200"

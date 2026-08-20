@@ -113,8 +113,14 @@ const PrintDoc = {
 
         const docTitle = opts.title
             ? `<div class="pd-doctitle">${e(opts.title)}</div>` : '';
-        const docMeta = opts.meta
-            ? `<div class="pd-docmeta">${e(opts.meta)}</div>` : '';
+        // ── v27: THE META LINE UNDER THE HEADING IS GONE ──
+        // It repeated what the document already says — the project name
+        // and location are in the letterhead and in the body — so on
+        // every printed page it was a second, smaller copy of the same
+        // words directly beneath the title. Callers still pass `meta`;
+        // it is simply no longer rendered, so nothing else has to change
+        // and no caller can reintroduce it one document at a time.
+        const docMeta = '';
 
         // ── v23: THE DOCUMENT TITLE MOVED OUT OF THE HEADER ──
         //

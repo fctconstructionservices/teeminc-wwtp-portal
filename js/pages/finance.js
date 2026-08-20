@@ -62,22 +62,36 @@ const FinancePage = {
         if (wBtn) wBtn.classList.toggle('primary', this._cfView === 'week');
 
         const nowIdx = typeof cf.nowIndex === 'number' ? cf.nowIndex : cf.labels.length - 1;
-        // running net: actual up to today, then projected continuation
-        // (inflow assumed 0 in the projection — conservative view; billings
-        // collections will raise it as they actually land)
-        let running = Number(cf.openingBalance || 0);
-        const netActual = [], netProjected = [];
-        cf.labels.forEach((_, i) => {
-            if (i <= nowIdx) {
-                running += (cf.inflow[i] || 0) - (cf.outflow[i] || 0);
-                netActual.push(running);
-                netProjected.push(i === nowIdx ? running : null);
-            } else {
-                running -= (cf.projectedOutflow && cf.projectedOutflow[i]) || 0;
-                netActual.push(null);
-                netProjected.push(running);
-            }
-        });
+
+        // ── v27: THE SERVER OWNS THIS CALCULATION ──
+        // This used to recompute the running balance here, and it made
+        // the same mistake the backend did: it joined the forecast to the
+        // actual line at the current interval and only began subtracting
+        // from the NEXT one, so the current interval's spend never came
+        // off and the closing balance read far too high. The server now
+        // sends both series computed once, from unrounded figures; the
+        // local version remains only as a fallback for an older payload.
+        let netActual = cf.netActual;
+        let netProjected = cf.netForecast;
+        if (!netActual || !netProjected) {
+            let running = Number(cf.openingBalance || 0);
+            netActual = []; netProjected = [];
+            cf.labels.forEach((_, i) => {
+                if (i < nowIdx) {
+                    running += (cf.inflow[i] || 0) - (cf.outflow[i] || 0);
+                    netActual.push(running);
+                    netProjected.push(null);
+                } else if (i === nowIdx) {
+                    running += (cf.inflow[i] || 0) - (cf.outflow[i] || 0);
+                    netActual.push(running);
+                    netProjected.push(running);
+                } else {
+                    netActual.push(null);
+                    running -= (cf.projectedOutflow && cf.projectedOutflow[i - 1]) || 0;
+                    netProjected.push(running);
+                }
+            });
+        }
 
         if (this._charts.cf) { try { this._charts.cf.destroy(); } catch (_) {} }
         this._charts.cf = new Chart(document.getElementById('cfChart'), {

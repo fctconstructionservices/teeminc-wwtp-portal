@@ -42,10 +42,15 @@
 const CONFIG = {
 
     /**
-     * apiUrl - the Apps Script Web App /exec URL for THIS company.
-     * Each company has its own deployment reading its own spreadsheet.
+     * apiUrl - the backend for THIS company.
+     *
+     * Now the Cloudflare Worker in front of the teem-db D1 database. The
+     * Apps Script deployment this used to point at still exists, but its
+     * only remaining job is proxying uploads to Drive — a Worker cannot
+     * write to Drive on its own, so that one task stays with the script,
+     * which runs as you and therefore owns the files it creates.
      */
-    apiUrl: 'https://script.google.com/macros/s/AKfycbyIuNjph0XC0Jd4yc777cOXrBnzt1rtv8rvzI8X0WISEtuz31CBJmTngv9c7Wcte1Xp_g/exec',
+    apiUrl: 'https://teeminc-wwtp-erp.f2cconstructionservice.workers.dev',
 
     /** company - what the app calls itself. */
     company: {
