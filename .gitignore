@@ -1,0 +1,5 @@
+node_modules/
+.wrangler/state/
+.wrangler/tmp/
+.wrangler/cache/cf.json
+.dev.vars

@@ -1,9 +1,13 @@
 {
+  "$schema": "node_modules/wrangler/config-schema.json",
   "name": "teeminc-wwtp-erp",
   "compatibility_date": "2025-01-01",
   "assets": {
     "directory": "./",
-    "not_found_handling": "single-page-application",
-    "exclude": [".git/**", ".wrangler/**", "backend/**", "tools/**", "docs/**", "deploy/**", "tests/**"]
+    "not_found_handling": "single-page-application"
+    // NOTE: "exclude" used to sit here. It is not a valid key under
+    // assets, so wrangler ignored it silently and shipped the whole
+    // repository — .git included — as public static files. Exclusions
+    // live in .assetsignore instead.
   }
 }
