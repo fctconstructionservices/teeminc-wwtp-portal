@@ -197,7 +197,7 @@ const Nav = {
         host.innerHTML = `
             <div class="nav-bar">
                 <button class="nav-mark" onclick="App.navigate('home')" title="Dashboard">
-                    <i>${logo}</i><span>${e(brand)}</span>
+                    <i class="${url ? 'has-logo' : ''}">${logo}</i><span>${e(brand)}</span>
                 </button>
                 <nav class="nav-groups" aria-label="Sections">
                     ${groups.map(g => `
@@ -258,10 +258,15 @@ const Nav = {
             const navIcon = document.querySelector('.nav-mark i');
             if (navIcon && url && navIcon.dataset.logo !== url) {
                 navIcon.dataset.logo = url;
+                navIcon.classList.add('has-logo');
                 const img = new Image();
                 img.src = url;
                 img.alt = short;
-                img.onerror = () => { navIcon.textContent = short.charAt(0) || ''; delete navIcon.dataset.logo; };
+                img.onerror = () => {
+                    navIcon.classList.remove('has-logo');
+                    navIcon.textContent = short.charAt(0) || '';
+                    delete navIcon.dataset.logo;
+                };
                 navIcon.textContent = '';
                 navIcon.appendChild(img);
             }
